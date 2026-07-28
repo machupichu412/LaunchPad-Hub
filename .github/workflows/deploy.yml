@@ -25,9 +25,9 @@ jobs:
       - run: dotnet test LaunchPad.sln -c Release --no-build --collect:"XPlat Code Coverage"
       - run: dotnet publish src/LaunchPad.Api -c Release -o ./publish/api
       - run: dotnet publish src/LaunchPad.Functions -c Release -o ./publish/functions
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with: { name: api, path: ./publish/api }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with: { name: functions, path: ./publish/functions }
 
   build-web:
@@ -39,7 +39,7 @@ jobs:
       - run: npm ci --prefix src/LaunchPad.Web
       - run: npm run lint --prefix src/LaunchPad.Web
       - run: npm run build --prefix src/LaunchPad.Web
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with: { name: web, path: src/LaunchPad.Web/dist }
 
   validate-infra:
