@@ -1,0 +1,118 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  id-token: write # OIDC federated credential — no stored Azure secrets
+  contents: read
+
+jobs:
+  build-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '9.0.x' }
+      - run: dotnet restore LaunchPad.sln
+      - run: dotnet format LaunchPad.sln --verify-no-changes
+      - run: dotnet build LaunchPad.sln -c Release --no-restore
+      # Domain/Application tests are pure and unit-tested (no DB); Api.IntegrationTests
+      # runs against an in-memory DbContext + fake auth scheme — see tests/LaunchPad.Api.IntegrationTests.
+      - run: dotnet test LaunchPad.sln -c Release --no-build --collect:"XPlat Code Coverage"
+      - run: dotnet publish src/LaunchPad.Api -c Release -o ./publish/api
+      - run: dotnet publish src/LaunchPad.Functions -c Release -o ./publish/functions
+      - uses: actions/upload-artifact@v4
+        with: { name: api, path: ./publish/api }
+      - uses: actions/upload-artifact@v4
+        with: { name: functions, path: ./publish/functions }
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: 'npm', cache-dependency-path: src/LaunchPad.Web/package-lock.json }
+      - run: npm ci --prefix src/LaunchPad.Web
+      - run: npm run lint --prefix src/LaunchPad.Web
+      - run: npm run build --prefix src/LaunchPad.Web
+      - uses: actions/upload-artifact@v4
+        with: { name: web, path: src/LaunchPad.Web/dist }
+
+  validate-infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/cli@v2
+        with:
+          inlineScript: az bicep build --file infra/main.bicep
+
+  deploy-dev:
+    needs: [build-api, build-web, validate-infra]
+    if: github.ref == 'refs/heads/main'
+    environment: development
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: azure/arm-deploy@v2 # infra first, idempotent
+        with:
+          resourceGroupName: rg-launchpad-dev
+          template: infra/main.bicep
+          parameters: infra/params.dev.json
+      - uses: actions/download-artifact@v4
+        with: { name: api, path: ./publish/api }
+      - run: dotnet ef database update --project src/LaunchPad.Infrastructure --startup-project src/LaunchPad.Api
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: app-launchpad-dev
+          package: ./publish/api
+      - uses: actions/download-artifact@v4
+        with: { name: web, path: ./dist }
+      - uses: azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.SWA_DEPLOYMENT_TOKEN_DEV }}
+          app_location: ./dist
+          skip_app_build: true
+
+  deploy-prod:
+    needs: [build-api, build-web, validate-infra]
+    if: github.ref == 'refs/heads/main'
+    environment: production # required reviewers gate here
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: azure/arm-deploy@v2 # infra first, idempotent
+        with:
+          resourceGroupName: rg-launchpad-prod
+          template: infra/main.bicep
+          parameters: infra/params.prod.json
+      - uses: actions/download-artifact@v4
+        with: { name: api, path: ./publish/api }
+      - run: dotnet ef database update --project src/LaunchPad.Infrastructure --startup-project src/LaunchPad.Api
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: app-launchpad-prod
+          slot-name: staging
+          package: ./publish/api
+      - run: ./scripts/smoke-test.sh https://app-launchpad-prod-staging.azurewebsites.net
+      - run: az webapp deployment slot swap -g rg-launchpad-prod -n app-launchpad-prod --slot staging
+      - uses: actions/download-artifact@v4
+        with: { name: web, path: ./dist }
+      - uses: azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.SWA_DEPLOYMENT_TOKEN_PROD }}
+          app_location: ./dist
+          skip_app_build: true

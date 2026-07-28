@@ -1,0 +1,42 @@
+@description('Environment name, e.g. dev, test, prod')
+param env string
+
+@description('Azure region')
+param location string
+
+param publicNetworkAccess bool = true
+
+resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
+  name: 'sb-launchpad-${env}'
+  location: location
+  sku: {
+    name: 'Standard'
+    tier: 'Standard'
+  }
+  properties: {
+    publicNetworkAccess: publicNetworkAccess ? 'Enabled' : 'Disabled'
+  }
+}
+
+// Cohort-wide matching runs. Dead-lettering catches jobs the matching Function fails to process.
+resource matchingJobsQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-preview' = {
+  parent: serviceBusNamespace
+  name: 'matching-jobs'
+  properties: {
+    deadLetteringOnMessageExpiration: true
+    maxDeliveryCount: 5
+  }
+}
+
+// Sponsor auto-flag evaluation, fired on review submit.
+resource reviewSubmittedQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-preview' = {
+  parent: serviceBusNamespace
+  name: 'review-submitted'
+  properties: {
+    deadLetteringOnMessageExpiration: true
+    maxDeliveryCount: 5
+  }
+}
+
+output namespaceName string = serviceBusNamespace.name
+output namespaceId string = serviceBusNamespace.id

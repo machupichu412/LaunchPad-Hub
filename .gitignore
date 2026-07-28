@@ -1,0 +1,33 @@
+# .NET
+bin/
+obj/
+out/
+publish/
+*.user
+*.suo
+.vs/
+appsettings.*.local.json
+*.db
+
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+.env
+.env.*
+!.env.example
+
+# Azure Functions
+local.settings.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+
+# Claude Code local settings (personal permissions, not shared config)
+.claude/settings.local.json
