@@ -9,3 +9,15 @@ export const AppRoles = {
 } as const;
 
 export type AppRole = (typeof AppRoles)[keyof typeof AppRoles];
+
+const roleLabels: Record<AppRole, string> = {
+  [AppRoles.Executive]: 'Executive',
+  [AppRoles.ProgramOps]: 'Program Ops',
+  [AppRoles.Sponsor]: 'Sponsor',
+  [AppRoles.Candidate]: 'Candidate',
+  [AppRoles.HiringManager]: 'Hiring Manager',
+};
+
+export function roleLabel(role: AppRole): string {
+  return roleLabels[role];
+}

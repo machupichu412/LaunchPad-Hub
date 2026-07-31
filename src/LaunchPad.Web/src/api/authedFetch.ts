@@ -7,7 +7,9 @@ import { msalInstance } from '../auth/msalInstance';
  * itself. See launchpad-build-guide.md §7.2.
  */
 export async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  const account = msalInstance.getActiveAccount();
+  // Falls back to the first cached account if none is explicitly "active" yet —
+  // see the race explained in msalInstance.ts's initializeMsal.
+  const account = msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0];
   if (!account) throw new Error('No active account');
 
   let accessToken: string;
@@ -25,7 +27,7 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
 
   const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 
-  return fetch(`${baseUrl}${input}`, {
+  const response = await fetch(`${baseUrl}${input}`, {
     ...init,
     headers: {
       ...init.headers,
@@ -33,4 +35,21 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
       'Content-Type': 'application/json',
     },
   });
+
+  // Temporary diagnostic — 401 means the JWT itself failed validation (wrong
+  // audience/issuer, expired, wrong tenant), not a missing-role 403. The
+  // WWW-Authenticate header from ASP.NET Core's JwtBearer handler names the exact
+  // reason; the decoded token claims show what was actually sent. Remove once the
+  // current 401 investigation is resolved.
+  if (response.status === 401) {
+    console.warn('authedFetch: 401 from', input, '\nWWW-Authenticate:', response.headers.get('www-authenticate'));
+    try {
+      const payload = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      console.warn('authedFetch: decoded access token claims:', { aud: payload.aud, iss: payload.iss, tid: payload.tid, exp: payload.exp ? new Date(payload.exp * 1000).toISOString() : undefined, roles: payload.roles });
+    } catch {
+      console.warn('authedFetch: could not decode access token');
+    }
+  }
+
+  return response;
 }

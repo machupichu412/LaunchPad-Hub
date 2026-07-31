@@ -9,12 +9,16 @@ namespace LaunchPad.Api.IntegrationTests;
 /// <summary>
 /// Stands in for Entra JWT validation in tests. Tests set the "X-Test-Roles" header
 /// (comma-separated) to simulate a token's roles claim; omitting it simulates an
-/// unauthenticated request, exercising the fail-closed FallbackPolicy.
+/// unauthenticated request, exercising the fail-closed FallbackPolicy. Optionally set
+/// "X-Test-Oid" to a specific GUID to test resource-ownership scenarios (e.g. seed a
+/// Sponsor with a known EntraObjectId, then authenticate as that exact identity) —
+/// omitting it generates a random one, as before.
 /// </summary>
 public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
     public const string SchemeName = "Test";
     public const string RolesHeader = "X-Test-Roles";
+    public const string OidHeader = "X-Test-Oid";
 
     public TestAuthHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
@@ -31,10 +35,14 @@ public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationScheme
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
+        var oid = Request.Headers.TryGetValue(OidHeader, out var oidHeader)
+            ? oidHeader.ToString()
+            : Guid.NewGuid().ToString();
+
         var roles = rolesHeader.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries);
         var claims = new List<Claim>
         {
-            new("oid", Guid.NewGuid().ToString()),
+            new("oid", oid),
             new(ClaimTypes.Name, "Test User")
         };
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));

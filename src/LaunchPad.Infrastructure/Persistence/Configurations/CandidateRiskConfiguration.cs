@@ -15,5 +15,11 @@ public class CandidateRiskConfiguration : IEntityTypeConfiguration<CandidateRisk
     {
         builder.ToView("vCandidateRisk");
         builder.HasNoKey();
+
+        // No table/column is ever created for a view-mapped entity, but EF still
+        // warns about unspecified decimal precision unless told explicitly.
+        builder.Property(r => r.AvgScore).HasPrecision(5, 2);
+        builder.Property(r => r.MidScore).HasPrecision(5, 2);
+        builder.Property(r => r.FinalScore).HasPrecision(5, 2);
     }
 }

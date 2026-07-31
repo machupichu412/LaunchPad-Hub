@@ -7,4 +7,6 @@ public static class Policies
     public const string ApproveMatch = nameof(ApproveMatch);
     public const string ManageOwnProfile = nameof(ManageOwnProfile);
     public const string ManageOwnProject = nameof(ManageOwnProject);
+    public const string ManageOwnAssignment = nameof(ManageOwnAssignment);
+    public const string ViewOwnAssignment = nameof(ViewOwnAssignment);
 }

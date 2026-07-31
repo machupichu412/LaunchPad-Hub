@@ -6,9 +6,16 @@ export const msalInstance = new PublicClientApplication(msalConfig);
 export async function initializeMsal() {
   await msalInstance.initialize();
 
-  const accounts = msalInstance.getAllAccounts();
-  if (accounts.length > 0) {
-    msalInstance.setActiveAccount(accounts[0]);
+  // Required after loginRedirect(): without this, the redirect response is only
+  // ever processed by MsalProvider's internal effect, which runs after first
+  // render — so the singleton's "active account" (read directly by authedFetch,
+  // outside React) can stay unset indefinitely even once useMsal()'s accounts
+  // look signed-in. Resolving it here, before render, closes that race.
+  const redirectResult = await msalInstance.handleRedirectPromise();
+
+  const account = redirectResult?.account ?? msalInstance.getAllAccounts()[0];
+  if (account) {
+    msalInstance.setActiveAccount(account);
   }
 
   msalInstance.addEventCallback((event) => {

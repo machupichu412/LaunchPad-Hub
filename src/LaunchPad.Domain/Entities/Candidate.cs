@@ -15,6 +15,10 @@ public class Candidate : Entity
     public string? PortfolioUrl { get; set; }
     public string? ResumeBlobPath { get; set; }
     public CandidateStatus Status { get; set; }
+    public string? Bio { get; set; }
+    public string? School { get; set; }
+    public string? Degree { get; set; }
+    public decimal? Gpa { get; set; }
 
     public AppUser AppUser { get; set; } = null!;
     public Cohort Cohort { get; set; } = null!;

@@ -27,4 +27,5 @@ public class Assignment : Entity
     public Candidate Candidate { get; set; } = null!;
     public ICollection<Review> Reviews { get; set; } = new List<Review>();
     public ICollection<ProjectTodo> Todos { get; set; } = new List<ProjectTodo>();
+    public ICollection<Deliverable> Deliverables { get; set; } = new List<Deliverable>();
 }

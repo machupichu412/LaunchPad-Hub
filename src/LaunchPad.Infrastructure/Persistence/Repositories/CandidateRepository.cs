@@ -15,6 +15,14 @@ public sealed class CandidateRepository : ICandidateRepository
             .Include(c => c.Skills).ThenInclude(cs => cs.Skill)
             .FirstOrDefaultAsync(c => c.CandidateId == candidateId, ct);
 
+    public Task<Candidate?> GetByEntraObjectIdAsync(Guid entraObjectId, CancellationToken ct = default) =>
+        _db.Candidates
+            .Include(c => c.AppUser)
+            .Include(c => c.Skills).ThenInclude(cs => cs.Skill)
+            .Where(c => c.AppUser.EntraObjectId == entraObjectId)
+            .OrderByDescending(c => c.CandidateId) // most recent cohort if enrolled more than once
+            .FirstOrDefaultAsync(ct);
+
     public Task<CandidateRisk?> GetRiskAsync(int candidateId, CancellationToken ct = default) =>
         _db.CandidateRisks.FirstOrDefaultAsync(r => r.CandidateId == candidateId, ct);
 
@@ -24,4 +32,6 @@ public sealed class CandidateRepository : ICandidateRepository
             .Include(c => c.Skills).ThenInclude(cs => cs.Skill)
             .Where(c => c.CohortId == cohortId)
             .ToListAsync(ct);
+
+    public Task SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 }
