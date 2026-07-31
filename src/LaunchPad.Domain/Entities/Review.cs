@@ -22,5 +22,12 @@ public class Review
     public string? Comments { get; set; }
     public decimal? OverallScore { get; private set; }
 
+    // Qualitative counterparts to the hidden numeric score — these ARE candidate-visible
+    // (see CandidateEvaluationDto). OverallScore itself never is. Extending this table
+    // rather than adding a parallel one — see the class summary above.
+    public string? Strengths { get; set; }
+    public string? GrowthAreas { get; set; }
+    public bool? RecommendConversion { get; set; }
+
     public Assignment Assignment { get; set; } = null!;
 }

@@ -13,9 +13,16 @@ public class CandidateDto
 {
     public int CandidateId { get; set; }
     public string DisplayName { get; set; } = string.Empty;
+    public string? Email { get; set; }
     public string? Location { get; set; }
     public Availability Availability { get; set; }
     public DateOnly? GraduationDate { get; set; }
+    public string? LinkedInUrl { get; set; }
+    public string? PortfolioUrl { get; set; }
+    public string? Bio { get; set; }
+    public string? School { get; set; }
+    public string? Degree { get; set; }
+    public decimal? Gpa { get; set; }
     public string[] Skills { get; set; } = Array.Empty<string>();
     public string Outcome { get; set; } = string.Empty;
 

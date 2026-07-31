@@ -12,9 +12,16 @@ public sealed class CandidateDtoMapper : ICandidateDtoMapper
         {
             CandidateId = candidate.CandidateId,
             DisplayName = candidate.AppUser.DisplayName,
+            Email = candidate.AppUser.Upn,
             Location = candidate.Location,
             Availability = candidate.Availability,
             GraduationDate = candidate.GraduationDate,
+            LinkedInUrl = candidate.LinkedInUrl,
+            PortfolioUrl = candidate.PortfolioUrl,
+            Bio = candidate.Bio,
+            School = candidate.School,
+            Degree = candidate.Degree,
+            Gpa = candidate.Gpa,
             Skills = candidate.Skills.Select(s => s.Skill.Name).ToArray(),
             Outcome = candidate.Status.ToOutcomeLabel()
         };

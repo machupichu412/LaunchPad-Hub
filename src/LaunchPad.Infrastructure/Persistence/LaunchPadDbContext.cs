@@ -22,6 +22,10 @@ public class LaunchPadDbContext : DbContext
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<ProjectTodo> ProjectTodos => Set<ProjectTodo>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<Deliverable> Deliverables => Set<Deliverable>();
+    public DbSet<CommunityPost> CommunityPosts => Set<CommunityPost>();
+    public DbSet<CommunityComment> CommunityComments => Set<CommunityComment>();
+    public DbSet<CommunityPostReaction> CommunityPostReactions => Set<CommunityPostReaction>();
 
     // Keyless read model backed by the dbo.vCandidateRisk view — never write through this.
     public DbSet<CandidateRisk> CandidateRisks => Set<CandidateRisk>();

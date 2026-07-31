@@ -12,6 +12,13 @@ namespace LaunchPad.Api.IntegrationTests;
 
 public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
+    // Must be fixed per factory instance, not evaluated inside the options lambda —
+    // AddDbContext rebuilds DbContextOptions<T> for every new scope, so a
+    // Guid.NewGuid() call inside the lambda produces a fresh, isolated in-memory
+    // database per HTTP request (and per manual CreateScope() call in a test), which
+    // silently made seeded data invisible to the request that was supposed to see it.
+    private readonly string _databaseName = $"test-{Guid.NewGuid()}";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.ConfigureServices(services =>
@@ -21,10 +28,12 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             // former still leaves the SqlServer provider registered alongside InMemory.
             services.RemoveAll<DbContextOptions<LaunchPadDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<LaunchPadDbContext>>();
-            services.AddDbContext<LaunchPadDbContext>(o => o.UseInMemoryDatabase($"test-{Guid.NewGuid()}"));
+            services.AddDbContext<LaunchPadDbContext>(o => o.UseInMemoryDatabase(_databaseName));
 
+            // CandidateRisk is keyless (backed by a SQL view in prod) — it can never
+            // be seeded via .Add() under EF Core. See TestCandidateRepositoryWithFakeRisk.
             services.RemoveAll<ICandidateRepository>();
-            services.AddSingleton<ICandidateRepository, FakeCandidateRepository>();
+            services.AddScoped<ICandidateRepository, TestCandidateRepositoryWithFakeRisk>();
 
             services.AddAuthentication(TestAuthHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });

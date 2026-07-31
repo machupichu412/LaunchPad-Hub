@@ -12,6 +12,7 @@ public class ProjectTodo
     public int AssignmentId { get; set; }
     public string Title { get; set; } = string.Empty;
     public TodoStatus Status { get; set; }
+    public TodoPriority Priority { get; set; } = TodoPriority.Medium;
     public DateOnly? DueDate { get; set; }
     public DateTime? CompletedUtc { get; set; }
 

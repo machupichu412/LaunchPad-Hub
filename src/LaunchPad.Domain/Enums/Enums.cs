@@ -73,3 +73,25 @@ public enum TodoStatus
     InProgress = 1,
     Completed = 2
 }
+
+public enum TodoPriority
+{
+    Low = 0,
+    Medium = 1,
+    High = 2
+}
+
+public enum DeliverableStatus
+{
+    Draft = 0,
+    Submitted = 1
+}
+
+public enum CommunityPostType
+{
+    Win = 0,
+    Question = 1,
+    Announcement = 2,
+    Kudos = 3,
+    Reminder = 4
+}
