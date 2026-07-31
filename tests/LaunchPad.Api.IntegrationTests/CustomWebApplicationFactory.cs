@@ -1,4 +1,5 @@
 using LaunchPad.Application.Candidates;
+using LaunchPad.Application.Reporting;
 using LaunchPad.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
@@ -34,6 +35,11 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             // be seeded via .Add() under EF Core. See TestCandidateRepositoryWithFakeRisk.
             services.RemoveAll<ICandidateRepository>();
             services.AddScoped<ICandidateRepository, TestCandidateRepositoryWithFakeRisk>();
+
+            // Same keyless-CandidateRisk constraint as above — OpsDashboardRepository
+            // is built almost entirely around joining it. See FakeOpsDashboardRepository.
+            services.RemoveAll<IOpsDashboardRepository>();
+            services.AddScoped<IOpsDashboardRepository, FakeOpsDashboardRepository>();
 
             services.AddAuthentication(TestAuthHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });

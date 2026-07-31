@@ -13,7 +13,7 @@ public sealed class AssignmentRepository : IAssignmentRepository
     public Task<Assignment?> GetAsync(int assignmentId, CancellationToken ct = default) =>
         _db.Assignments
             .Include(a => a.Project).ThenInclude(p => p.Sponsor).ThenInclude(s => s.AppUser)
-            .Include(a => a.Candidate)
+            .Include(a => a.Candidate).ThenInclude(c => c.AppUser)
             .FirstOrDefaultAsync(a => a.AssignmentId == assignmentId, ct);
 
     public Task<Assignment?> GetWithOwnershipDetailsAsync(int assignmentId, CancellationToken ct = default) =>
@@ -62,5 +62,26 @@ public sealed class AssignmentRepository : IAssignmentRepository
         await _db.Reviews
             .Where(r => r.AssignmentId == assignmentId && r.ReviewType == ReviewType.SponsorOnCandidate)
             .OrderByDescending(r => r.SubmittedUtc)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Assignment>> GetPendingByCohortAsync(int cohortId, CancellationToken ct = default) =>
+        await _db.Assignments
+            .Include(a => a.Candidate).ThenInclude(c => c.AppUser)
+            .Include(a => a.Project).ThenInclude(p => p.Sponsor).ThenInclude(s => s.AppUser)
+            .Where(a => a.Project.CohortId == cohortId && a.Status == AssignmentStatus.Proposed)
+            .ToListAsync(ct);
+
+    public Task<Assignment?> GetLiveAssignmentAsync(int candidateId, CancellationToken ct = default) =>
+        _db.Assignments.FirstOrDefaultAsync(a =>
+            a.CandidateId == candidateId
+            && (a.Status == AssignmentStatus.OpsApproved || a.Status == AssignmentStatus.Active), ct);
+
+    public async Task<IReadOnlyList<Candidate>> GetEligibleCandidatesForMatchingAsync(int cohortId, CancellationToken ct = default) =>
+        await _db.Candidates
+            .Include(c => c.Skills).ThenInclude(cs => cs.Skill)
+            .Where(c => c.CohortId == cohortId && !_db.Assignments.Any(a =>
+                a.CandidateId == c.CandidateId
+                && a.Status != AssignmentStatus.Withdrawn
+                && a.Status != AssignmentStatus.Completed))
             .ToListAsync(ct);
 }

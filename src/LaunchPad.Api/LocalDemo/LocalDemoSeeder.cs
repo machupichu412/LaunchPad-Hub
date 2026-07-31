@@ -32,9 +32,15 @@ public static class LocalDemoSeeder
         var skillCSharp = new Skill { Name = "C#", Category = "Engineering" };
         var skillReact = new Skill { Name = "React", Category = "Engineering" };
         var skillPowerBi = new Skill { Name = "Power BI", Category = "Data" };
+        var skillPython = new Skill { Name = "Python", Category = "Data" };
+        var skillFigma = new Skill { Name = "Figma", Category = "Design" };
+        var skillKubernetes = new Skill { Name = "Kubernetes", Category = "Cloud" };
 
         var sponsorUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "sponsor.demo@example.com", DisplayName = "Sam Sponsor" };
         var sponsor = new Sponsor { AppUser = sponsorUser, Organization = "Contoso Retail", Title = "Engineering Manager", IsActive = true };
+
+        var sponsor2User = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "priya.shah@example.com", DisplayName = "Priya Shah" };
+        var sponsor2 = new Sponsor { AppUser = sponsor2User, Organization = "Contoso Cloud", Title = "Director of Data & AI", IsActive = true };
 
         var project = new Project
         {
@@ -54,6 +60,74 @@ public static class LocalDemoSeeder
             }
         };
 
+        // Two more Open/Approved projects in the main cohort so the Ops "Run matching"
+        // action and Projects catalog (category filter chips) have real material —
+        // these deliberately stay unstaffed, unlike the one above.
+        var project2 = new Project
+        {
+            Cohort = cohort,
+            Sponsor = sponsor2,
+            Name = "Customer Insights AI Copilot",
+            Description = "Build a copilot that surfaces actionable customer insights from support tickets.",
+            AvailabilityNeeded = Availability.FullTime,
+            StartDate = cohort.StartDate,
+            EndDate = cohort.EndDate,
+            ApprovalStatus = ProjectApprovalStatus.Approved,
+            Status = ProjectStatus.Open,
+            Skills = new List<ProjectSkill>
+            {
+                new() { Skill = skillPython, IsRequired = true },
+                new() { Skill = skillPowerBi, IsRequired = false }
+            }
+        };
+        var project3 = new Project
+        {
+            Cohort = cohort,
+            Sponsor = sponsor,
+            Name = "Design System Refresh",
+            Description = "Modernize the shared component library and design tokens.",
+            AvailabilityNeeded = Availability.PartTime,
+            StartDate = cohort.StartDate,
+            EndDate = cohort.EndDate,
+            ApprovalStatus = ProjectApprovalStatus.Approved,
+            Status = ProjectStatus.Open,
+            Skills = new List<ProjectSkill> { new() { Skill = skillFigma, IsRequired = true } }
+        };
+
+        // A second, lightly-populated cohort so Cohorts/Dashboard have more than one
+        // card/cross-cohort number to show.
+        var cohort2 = new Cohort
+        {
+            Program = program,
+            Name = "LP-2026-Fall",
+            StartDate = new DateOnly(2026, 9, 8),
+            EndDate = new DateOnly(2026, 12, 12),
+            Status = CohortStatus.Active
+        };
+        var project4 = new Project
+        {
+            Cohort = cohort2,
+            Sponsor = sponsor2,
+            Name = "Cloud Cost Optimization",
+            Description = "Reduce cross-region infra spend by profiling workloads and rightsizing services.",
+            AvailabilityNeeded = Availability.PartTime,
+            StartDate = cohort2.StartDate,
+            EndDate = cohort2.EndDate,
+            ApprovalStatus = ProjectApprovalStatus.Approved,
+            Status = ProjectStatus.Open,
+            Skills = new List<ProjectSkill> { new() { Skill = skillKubernetes, IsRequired = true } }
+        };
+        var cohort2CandidateUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "alex.torres@example.com", DisplayName = "Alex Torres" };
+        var cohort2Candidate = new Candidate
+        {
+            AppUser = cohort2CandidateUser,
+            Cohort = cohort2,
+            Location = "Austin, TX",
+            Availability = Availability.PartTime,
+            Status = CandidateStatus.InProgress,
+            Skills = new List<CandidateSkill> { new() { Skill = skillKubernetes, Proficiency = 3, Source = SkillSource.SelfReported } }
+        };
+
         var candidateUsers = new[]
         {
             new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "jordan.rivera@example.com", DisplayName = "Jordan Rivera" },
@@ -67,7 +141,11 @@ public static class LocalDemoSeeder
             {
                 AppUser = candidateUsers[0], Cohort = cohort, Location = "Remote",
                 Availability = Availability.PartTime, Status = CandidateStatus.InProgress,
-                Skills = new List<CandidateSkill> { new() { Skill = skillReact, Proficiency = 4, Source = SkillSource.SelfReported } }
+                Skills = new List<CandidateSkill>
+                {
+                    new() { Skill = skillReact, Proficiency = 4, Source = SkillSource.SelfReported },
+                    new() { Skill = skillFigma, Proficiency = 3, Source = SkillSource.SelfReported }
+                }
             },
             new Candidate
             {
@@ -83,7 +161,11 @@ public static class LocalDemoSeeder
             {
                 AppUser = candidateUsers[2], Cohort = cohort, Location = "Remote",
                 Availability = Availability.FullTime, Status = CandidateStatus.TalentPlus,
-                Skills = new List<CandidateSkill> { new() { Skill = skillPowerBi, Proficiency = 4, Source = SkillSource.OpsVerified } }
+                Skills = new List<CandidateSkill>
+                {
+                    new() { Skill = skillPowerBi, Proficiency = 4, Source = SkillSource.OpsVerified },
+                    new() { Skill = skillPython, Proficiency = 3, Source = SkillSource.SelfReported }
+                }
             }
         };
 
@@ -99,6 +181,8 @@ public static class LocalDemoSeeder
 
         db.AddRange(program, cohort, skillCSharp, skillReact, skillPowerBi, sponsor, project, assignment);
         db.AddRange(candidates);
+        db.AddRange(skillPython, skillFigma, skillKubernetes, sponsor2, project2, project3);
+        db.AddRange(cohort2, project4, cohort2Candidate);
         db.SaveChanges();
 
         // Second wave: attach richer downstream data to the one fully-wired assignment

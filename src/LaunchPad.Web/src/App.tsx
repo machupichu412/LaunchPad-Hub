@@ -10,6 +10,11 @@ import { RoleAwareHome } from './features/shared/RoleAwareHome';
 import { Unauthorized } from './features/shared/Unauthorized';
 import { TalentPipeline } from './features/ops/TalentPipeline';
 import { ApprovalQueue } from './features/ops/ApprovalQueue';
+import { OpsDashboard } from './features/ops/OpsDashboard';
+import { OpsProjects } from './features/ops/OpsProjects';
+import { OpsProjectDetail } from './features/ops/OpsProjectDetail';
+import { Cohorts } from './features/ops/Cohorts';
+import { Risks } from './features/ops/Risks';
 import { ExecutiveDashboard } from './features/exec/ExecutiveDashboard';
 import { CandidateDashboard } from './features/candidate/CandidateDashboard';
 import { MyProfile } from './features/candidate/MyProfile';
@@ -41,10 +46,50 @@ export default function App() {
                   }
                 />
                 <Route
+                  path="/ops/dashboard"
+                  element={
+                    <RequireRole allow={[AppRoles.ProgramOps]}>
+                      <OpsDashboard />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/ops/projects"
+                  element={
+                    <RequireRole allow={[AppRoles.ProgramOps]}>
+                      <OpsProjects />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/ops/projects/:id"
+                  element={
+                    <RequireRole allow={[AppRoles.ProgramOps]}>
+                      <OpsProjectDetail />
+                    </RequireRole>
+                  }
+                />
+                <Route
                   path="/ops/approvals"
                   element={
                     <RequireRole allow={[AppRoles.ProgramOps]}>
                       <ApprovalQueue />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/ops/cohorts"
+                  element={
+                    <RequireRole allow={[AppRoles.ProgramOps]}>
+                      <Cohorts />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/ops/risks"
+                  element={
+                    <RequireRole allow={[AppRoles.ProgramOps]}>
+                      <Risks />
                     </RequireRole>
                   }
                 />
@@ -107,7 +152,7 @@ export default function App() {
                 <Route
                   path="/community"
                   element={
-                    <RequireRole allow={[AppRoles.Candidate]}>
+                    <RequireRole allow={[AppRoles.Candidate, AppRoles.ProgramOps]}>
                       <Community />
                     </RequireRole>
                   }

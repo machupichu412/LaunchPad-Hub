@@ -51,9 +51,13 @@ export function NavMenu() {
 
       {activeRole === AppRoles.ProgramOps && (
         <>
-          <li><Link to="/pipeline">Talent Pipeline</Link></li>
-          <li><Link to="/ops/approvals">Approval Queue</Link></li>
-          <li><Link to="/exec">Executive Dashboard</Link></li>
+          <li><Link to="/ops/dashboard">Dashboard</Link></li>
+          <li><Link to="/ops/projects">Projects</Link></li>
+          <li><Link to="/ops/approvals">Approvals</Link></li>
+          <li><Link to="/ops/cohorts">Cohorts</Link></li>
+          <li><Link to="/ops/risks">Risks</Link></li>
+          <li><Link to="/pipeline">Candidates</Link></li>
+          <li><Link to="/community">Community</Link></li>
         </>
       )}
 

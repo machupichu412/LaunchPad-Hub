@@ -1,5 +1,6 @@
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Candidates;
+using LaunchPad.Application.Cohorts;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Community;
 using LaunchPad.Application.Matching;
@@ -34,6 +35,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ISkillRepository, SkillRepository>();
         services.AddScoped<IAppUserRepository, AppUserRepository>();
         services.AddScoped<ICommunityRepository, CommunityRepository>();
+        services.AddScoped<ICohortRepository, CohortRepository>();
+        services.AddScoped<IOpsDashboardRepository, OpsDashboardRepository>();
 
         services.AddSingleton<ICandidateDtoMapper, CandidateDtoMapper>();
         services.AddSingleton<IMatchingEngine, MatchingEngine>();

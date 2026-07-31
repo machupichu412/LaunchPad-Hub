@@ -48,6 +48,7 @@ export type ProjectStatus = 'Open' | 'InProgress' | 'Completed' | 'Cancelled';
 
 export interface ProjectSkillDto {
   skillName: string;
+  category: string | null;
   isRequired: boolean;
 }
 
@@ -55,6 +56,7 @@ export interface ProjectDto {
   projectId: number;
   cohortId: number;
   sponsorId: number;
+  sponsorName: string;
   name: string;
   description: string | null;
   availabilityNeeded: Availability;
@@ -178,4 +180,68 @@ export interface CreateCommunityPostRequest {
 
 export interface CreateCommunityCommentRequest {
   body: string;
+}
+
+export type CohortStatus = 'Planned' | 'Active' | 'Completed';
+
+export interface CohortDto {
+  cohortId: number;
+  programId: number;
+  programName: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: CohortStatus;
+  candidateCount: number;
+  projectCount: number;
+}
+
+export interface CreateCohortRequest {
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface PendingAssignmentDto {
+  assignmentId: number;
+  candidateId: number;
+  candidateName: string;
+  projectId: number;
+  projectName: string;
+  sponsorName: string;
+  sponsorOrganization: string | null;
+  matchScore: number | null;
+  matchRationale: string | null;
+}
+
+export interface RunMatchingResult {
+  proposedCount: number;
+}
+
+export interface MatchFunnelDto {
+  proposed: number;
+  approved: number;
+  denied: number;
+  active: number;
+}
+
+export interface RiskCandidateDto {
+  candidateId: number;
+  displayName: string;
+  cohortName: string;
+  avgScore: number | null;
+  hasPerformanceRisk: boolean;
+  hasEngagementRisk: boolean;
+  staleTodoCount: number;
+}
+
+export interface OpsDashboardDto {
+  activeCandidateCount: number;
+  activeProjectCount: number;
+  activeProjectCohortCount: number;
+  pendingApprovalCount: number;
+  approvedTotalCount: number;
+  highRiskCount: number;
+  matchFunnel: MatchFunnelDto;
+  topRisks: RiskCandidateDto[];
 }

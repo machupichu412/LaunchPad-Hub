@@ -85,6 +85,16 @@ public class ProjectsController : ControllerBase
         return Ok(projects.Select(ToDto).ToArray());
     }
 
+    /// <summary>All projects in a cohort, any status — the Program Ops catalog view. Distinct from
+    /// GetOpenProjects (Candidate-facing, Open+Approved only).</summary>
+    [HttpGet("cohort/{cohortId:int}")]
+    [Authorize(Policy = Policies.ViewTalentPipeline)]
+    public async Task<ActionResult<IReadOnlyList<ProjectDto>>> GetByCohort(int cohortId, CancellationToken ct)
+    {
+        var projects = await _projects.GetByCohortAsync(cohortId, ct);
+        return Ok(projects.Select(ToDto).ToArray());
+    }
+
     [HttpPost]
     [Authorize(Roles = Roles.Sponsor)]
     public async Task<ActionResult<ProjectDto>> Create(CreateProjectRequest request, CancellationToken ct)
@@ -160,6 +170,7 @@ public class ProjectsController : ControllerBase
         ProjectId = project.ProjectId,
         CohortId = project.CohortId,
         SponsorId = project.SponsorId,
+        SponsorName = project.Sponsor.AppUser.DisplayName,
         Name = project.Name,
         Description = project.Description,
         AvailabilityNeeded = project.AvailabilityNeeded,
@@ -168,7 +179,7 @@ public class ProjectsController : ControllerBase
         ApprovalStatus = project.ApprovalStatus,
         Status = project.Status,
         RequiredSkills = project.Skills
-            .Select(s => new ProjectSkillDto { SkillName = s.Skill.Name, IsRequired = s.IsRequired })
+            .Select(s => new ProjectSkillDto { SkillName = s.Skill.Name, Category = s.Skill.Category, IsRequired = s.IsRequired })
             .ToArray()
     };
 

@@ -7,6 +7,7 @@ public class ProjectDto
     public int ProjectId { get; set; }
     public int CohortId { get; set; }
     public int SponsorId { get; set; }
+    public string SponsorName { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public Availability AvailabilityNeeded { get; set; }
@@ -20,5 +21,6 @@ public class ProjectDto
 public class ProjectSkillDto
 {
     public string SkillName { get; set; } = string.Empty;
+    public string? Category { get; set; }
     public bool IsRequired { get; set; }
 }

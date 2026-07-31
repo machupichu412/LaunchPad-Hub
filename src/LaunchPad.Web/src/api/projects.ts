@@ -13,6 +13,18 @@ export async function getOpenProjects(): Promise<ProjectDto[]> {
   return response.json() as Promise<ProjectDto[]>;
 }
 
+export async function getProject(projectId: number): Promise<ProjectDto> {
+  const response = await authedFetch(`/api/projects/${projectId}`);
+  if (!response.ok) throw new Error(`Failed to load project ${projectId}: ${response.status}`);
+  return response.json() as Promise<ProjectDto>;
+}
+
+export async function getProjectsByCohort(cohortId: number): Promise<ProjectDto[]> {
+  const response = await authedFetch(`/api/projects/cohort/${cohortId}`);
+  if (!response.ok) throw new Error(`Failed to load projects for cohort ${cohortId}: ${response.status}`);
+  return response.json() as Promise<ProjectDto[]>;
+}
+
 export async function createProject(request: CreateProjectRequest): Promise<ProjectDto> {
   const response = await authedFetch('/api/projects', { method: 'POST', body: JSON.stringify(request) });
   if (!response.ok) throw new Error(`Failed to create project: ${response.status}`);

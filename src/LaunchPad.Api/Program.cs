@@ -102,7 +102,11 @@ builder.Services.AddCors(options =>
     options.AddPolicy("Spa", policy => policy
         .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>())
         .AllowAnyHeader()
-        .AllowAnyMethod());
+        .AllowAnyMethod()
+        // Without this, browsers hide WWW-Authenticate from fetch()'s Response object
+        // even when the API sends it — the exact validation failure reason (invalid
+        // audience, expired token, etc.) becomes invisible client-side.
+        .WithExposedHeaders("WWW-Authenticate"));
 });
 
 var app = builder.Build();
