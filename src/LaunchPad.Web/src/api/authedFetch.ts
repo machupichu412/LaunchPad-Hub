@@ -7,7 +7,9 @@ import { msalInstance } from '../auth/msalInstance';
  * itself. See launchpad-build-guide.md §7.2.
  */
 export async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  const account = msalInstance.getActiveAccount();
+  // Falls back to the first cached account if none is explicitly "active" yet —
+  // see the race explained in msalInstance.ts's initializeMsal.
+  const account = msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0];
   if (!account) throw new Error('No active account');
 
   let accessToken: string;
