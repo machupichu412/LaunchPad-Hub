@@ -11,6 +11,7 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.ToTable("Project");
         builder.HasKey(p => p.ProjectId);
         builder.Property(p => p.Name).HasMaxLength(300).IsRequired();
+        builder.Property(p => p.RejectionReason).HasMaxLength(1000);
         builder.Property(p => p.RowVersion).IsRowVersion();
 
         builder.HasOne(p => p.Cohort)

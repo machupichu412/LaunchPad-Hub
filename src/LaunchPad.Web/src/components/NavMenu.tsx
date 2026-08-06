@@ -1,5 +1,24 @@
-import { Link } from 'react-router-dom';
-import { makeStyles, tokens } from '@fluentui/react-components';
+import type { ReactElement } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Body1, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
+import {
+  BriefcaseRegular,
+  CheckmarkCircleRegular,
+  ChartMultipleRegular,
+  ClipboardTaskRegular,
+  DocumentArrowUpRegular,
+  DocumentCheckmarkRegular,
+  FolderRegular,
+  GridRegular,
+  HomeRegular,
+  PeopleCommunityRegular,
+  PeopleRegular,
+  PeopleTeamRegular,
+  PersonRegular,
+  ShoppingBagRegular,
+  TaskListSquareLtrRegular,
+  WarningRegular,
+} from '@fluentui/react-icons';
 import { AppRoles } from '../auth/roles';
 import { useActiveRole } from '../auth/ActiveRoleContext';
 
@@ -7,12 +26,62 @@ const useStyles = makeStyles({
   list: {
     display: 'flex',
     flexDirection: 'column',
-    gap: tokens.spacingVerticalS,
+    gap: tokens.spacingVerticalXXS,
     marginTop: tokens.spacingVerticalM,
     listStyle: 'none',
     padding: 0,
   },
+  item: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+    padding: `${tokens.spacingVerticalSNudge} ${tokens.spacingHorizontalM}`,
+    borderRadius: tokens.borderRadiusMedium,
+    color: tokens.colorNeutralForeground2,
+    textDecorationLine: 'none',
+    fontSize: tokens.fontSizeBase300,
+    transitionProperty: 'background-color, color',
+    transitionDuration: tokens.durationFaster,
+    transitionTimingFunction: tokens.curveEasyEase,
+    ':hover': {
+      backgroundColor: tokens.colorSubtleBackgroundHover,
+      color: tokens.colorNeutralForeground2Hover,
+    },
+  },
+  itemSelected: {
+    backgroundColor: tokens.colorBrandBackground2,
+    color: tokens.colorBrandForeground2,
+    fontWeight: tokens.fontWeightSemibold,
+    ':hover': {
+      backgroundColor: tokens.colorBrandBackground2Hover,
+      color: tokens.colorBrandForeground2,
+    },
+  },
+  icon: {
+    display: 'flex',
+    fontSize: '20px',
+    flexShrink: 0,
+  },
 });
+
+function NavLink({ to, icon, children }: { to: string; icon: ReactElement; children: string }) {
+  const styles = useStyles();
+  const { pathname } = useLocation();
+  const isSelected = to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`);
+
+  return (
+    <li>
+      <Link to={to} className={mergeClasses(styles.item, isSelected && styles.itemSelected)}>
+        <span className={styles.icon} aria-hidden="true">
+          {icon}
+        </span>
+        <Body1 as="span" style={{ color: 'inherit', fontWeight: 'inherit' }}>
+          {children}
+        </Body1>
+      </Link>
+    </li>
+  );
+}
 
 /**
  * Shapes the menu only — every link it exposes still hits an API endpoint that
@@ -28,48 +97,51 @@ export function NavMenu() {
 
   return (
     <ul className={styles.list}>
-      <li><Link to="/">Home</Link></li>
+      <NavLink to="/" icon={<HomeRegular />}>Home</NavLink>
 
       {activeRole === AppRoles.Candidate && (
         <>
-          <li><Link to="/dashboard">Dashboard</Link></li>
-          <li><Link to="/profile">My Profile</Link></li>
-          <li><Link to="/assignments">Assignments</Link></li>
-          <li><Link to="/tasks">Tasks</Link></li>
-          <li><Link to="/deliverables">Deliverables</Link></li>
-          <li><Link to="/evaluations">Evaluations</Link></li>
-          <li><Link to="/community">Community</Link></li>
+          <NavLink to="/dashboard" icon={<GridRegular />}>Dashboard</NavLink>
+          <NavLink to="/profile" icon={<PersonRegular />}>My Profile</NavLink>
+          <NavLink to="/marketplace" icon={<ShoppingBagRegular />}>Project Marketplace</NavLink>
+          <NavLink to="/assignments" icon={<BriefcaseRegular />}>Assignments</NavLink>
+          <NavLink to="/tasks" icon={<TaskListSquareLtrRegular />}>Tasks</NavLink>
+          <NavLink to="/deliverables" icon={<DocumentArrowUpRegular />}>Deliverables</NavLink>
+          <NavLink to="/evaluations" icon={<DocumentCheckmarkRegular />}>Evaluations</NavLink>
+          <NavLink to="/community" icon={<PeopleCommunityRegular />}>Community</NavLink>
         </>
       )}
 
       {activeRole === AppRoles.Sponsor && (
         <>
-          <li><Link to="/projects">My Projects</Link></li>
-          <li><Link to="/pipeline">Talent Pipeline</Link></li>
+          <NavLink to="/projects" icon={<FolderRegular />}>My Projects</NavLink>
+          <NavLink to="/candidates" icon={<PeopleRegular />}>My Candidates</NavLink>
+          <NavLink to="/pipeline" icon={<PeopleTeamRegular />}>Talent Pipeline</NavLink>
         </>
       )}
 
       {activeRole === AppRoles.ProgramOps && (
         <>
-          <li><Link to="/ops/dashboard">Dashboard</Link></li>
-          <li><Link to="/ops/projects">Projects</Link></li>
-          <li><Link to="/ops/approvals">Approvals</Link></li>
-          <li><Link to="/ops/cohorts">Cohorts</Link></li>
-          <li><Link to="/ops/risks">Risks</Link></li>
-          <li><Link to="/pipeline">Candidates</Link></li>
-          <li><Link to="/community">Community</Link></li>
+          <NavLink to="/ops/dashboard" icon={<GridRegular />}>Dashboard</NavLink>
+          <NavLink to="/ops/projects" icon={<FolderRegular />}>Projects</NavLink>
+          <NavLink to="/ops/project-approvals" icon={<ClipboardTaskRegular />}>Project Approvals</NavLink>
+          <NavLink to="/ops/approvals" icon={<CheckmarkCircleRegular />}>Approvals</NavLink>
+          <NavLink to="/ops/cohorts" icon={<PeopleTeamRegular />}>Cohorts</NavLink>
+          <NavLink to="/ops/risks" icon={<WarningRegular />}>Risks</NavLink>
+          <NavLink to="/pipeline" icon={<PeopleRegular />}>Candidates</NavLink>
+          <NavLink to="/community" icon={<PeopleCommunityRegular />}>Community</NavLink>
         </>
       )}
 
       {activeRole === AppRoles.Executive && (
         <>
-          <li><Link to="/pipeline">Talent Pipeline</Link></li>
-          <li><Link to="/exec">Executive Dashboard</Link></li>
+          <NavLink to="/pipeline" icon={<PeopleTeamRegular />}>Talent Pipeline</NavLink>
+          <NavLink to="/exec" icon={<ChartMultipleRegular />}>Executive Dashboard</NavLink>
         </>
       )}
 
       {activeRole === AppRoles.HiringManager && (
-        <li><Link to="/pipeline">Talent Pipeline</Link></li>
+        <NavLink to="/pipeline" icon={<PeopleTeamRegular />}>Talent Pipeline</NavLink>
       )}
     </ul>
   );

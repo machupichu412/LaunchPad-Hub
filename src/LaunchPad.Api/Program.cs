@@ -38,6 +38,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(Policies.ApproveMatch, p =>
         p.RequireRole(Roles.ProgramOps));
 
+    options.AddPolicy(Policies.ApproveProject, p =>
+        p.RequireRole(Roles.ProgramOps));
+
     options.AddPolicy(Policies.ManageOwnProfile, p =>
         p.Requirements.Add(new OwnsCandidateProfileRequirement()));
 

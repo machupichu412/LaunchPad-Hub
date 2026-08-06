@@ -2,11 +2,21 @@ using LaunchPad.Domain.Enums;
 
 namespace LaunchPad.Domain.Entities;
 
+public class SkillCategory
+{
+    public int SkillCategoryId { get; set; }
+    public string Name { get; set; } = string.Empty;
+
+    public ICollection<Skill> Skills { get; set; } = new List<Skill>();
+}
+
 public class Skill
 {
     public int SkillId { get; set; }
     public string Name { get; set; } = string.Empty;
-    public string? Category { get; set; }
+    public int SkillCategoryId { get; set; }
+
+    public SkillCategory SkillCategory { get; set; } = null!;
 }
 
 public class CandidateSkill

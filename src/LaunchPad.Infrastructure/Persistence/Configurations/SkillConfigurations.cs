@@ -4,6 +4,17 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace LaunchPad.Infrastructure.Persistence.Configurations;
 
+public class SkillCategoryConfiguration : IEntityTypeConfiguration<SkillCategory>
+{
+    public void Configure(EntityTypeBuilder<SkillCategory> builder)
+    {
+        builder.ToTable("SkillCategory");
+        builder.HasKey(sc => sc.SkillCategoryId);
+        builder.Property(sc => sc.Name).HasMaxLength(100).IsRequired();
+        builder.HasIndex(sc => sc.Name).IsUnique();
+    }
+}
+
 public class SkillConfiguration : IEntityTypeConfiguration<Skill>
 {
     public void Configure(EntityTypeBuilder<Skill> builder)
@@ -11,8 +22,15 @@ public class SkillConfiguration : IEntityTypeConfiguration<Skill>
         builder.ToTable("Skill");
         builder.HasKey(s => s.SkillId);
         builder.Property(s => s.Name).HasMaxLength(100).IsRequired();
-        builder.Property(s => s.Category).HasMaxLength(100);
         builder.HasIndex(s => s.Name).IsUnique();
+
+        // Every skill has a category — ad hoc skills created from free-text input
+        // fall back to a seeded "Uncategorized" row rather than allowing null (see
+        // SkillRepository.GetOrCreateByNamesAsync).
+        builder.HasOne(s => s.SkillCategory)
+            .WithMany(sc => sc.Skills)
+            .HasForeignKey(s => s.SkillCategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
 

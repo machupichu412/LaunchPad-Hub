@@ -29,12 +29,17 @@ public static class LocalDemoSeeder
             Status = CohortStatus.Active
         };
 
-        var skillCSharp = new Skill { Name = "C#", Category = "Engineering" };
-        var skillReact = new Skill { Name = "React", Category = "Engineering" };
-        var skillPowerBi = new Skill { Name = "Power BI", Category = "Data" };
-        var skillPython = new Skill { Name = "Python", Category = "Data" };
-        var skillFigma = new Skill { Name = "Figma", Category = "Design" };
-        var skillKubernetes = new Skill { Name = "Kubernetes", Category = "Cloud" };
+        var categoryEngineering = new SkillCategory { Name = "Engineering" };
+        var categoryData = new SkillCategory { Name = "Data" };
+        var categoryDesign = new SkillCategory { Name = "Design" };
+        var categoryCloud = new SkillCategory { Name = "Cloud" };
+
+        var skillCSharp = new Skill { Name = "C#", SkillCategory = categoryEngineering };
+        var skillReact = new Skill { Name = "React", SkillCategory = categoryEngineering };
+        var skillPowerBi = new Skill { Name = "Power BI", SkillCategory = categoryData };
+        var skillPython = new Skill { Name = "Python", SkillCategory = categoryData };
+        var skillFigma = new Skill { Name = "Figma", SkillCategory = categoryDesign };
+        var skillKubernetes = new Skill { Name = "Kubernetes", SkillCategory = categoryCloud };
 
         var sponsorUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "sponsor.demo@example.com", DisplayName = "Sam Sponsor" };
         var sponsor = new Sponsor { AppUser = sponsorUser, Organization = "Contoso Retail", Title = "Engineering Manager", IsActive = true };
@@ -92,6 +97,36 @@ public static class LocalDemoSeeder
             ApprovalStatus = ProjectApprovalStatus.Approved,
             Status = ProjectStatus.Open,
             Skills = new List<ProjectSkill> { new() { Skill = skillFigma, IsRequired = true } }
+        };
+
+        // One project still in Draft and one already PendingOps, so the Sponsor's new
+        // "Submit for approval" button and the Ops "Project Approvals" queue both have
+        // something to act on immediately.
+        var project5 = new Project
+        {
+            Cohort = cohort,
+            Sponsor = sponsor,
+            Name = "Mentorship Program Refresh",
+            Description = "Redesign the cross-cohort mentorship matching process.",
+            AvailabilityNeeded = Availability.PartTime,
+            StartDate = cohort.StartDate,
+            EndDate = cohort.EndDate,
+            ApprovalStatus = ProjectApprovalStatus.Draft,
+            Status = ProjectStatus.Open,
+            Skills = new List<ProjectSkill> { new() { Skill = skillFigma, IsRequired = true } }
+        };
+        var project6 = new Project
+        {
+            Cohort = cohort,
+            Sponsor = sponsor2,
+            Name = "API Gateway Migration",
+            Description = "Migrate legacy REST endpoints behind a unified API gateway.",
+            AvailabilityNeeded = Availability.FullTime,
+            StartDate = cohort.StartDate,
+            EndDate = cohort.EndDate,
+            ApprovalStatus = ProjectApprovalStatus.PendingOps,
+            Status = ProjectStatus.Open,
+            Skills = new List<ProjectSkill> { new() { Skill = skillPython, IsRequired = true } }
         };
 
         // A second, lightly-populated cohort so Cohorts/Dashboard have more than one
@@ -179,10 +214,32 @@ public static class LocalDemoSeeder
             StartDate = cohort.StartDate
         };
 
+        // A Proposed match sitting on the sponsor's own project so the Sponsor's
+        // "Review matches" screen has something to recommend/reject immediately,
+        // without first needing an Ops "Run matching" click.
+        var proposedMatch = new Assignment
+        {
+            Project = project3,
+            Candidate = candidates[0],
+            MatchScore = 92m,
+            MatchRationale = "Matched 1/1 required skills; availability aligned.",
+            Status = AssignmentStatus.Proposed,
+        };
+
+        // A few marketplace interest ratings so the matching engine's interest nudge and
+        // the "Highly rated only" marketplace filter both have real data to show.
+        var interest1 = new ProjectInterest { Candidate = candidates[0], Project = project2, Rating = 4 };
+        var interest2 = new ProjectInterest { Candidate = candidates[0], Project = project3, Rating = 5 };
+        var interest3 = new ProjectInterest { Candidate = candidates[2], Project = project2, Rating = 5 };
+
+        db.AddRange(categoryEngineering, categoryData, categoryDesign, categoryCloud);
         db.AddRange(program, cohort, skillCSharp, skillReact, skillPowerBi, sponsor, project, assignment);
         db.AddRange(candidates);
         db.AddRange(skillPython, skillFigma, skillKubernetes, sponsor2, project2, project3);
+        db.AddRange(project5, project6);
         db.AddRange(cohort2, project4, cohort2Candidate);
+        db.Add(proposedMatch);
+        db.AddRange(interest1, interest2, interest3);
         db.SaveChanges();
 
         // Second wave: attach richer downstream data to the one fully-wired assignment

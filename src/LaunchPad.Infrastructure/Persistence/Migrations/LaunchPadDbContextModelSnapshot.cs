@@ -479,6 +479,10 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
 
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -500,6 +504,42 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.HasIndex("SponsorId");
 
                     b.ToTable("Project", (string)null);
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectInterest", b =>
+                {
+                    b.Property<int>("ProjectInterestId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProjectInterestId"));
+
+                    b.Property<int>("CandidateId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Rating")
+                        .HasColumnType("tinyint");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime>("UpdatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("ProjectInterestId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("CandidateId", "ProjectId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ProjectInterest_Candidate_Project");
+
+                    b.ToTable("ProjectInterest", (string)null);
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectSkill", b =>
@@ -624,21 +664,43 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SkillId"));
 
-                    b.Property<string>("Category")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("SkillCategoryId")
+                        .HasColumnType("int");
 
                     b.HasKey("SkillId");
 
                     b.HasIndex("Name")
                         .IsUnique();
 
+                    b.HasIndex("SkillCategoryId");
+
                     b.ToTable("Skill", (string)null);
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.SkillCategory", b =>
+                {
+                    b.Property<int>("SkillCategoryId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SkillCategoryId"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("SkillCategoryId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("SkillCategory", (string)null);
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.Sponsor", b =>
@@ -821,6 +883,25 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.Navigation("Sponsor");
                 });
 
+            modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectInterest", b =>
+                {
+                    b.HasOne("LaunchPad.Domain.Entities.Candidate", "Candidate")
+                        .WithMany()
+                        .HasForeignKey("CandidateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LaunchPad.Domain.Entities.Project", "Project")
+                        .WithMany("Interests")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Candidate");
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectSkill", b =>
                 {
                     b.HasOne("LaunchPad.Domain.Entities.Project", "Project")
@@ -860,6 +941,17 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Assignment");
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.Skill", b =>
+                {
+                    b.HasOne("LaunchPad.Domain.Entities.SkillCategory", "SkillCategory")
+                        .WithMany("Skills")
+                        .HasForeignKey("SkillCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SkillCategory");
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.Sponsor", b =>
@@ -912,6 +1004,13 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("Assignments");
 
+                    b.Navigation("Interests");
+
+                    b.Navigation("Skills");
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.SkillCategory", b =>
+                {
                     b.Navigation("Skills");
                 });
 

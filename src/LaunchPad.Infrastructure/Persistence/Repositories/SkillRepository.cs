@@ -6,6 +6,8 @@ namespace LaunchPad.Infrastructure.Persistence.Repositories;
 
 public sealed class SkillRepository : ISkillRepository
 {
+    private const string UncategorizedCategoryName = "Uncategorized";
+
     private readonly LaunchPadDbContext _db;
     public SkillRepository(LaunchPadDbContext db) => _db = db;
 
@@ -20,6 +22,7 @@ public sealed class SkillRepository : ISkillRepository
         if (distinctNames.Length == 0) return Array.Empty<Skill>();
 
         var existing = await _db.Skills
+            .Include(s => s.SkillCategory)
             .Where(s => distinctNames.Contains(s.Name))
             .ToListAsync(ct);
 
@@ -29,12 +32,28 @@ public sealed class SkillRepository : ISkillRepository
 
         if (missingNames.Length > 0)
         {
-            var created = missingNames.Select(n => new Skill { Name = n }).ToArray();
+            // Every skill needs a category (see SkillConfiguration); a skill typed
+            // free-text on a Project/Candidate form has no category to offer, so it
+            // falls back to a shared "Uncategorized" row that Program Ops can later
+            // recategorize from a skills admin view.
+            var uncategorizedId = await GetOrCreateUncategorizedCategoryIdAsync(ct);
+            var created = missingNames.Select(n => new Skill { Name = n, SkillCategoryId = uncategorizedId }).ToArray();
             await _db.Skills.AddRangeAsync(created, ct);
             await _db.SaveChangesAsync(ct);
             existing.AddRange(created);
         }
 
         return existing;
+    }
+
+    private async Task<int> GetOrCreateUncategorizedCategoryIdAsync(CancellationToken ct)
+    {
+        var category = await _db.SkillCategories.FirstOrDefaultAsync(sc => sc.Name == UncategorizedCategoryName, ct);
+        if (category is not null) return category.SkillCategoryId;
+
+        category = new SkillCategory { Name = UncategorizedCategoryName };
+        await _db.SkillCategories.AddAsync(category, ct);
+        await _db.SaveChangesAsync(ct);
+        return category.SkillCategoryId;
     }
 }

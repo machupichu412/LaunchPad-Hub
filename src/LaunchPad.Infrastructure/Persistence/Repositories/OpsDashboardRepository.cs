@@ -18,6 +18,9 @@ public sealed class OpsDashboardRepository : IOpsDashboardRepository
         var activeProjectCohortCount = await activeProjects.Select(p => p.CohortId).Distinct().CountAsync(ct);
 
         var proposedCount = await _db.Assignments.CountAsync(a => a.Status == AssignmentStatus.Proposed, ct);
+        // What's actually actionable in Ops's queue under the two-stage flow —
+        // Proposed is still awaiting sponsor review, not Ops's.
+        var sponsorApprovedCount = await _db.Assignments.CountAsync(a => a.Status == AssignmentStatus.SponsorApproved, ct);
         var approvedTotalCount = await _db.Assignments.CountAsync(
             a => a.Status == AssignmentStatus.OpsApproved || a.Status == AssignmentStatus.Active, ct);
         var deniedCount = await _db.Assignments.CountAsync(a => a.Status == AssignmentStatus.Withdrawn, ct);
@@ -31,7 +34,7 @@ public sealed class OpsDashboardRepository : IOpsDashboardRepository
             ActiveCandidateCount = activeCandidateCount,
             ActiveProjectCount = activeProjectCount,
             ActiveProjectCohortCount = activeProjectCohortCount,
-            PendingApprovalCount = proposedCount,
+            PendingApprovalCount = sponsorApprovedCount,
             ApprovedTotalCount = approvedTotalCount,
             HighRiskCount = highRiskCount,
             MatchFunnel = new MatchFunnelDto

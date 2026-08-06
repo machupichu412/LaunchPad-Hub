@@ -38,5 +38,18 @@ resource reviewSubmittedQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01
   }
 }
 
+// Outlook (Graph) email notifications — project submission and Ops approval decisions.
+// Consumed by LaunchPad.Functions' NotificationFunction. The API and Functions identities
+// already have namespace-wide send/receive RBAC (see main.bicep), so no per-queue role
+// assignment is needed for this one.
+resource notificationsQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-preview' = {
+  parent: serviceBusNamespace
+  name: 'notifications'
+  properties: {
+    deadLetteringOnMessageExpiration: true
+    maxDeliveryCount: 5
+  }
+}
+
 output namespaceName string = serviceBusNamespace.name
 output namespaceId string = serviceBusNamespace.id

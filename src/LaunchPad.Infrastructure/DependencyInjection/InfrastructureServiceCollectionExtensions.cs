@@ -4,11 +4,13 @@ using LaunchPad.Application.Cohorts;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Community;
 using LaunchPad.Application.Matching;
+using LaunchPad.Application.Notifications;
 using LaunchPad.Application.Projects;
 using LaunchPad.Application.Reporting;
 using LaunchPad.Application.Reviews;
 using LaunchPad.Application.Skills;
 using LaunchPad.Application.Sponsors;
+using LaunchPad.Infrastructure.Notifications;
 using LaunchPad.Infrastructure.Persistence;
 using LaunchPad.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -37,9 +39,13 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ICommunityRepository, CommunityRepository>();
         services.AddScoped<ICohortRepository, CohortRepository>();
         services.AddScoped<IOpsDashboardRepository, OpsDashboardRepository>();
+        services.AddScoped<IProjectInterestRepository, ProjectInterestRepository>();
 
         services.AddSingleton<ICandidateDtoMapper, CandidateDtoMapper>();
         services.AddSingleton<IMatchingEngine, MatchingEngine>();
+
+        services.AddScoped<INotificationPublisher, ServiceBusNotificationPublisher>();
+        services.AddScoped<IEmailNotifier, GraphEmailNotifier>();
 
         return services;
     }
