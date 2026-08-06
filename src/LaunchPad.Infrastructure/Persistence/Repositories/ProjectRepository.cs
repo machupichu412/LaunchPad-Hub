@@ -13,27 +13,27 @@ public sealed class ProjectRepository : IProjectRepository
     public Task<Project?> GetWithSponsorAsync(int projectId, CancellationToken ct = default) =>
         _db.Projects
             .Include(p => p.Sponsor).ThenInclude(s => s.AppUser)
-            .Include(p => p.Skills).ThenInclude(ps => ps.Skill)
+            .Include(p => p.Skills).ThenInclude(ps => ps.Skill).ThenInclude(s => s.SkillCategory)
             .FirstOrDefaultAsync(p => p.ProjectId == projectId, ct);
 
     public async Task<IReadOnlyList<Project>> GetByCohortAsync(int cohortId, CancellationToken ct = default) =>
         await _db.Projects
             .Include(p => p.Sponsor).ThenInclude(s => s.AppUser)
-            .Include(p => p.Skills).ThenInclude(ps => ps.Skill)
+            .Include(p => p.Skills).ThenInclude(ps => ps.Skill).ThenInclude(s => s.SkillCategory)
             .Where(p => p.CohortId == cohortId)
             .ToListAsync(ct);
 
     public async Task<IReadOnlyList<Project>> GetOpenByCohortAsync(int cohortId, CancellationToken ct = default) =>
         await _db.Projects
             .Include(p => p.Sponsor).ThenInclude(s => s.AppUser)
-            .Include(p => p.Skills).ThenInclude(ps => ps.Skill)
+            .Include(p => p.Skills).ThenInclude(ps => ps.Skill).ThenInclude(s => s.SkillCategory)
             .Where(p => p.CohortId == cohortId && p.ApprovalStatus == ProjectApprovalStatus.Approved && p.Status == ProjectStatus.Open)
             .ToListAsync(ct);
 
     public async Task<IReadOnlyList<Project>> GetBySponsorAsync(int sponsorId, CancellationToken ct = default) =>
         await _db.Projects
             .Include(p => p.Sponsor).ThenInclude(s => s.AppUser)
-            .Include(p => p.Skills).ThenInclude(ps => ps.Skill)
+            .Include(p => p.Skills).ThenInclude(ps => ps.Skill).ThenInclude(s => s.SkillCategory)
             .Where(p => p.SponsorId == sponsorId)
             .ToListAsync(ct);
 

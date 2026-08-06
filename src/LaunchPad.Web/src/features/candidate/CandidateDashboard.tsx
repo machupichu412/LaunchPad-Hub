@@ -13,22 +13,38 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { useMsal } from '@azure/msal-react';
+import { RocketRegular } from '@fluentui/react-icons';
 import { getMyCandidateDashboard } from '../../api/candidates';
 import { getAssignmentTodos } from '../../api/assignments';
 
 const useStyles = makeStyles({
   banner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalL,
     borderRadius: tokens.borderRadiusLarge,
     padding: tokens.spacingVerticalXXL,
-    background: 'linear-gradient(135deg, #4F52B2 0%, #7A4FBB 100%)',
-    color: '#ffffff',
+    backgroundColor: tokens.colorBrandBackground2,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorBrandStroke2}`,
     marginBottom: tokens.spacingVerticalXL,
   },
+  bannerIcon: {
+    display: 'flex',
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '56px',
+    height: '56px',
+    borderRadius: tokens.borderRadiusCircular,
+    backgroundColor: tokens.colorBrandBackground,
+    color: tokens.colorNeutralForegroundOnBrand,
+    fontSize: '28px',
+  },
   bannerTitle: {
-    color: '#ffffff',
+    color: tokens.colorBrandForeground2,
   },
   bannerBody: {
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: tokens.colorNeutralForeground2,
   },
   tileGrid: {
     display: 'grid',
@@ -98,10 +114,15 @@ export function CandidateDashboard() {
   return (
     <>
       <div className={styles.banner}>
-        <Title1 className={styles.bannerTitle}>Welcome back, {firstName}</Title1>
-        <Body1 className={styles.bannerBody}>
-          {project ? `You're working on ${project.projectName}.` : "You don't have an active project assignment yet."}
-        </Body1>
+        <span className={styles.bannerIcon} aria-hidden="true">
+          <RocketRegular />
+        </span>
+        <div>
+          <Title1 className={styles.bannerTitle}>Welcome back, {firstName}</Title1>
+          <Body1 className={styles.bannerBody}>
+            {project ? `You're working on ${project.projectName}.` : "You don't have an active project assignment yet."}
+          </Body1>
+        </div>
       </div>
 
       <div className={styles.tileGrid}>

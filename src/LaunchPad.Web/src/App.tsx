@@ -1,11 +1,12 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { FluentProvider, webLightTheme } from '@fluentui/react-components';
+import { FluentProvider } from '@fluentui/react-components';
 import { AuthenticatedTemplate, UnauthenticatedTemplate } from '@azure/msal-react';
 import { AppShell } from './components/AppShell';
 import { SignInPrompt } from './components/SignInPrompt';
 import { RequireRole } from './auth/RequireRole';
 import { ActiveRoleProvider } from './auth/ActiveRoleContext';
 import { AppRoles } from './auth/roles';
+import { ThemeModeProvider, useThemeMode } from './theme/ThemeModeContext';
 import { RoleAwareHome } from './features/shared/RoleAwareHome';
 import { Unauthorized } from './features/shared/Unauthorized';
 import { TalentPipeline } from './features/ops/TalentPipeline';
@@ -13,6 +14,7 @@ import { ApprovalQueue } from './features/ops/ApprovalQueue';
 import { OpsDashboard } from './features/ops/OpsDashboard';
 import { OpsProjects } from './features/ops/OpsProjects';
 import { OpsProjectDetail } from './features/ops/OpsProjectDetail';
+import { ProjectApprovals } from './features/ops/ProjectApprovals';
 import { Cohorts } from './features/ops/Cohorts';
 import { Risks } from './features/ops/Risks';
 import { ExecutiveDashboard } from './features/exec/ExecutiveDashboard';
@@ -24,10 +26,25 @@ import { Deliverables } from './features/candidate/Deliverables';
 import { Evaluations } from './features/candidate/Evaluations';
 import { Community } from './features/candidate/Community';
 import { MyProjects } from './features/sponsor/MyProjects';
+import { ProjectMatches } from './features/sponsor/ProjectMatches';
+import { MyCandidates } from './features/sponsor/MyCandidates';
+import { SubmitReview } from './features/sponsor/SubmitReview';
+import { ProjectMarketplace } from './features/candidate/ProjectMarketplace';
+import { ProjectDetail } from './features/candidate/ProjectDetail';
 
 export default function App() {
   return (
-    <FluentProvider theme={webLightTheme}>
+    <ThemeModeProvider>
+      <AppContent />
+    </ThemeModeProvider>
+  );
+}
+
+function AppContent() {
+  const { theme } = useThemeMode();
+
+  return (
+    <FluentProvider theme={theme}>
       <AuthenticatedTemplate>
         <ActiveRoleProvider>
           <BrowserRouter>
@@ -90,6 +107,14 @@ export default function App() {
                   element={
                     <RequireRole allow={[AppRoles.ProgramOps]}>
                       <Risks />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/ops/project-approvals"
+                  element={
+                    <RequireRole allow={[AppRoles.ProgramOps]}>
+                      <ProjectApprovals />
                     </RequireRole>
                   }
                 />
@@ -158,10 +183,50 @@ export default function App() {
                   }
                 />
                 <Route
+                  path="/marketplace"
+                  element={
+                    <RequireRole allow={[AppRoles.Candidate]}>
+                      <ProjectMarketplace />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/marketplace/:id"
+                  element={
+                    <RequireRole allow={[AppRoles.Candidate]}>
+                      <ProjectDetail />
+                    </RequireRole>
+                  }
+                />
+                <Route
                   path="/projects"
                   element={
                     <RequireRole allow={[AppRoles.Sponsor]}>
                       <MyProjects />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/projects/:id/matches"
+                  element={
+                    <RequireRole allow={[AppRoles.Sponsor]}>
+                      <ProjectMatches />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/candidates"
+                  element={
+                    <RequireRole allow={[AppRoles.Sponsor]}>
+                      <MyCandidates />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/candidates/:assignmentId/review"
+                  element={
+                    <RequireRole allow={[AppRoles.Sponsor]}>
+                      <SubmitReview />
                     </RequireRole>
                   }
                 />

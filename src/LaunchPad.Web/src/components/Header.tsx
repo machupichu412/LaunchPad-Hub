@@ -1,8 +1,10 @@
 import { useMsal } from '@azure/msal-react';
-import { Avatar, Body1, Button, Caption1, Input, makeStyles, tokens } from '@fluentui/react-components';
-import { AlertRegular, SearchRegular } from '@fluentui/react-icons';
+import { useNavigate } from 'react-router-dom';
+import { Avatar, Body1, Button, Caption1, Input, Tooltip, makeStyles, tokens } from '@fluentui/react-components';
+import { AlertRegular, SearchRegular, WeatherMoonRegular, WeatherSunnyRegular } from '@fluentui/react-icons';
 import { useActiveRole } from '../auth/ActiveRoleContext';
-import { roleLabel } from '../auth/roles';
+import { roleHomePath, roleLabel, type AppRole } from '../auth/roles';
+import { useThemeMode } from '../theme/ThemeModeContext';
 
 const useStyles = makeStyles({
   root: {
@@ -42,10 +44,17 @@ const useStyles = makeStyles({
  */
 export function Header() {
   const styles = useStyles();
+  const navigate = useNavigate();
   const { accounts } = useMsal();
   const { activeRole, roles, setActiveRole } = useActiveRole();
+  const { mode, toggleMode } = useThemeMode();
   const account = accounts[0];
   const displayName = account?.name ?? account?.username ?? 'Signed in';
+
+  const switchRole = (role: AppRole) => {
+    setActiveRole(role);
+    navigate(roleHomePath(role));
+  };
 
   return (
     <header className={styles.root}>
@@ -67,13 +76,22 @@ export function Header() {
               size="small"
               shape="rounded"
               appearance={role === activeRole ? 'primary' : 'outline'}
-              onClick={() => setActiveRole(role)}
+              onClick={() => switchRole(role)}
             >
               {roleLabel(role)}
             </Button>
           ))}
         </div>
       )}
+
+      <Tooltip content={mode === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} relationship="label">
+        <Button
+          icon={mode === 'dark' ? <WeatherSunnyRegular /> : <WeatherMoonRegular />}
+          appearance="subtle"
+          onClick={toggleMode}
+          aria-label={mode === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        />
+      </Tooltip>
 
       <Button icon={<AlertRegular />} appearance="subtle" disabled title="Notifications" />
 

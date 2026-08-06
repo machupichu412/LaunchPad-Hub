@@ -15,9 +15,11 @@ public class Project : Entity
     public DateOnly? EndDate { get; set; }
     public ProjectApprovalStatus ApprovalStatus { get; set; }
     public ProjectStatus Status { get; set; }
+    public string? RejectionReason { get; set; }
 
     public Cohort Cohort { get; set; } = null!;
     public Sponsor Sponsor { get; set; } = null!;
     public ICollection<ProjectSkill> Skills { get; set; } = new List<ProjectSkill>();
     public ICollection<Assignment> Assignments { get; set; } = new List<Assignment>();
+    public ICollection<ProjectInterest> Interests { get; set; } = new List<ProjectInterest>();
 }

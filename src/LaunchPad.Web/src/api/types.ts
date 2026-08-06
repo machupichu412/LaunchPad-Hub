@@ -48,7 +48,7 @@ export type ProjectStatus = 'Open' | 'InProgress' | 'Completed' | 'Cancelled';
 
 export interface ProjectSkillDto {
   skillName: string;
-  category: string | null;
+  category: string;
   isRequired: boolean;
 }
 
@@ -64,7 +64,18 @@ export interface ProjectDto {
   endDate: string | null;
   approvalStatus: ProjectApprovalStatus;
   status: ProjectStatus;
+  rejectionReason: string | null;
+  sponsorTeamsLink: string;
+  myInterestRating: number | null;
   requiredSkills: ProjectSkillDto[];
+}
+
+export interface RateInterestRequest {
+  rating: number;
+}
+
+export interface RejectProjectRequest {
+  reason: string;
 }
 
 export interface CreateProjectRequest {
@@ -244,4 +255,50 @@ export interface OpsDashboardDto {
   highRiskCount: number;
   matchFunnel: MatchFunnelDto;
   topRisks: RiskCandidateDto[];
+}
+
+export interface ProjectMatchDto {
+  assignmentId: number;
+  candidateId: number;
+  candidateName: string;
+  matchScore: number | null;
+  matchRationale: string | null;
+}
+
+export interface SubmitReviewRequest {
+  assignmentId: number;
+  reviewType: 'SponsorOnCandidate' | 'CandidateOnSponsor' | 'ProjectEval';
+  checkpoint: Checkpoint;
+  commitment: number | null;
+  availability: number | null;
+  guidance: number | null;
+  outputQuality: number | null;
+  comments: string | null;
+  strengths: string | null;
+  growthAreas: string | null;
+  recommendConversion: boolean | null;
+}
+
+/** Never carries OverallScore or the four numeric rating dimensions — see
+ * CLAUDE.md's "hidden ratings" control. Not even the sponsor who submitted them
+ * gets them echoed back. */
+export interface SponsorReviewDto {
+  reviewId: number;
+  assignmentId: number;
+  checkpoint: Checkpoint;
+  submittedUtc: string;
+  comments: string | null;
+  strengths: string | null;
+  growthAreas: string | null;
+  recommendConversion: boolean | null;
+}
+
+export interface SponsorCandidateDto {
+  assignmentId: number;
+  candidateId: number;
+  candidateName: string;
+  projectId: number;
+  projectName: string;
+  status: AssignmentStatus;
+  startDate: string | null;
 }

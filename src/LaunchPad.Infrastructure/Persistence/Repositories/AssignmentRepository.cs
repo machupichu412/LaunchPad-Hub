@@ -68,7 +68,7 @@ public sealed class AssignmentRepository : IAssignmentRepository
         await _db.Assignments
             .Include(a => a.Candidate).ThenInclude(c => c.AppUser)
             .Include(a => a.Project).ThenInclude(p => p.Sponsor).ThenInclude(s => s.AppUser)
-            .Where(a => a.Project.CohortId == cohortId && a.Status == AssignmentStatus.Proposed)
+            .Where(a => a.Project.CohortId == cohortId && a.Status == AssignmentStatus.SponsorApproved)
             .ToListAsync(ct);
 
     public Task<Assignment?> GetLiveAssignmentAsync(int candidateId, CancellationToken ct = default) =>
@@ -81,7 +81,49 @@ public sealed class AssignmentRepository : IAssignmentRepository
             .Include(c => c.Skills).ThenInclude(cs => cs.Skill)
             .Where(c => c.CohortId == cohortId && !_db.Assignments.Any(a =>
                 a.CandidateId == c.CandidateId
-                && a.Status != AssignmentStatus.Withdrawn
-                && a.Status != AssignmentStatus.Completed))
+                && (a.Status == AssignmentStatus.OpsApproved || a.Status == AssignmentStatus.Active)))
             .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Assignment>> GetProposedByProjectAsync(int projectId, CancellationToken ct = default) =>
+        await _db.Assignments
+            .Include(a => a.Candidate).ThenInclude(c => c.AppUser)
+            .Include(a => a.Project).ThenInclude(p => p.Sponsor).ThenInclude(s => s.AppUser)
+            .Where(a => a.ProjectId == projectId && a.Status == AssignmentStatus.Proposed)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<int>> GetProjectIdsWithPendingMatchesAsync(int cohortId, CancellationToken ct = default) =>
+        await _db.Assignments
+            .Where(a => a.Project.CohortId == cohortId
+                && (a.Status == AssignmentStatus.Proposed || a.Status == AssignmentStatus.SponsorApproved))
+            .Select(a => a.ProjectId)
+            .Distinct()
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Assignment>> GetPendingAssignmentsForCandidateAsync(int candidateId, CancellationToken ct = default) =>
+        await _db.Assignments
+            .Where(a => a.CandidateId == candidateId
+                && (a.Status == AssignmentStatus.Proposed || a.Status == AssignmentStatus.SponsorApproved))
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Assignment>> GetBySponsorAsync(int sponsorId, CancellationToken ct = default) =>
+        await _db.Assignments
+            .Include(a => a.Candidate).ThenInclude(c => c.AppUser)
+            .Include(a => a.Project)
+            .Where(a => a.Project.SponsorId == sponsorId
+                && (a.Status == AssignmentStatus.OpsApproved || a.Status == AssignmentStatus.Active || a.Status == AssignmentStatus.Completed))
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyDictionary<int, decimal>> GetAveragePerformanceScoresByCohortAsync(int cohortId, CancellationToken ct = default)
+    {
+        var averages = await _db.Reviews
+            .Where(r => r.ReviewType == ReviewType.SponsorOnCandidate
+                && r.Assignment.Candidate.CohortId == cohortId
+                && r.OverallScore != null)
+            .GroupBy(r => r.Assignment.CandidateId)
+            .Select(g => new { CandidateId = g.Key, AverageScore = g.Average(r => r.OverallScore!.Value) })
+            .ToListAsync(ct);
+
+        // OverallScore is on a 1-5 scale; normalize to 0-1 for the matching engine.
+        return averages.ToDictionary(x => x.CandidateId, x => Math.Clamp((x.AverageScore - 1m) / 4m, 0m, 1m));
+    }
 }

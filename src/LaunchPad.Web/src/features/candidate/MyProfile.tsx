@@ -105,7 +105,7 @@ export function MyProfile() {
     <>
       <Title2>My Profile</Title2>
 
-      <div className={styles.layout} style={{ marginTop: '1rem' }}>
+      <div className={styles.layout} style={{ marginTop: tokens.spacingVerticalM }}>
         <Card className={styles.summaryCard}>
           <Avatar name={profile.displayName} size={72} />
           <Title3>{profile.displayName}</Title3>

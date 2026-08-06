@@ -1,4 +1,5 @@
 using LaunchPad.Application.Candidates;
+using LaunchPad.Application.Notifications;
 using LaunchPad.Application.Reporting;
 using LaunchPad.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication;
@@ -40,6 +41,11 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             // is built almost entirely around joining it. See FakeOpsDashboardRepository.
             services.RemoveAll<IOpsDashboardRepository>();
             services.AddScoped<IOpsDashboardRepository, FakeOpsDashboardRepository>();
+
+            // Records notifications instead of publishing to a real Service Bus
+            // namespace — see FakeNotificationPublisher.
+            services.RemoveAll<INotificationPublisher>();
+            services.AddSingleton<INotificationPublisher, FakeNotificationPublisher>();
 
             services.AddAuthentication(TestAuthHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });

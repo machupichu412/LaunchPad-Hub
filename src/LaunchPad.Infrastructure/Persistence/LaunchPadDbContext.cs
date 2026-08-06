@@ -15,9 +15,11 @@ public class LaunchPadDbContext : DbContext
     public DbSet<Candidate> Candidates => Set<Candidate>();
     public DbSet<Sponsor> Sponsors => Set<Sponsor>();
     public DbSet<Project> Projects => Set<Project>();
+    public DbSet<SkillCategory> SkillCategories => Set<SkillCategory>();
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<CandidateSkill> CandidateSkills => Set<CandidateSkill>();
     public DbSet<ProjectSkill> ProjectSkills => Set<ProjectSkill>();
+    public DbSet<ProjectInterest> ProjectInterests => Set<ProjectInterest>();
     public DbSet<Assignment> Assignments => Set<Assignment>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<ProjectTodo> ProjectTodos => Set<ProjectTodo>();
