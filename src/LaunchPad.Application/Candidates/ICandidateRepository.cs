@@ -8,5 +8,6 @@ public interface ICandidateRepository
     Task<Candidate?> GetByEntraObjectIdAsync(Guid entraObjectId, CancellationToken ct = default);
     Task<CandidateRisk?> GetRiskAsync(int candidateId, CancellationToken ct = default);
     Task<IReadOnlyList<Candidate>> GetByCohortAsync(int cohortId, CancellationToken ct = default);
+    Task<Candidate> AddAsync(Candidate candidate, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken ct = default);
 }

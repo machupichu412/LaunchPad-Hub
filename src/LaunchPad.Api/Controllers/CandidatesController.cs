@@ -1,6 +1,7 @@
 using FluentValidation;
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Candidates;
+using LaunchPad.Application.Cohorts;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Community;
 using LaunchPad.Application.Skills;
@@ -23,27 +24,39 @@ public class CandidatesController : ControllerBase
     private readonly ICandidateRepository _candidates;
     private readonly ICandidateDtoMapper _mapper;
     private readonly ISkillRepository _skills;
+    private readonly ICohortRepository _cohorts;
+    private readonly IAppUserRepository _appUsers;
     private readonly ICurrentUser _currentUser;
     private readonly IValidator<UpdateCandidateProfileRequest> _updateValidator;
+    private readonly IValidator<CreateCandidateProfileRequest> _createValidator;
     private readonly IAssignmentRepository _assignments;
     private readonly ICommunityRepository _community;
+    private readonly IProfilePictureStorage _profilePictures;
 
     public CandidatesController(
         ICandidateRepository candidates,
         ICandidateDtoMapper mapper,
         ISkillRepository skills,
+        ICohortRepository cohorts,
+        IAppUserRepository appUsers,
         ICurrentUser currentUser,
         IValidator<UpdateCandidateProfileRequest> updateValidator,
+        IValidator<CreateCandidateProfileRequest> createValidator,
         IAssignmentRepository assignments,
-        ICommunityRepository community)
+        ICommunityRepository community,
+        IProfilePictureStorage profilePictures)
     {
         _candidates = candidates;
         _mapper = mapper;
         _skills = skills;
+        _cohorts = cohorts;
+        _appUsers = appUsers;
         _currentUser = currentUser;
         _updateValidator = updateValidator;
+        _createValidator = createValidator;
         _assignments = assignments;
         _community = community;
+        _profilePictures = profilePictures;
     }
 
     [HttpGet("{id:int}")]
@@ -56,6 +69,23 @@ public class CandidatesController : ControllerBase
         // Redaction happens inside the mapper — never filter scores here or in the client.
         var risk = await _candidates.GetRiskAsync(id, ct);
         return Ok(_mapper.ToDto(candidate, risk, User));
+    }
+
+    /// <summary>The candidate's photo for roster/browse cards (see CandidateAvatar.tsx) —
+    /// same ViewTalentPipeline gate as viewing the candidate's other info; a photo carries
+    /// none of the hidden-score sensitivity CLAUDE.md's redaction rule is about, so no
+    /// separate ownership check is needed beyond "can this caller see candidates at all."</summary>
+    [HttpGet("{id:int}/avatar")]
+    [Authorize(Policy = Policies.ViewTalentPipeline)]
+    public async Task<IActionResult> GetAvatar(int id, CancellationToken ct)
+    {
+        var candidate = await _candidates.GetWithSkillsAsync(id, ct);
+        if (candidate?.AppUser.AvatarBlobPath is not { } blobPath) return NotFound();
+
+        var result = await _profilePictures.GetAsync(blobPath, ct);
+        if (result is null) return NotFound();
+
+        return File(result.Value.Content, result.Value.ContentType);
     }
 
     [HttpGet("cohort/{cohortId:int}")]
@@ -105,6 +135,80 @@ public class CandidatesController : ControllerBase
             MatchScore = assignment.MatchScore,
             CommunityPostsThisWeek = communityPostsThisWeek,
         });
+    }
+
+    /// <summary>
+    /// Self-service onboarding: creates the caller's own Candidate row the first time
+    /// they're seen (a Candidate-role Entra token with no matching row yet — see
+    /// AppUserProvisioningMiddleware, which JIT-provisions AppUser but never Candidate).
+    /// AppUserId is resolved server-side from EntraObjectId, never client-supplied,
+    /// same pattern ProjectsController uses for SponsorId. Cohort is auto-assigned to
+    /// the single active cohort; ambiguity (zero or multiple) is a 409, not a guess.
+    /// </summary>
+    [HttpPost("me")]
+    [Authorize(Roles = Roles.Candidate)]
+    public async Task<ActionResult<CandidateDto>> CreateMe(CreateCandidateProfileRequest request, CancellationToken ct)
+    {
+        var validation = await _createValidator.ValidateAsync(request, ct);
+        if (!validation.IsValid)
+        {
+            foreach (var error in validation.Errors)
+            {
+                ModelState.AddModelError(error.PropertyName, error.ErrorMessage);
+            }
+            return ValidationProblem(ModelState);
+        }
+
+        var existing = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        if (existing is not null) return Conflict("A candidate profile already exists for this account.");
+
+        // Request-shape validity (do the selected skills even exist) is checked before
+        // any external resource-state check (active cohort count) — a malformed request
+        // should fail the same way regardless of how many cohorts happen to be active.
+        var allSkills = await _skills.GetAllAsync(ct);
+        var requestedSkillIds = request.SkillIds.ToHashSet();
+        var matchedSkills = allSkills.Where(s => requestedSkillIds.Contains(s.SkillId)).ToList();
+        if (matchedSkills.Count != requestedSkillIds.Count)
+        {
+            return BadRequest("One or more selected skills don't exist.");
+        }
+
+        var appUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        if (appUserId is null) return Conflict("Your account isn't provisioned yet — try signing in again.");
+
+        var activeCohorts = await _cohorts.GetActiveAsync(ct);
+        if (activeCohorts.Count != 1)
+        {
+            return Conflict(activeCohorts.Count == 0
+                ? "There's no active cohort to join right now — contact Program Ops."
+                : "More than one cohort is active — contact Program Ops to get assigned.");
+        }
+
+        var candidate = new Candidate
+        {
+            AppUserId = appUserId.Value,
+            CohortId = activeCohorts[0].CohortId,
+            Location = request.Location,
+            Availability = request.Availability,
+            GraduationDate = request.GraduationDate,
+            LinkedInUrl = request.LinkedInUrl,
+            PortfolioUrl = request.PortfolioUrl,
+            Bio = request.Bio,
+            School = request.School,
+            Degree = request.Degree,
+            Gpa = request.Gpa,
+            Status = CandidateStatus.InProgress,
+            Skills = matchedSkills
+                .Select(s => new CandidateSkill { SkillId = s.SkillId, Skill = s, Source = SkillSource.SelfReported })
+                .ToList(),
+        };
+
+        await _candidates.AddAsync(candidate, ct);
+        await _candidates.SaveChangesAsync(ct);
+
+        var created = await _candidates.GetWithSkillsAsync(candidate.CandidateId, ct);
+        var risk = await _candidates.GetRiskAsync(candidate.CandidateId, ct);
+        return CreatedAtAction(nameof(GetMe), null, _mapper.ToDto(created!, risk, User));
     }
 
     /// <summary>The signed-in Candidate's own profile — resolved server-side from their EntraObjectId.</summary>
