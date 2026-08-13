@@ -1,3 +1,4 @@
+using FluentValidation;
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Sponsors;
@@ -15,12 +16,68 @@ public class SponsorsController : ControllerBase
     private readonly ISponsorRepository _sponsors;
     private readonly IAssignmentRepository _assignments;
     private readonly ICurrentUser _currentUser;
+    private readonly IAppUserRepository _appUsers;
+    private readonly IValidator<CreateSponsorProfileRequest> _createValidator;
 
-    public SponsorsController(ISponsorRepository sponsors, IAssignmentRepository assignments, ICurrentUser currentUser)
+    public SponsorsController(
+        ISponsorRepository sponsors,
+        IAssignmentRepository assignments,
+        ICurrentUser currentUser,
+        IAppUserRepository appUsers,
+        IValidator<CreateSponsorProfileRequest> createValidator)
     {
         _sponsors = sponsors;
         _assignments = assignments;
         _currentUser = currentUser;
+        _appUsers = appUsers;
+        _createValidator = createValidator;
+    }
+
+    /// <summary>
+    /// Self-service onboarding: creates the caller's own Sponsor row the first time
+    /// they're seen (a Sponsor-role Entra token with no matching row yet — see
+    /// AppUserProvisioningMiddleware, which JIT-provisions AppUser but never Sponsor).
+    /// Mirrors CandidatesController.CreateMe. AppUserId is resolved server-side from
+    /// EntraObjectId, never client-supplied. No cohort assignment — Sponsor isn't
+    /// cohort-scoped (see CreateSponsorProfileRequest).
+    /// </summary>
+    [HttpPost("me")]
+    public async Task<ActionResult<SponsorDto>> CreateMe(CreateSponsorProfileRequest request, CancellationToken ct)
+    {
+        var validation = await _createValidator.ValidateAsync(request, ct);
+        if (!validation.IsValid)
+        {
+            foreach (var error in validation.Errors)
+            {
+                ModelState.AddModelError(error.PropertyName, error.ErrorMessage);
+            }
+            return ValidationProblem(ModelState);
+        }
+
+        var existing = await _sponsors.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        if (existing is not null) return Conflict("A sponsor profile already exists for this account.");
+
+        var appUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        if (appUserId is null) return Conflict("Your account isn't provisioned yet — try signing in again.");
+
+        var sponsor = new Sponsor
+        {
+            AppUserId = appUserId.Value,
+            Organization = request.Organization,
+            Title = request.Title,
+        };
+
+        await _sponsors.AddAsync(sponsor, ct);
+        await _sponsors.SaveChangesAsync(ct);
+
+        var created = await _sponsors.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        return CreatedAtAction(nameof(GetMe), null, new SponsorDto
+        {
+            SponsorId = created!.SponsorId,
+            DisplayName = created.AppUser.DisplayName,
+            Organization = created.Organization,
+            Title = created.Title,
+        });
     }
 
     /// <summary>

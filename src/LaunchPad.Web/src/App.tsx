@@ -4,6 +4,8 @@ import { AuthenticatedTemplate, UnauthenticatedTemplate } from '@azure/msal-reac
 import { AppShell } from './components/AppShell';
 import { SignInPrompt } from './components/SignInPrompt';
 import { RequireRole } from './auth/RequireRole';
+import { RequireCandidateProfile } from './auth/RequireCandidateProfile';
+import { RequireSponsorProfile } from './auth/RequireSponsorProfile';
 import { ActiveRoleProvider } from './auth/ActiveRoleContext';
 import { AppRoles } from './auth/roles';
 import { ThemeModeProvider, useThemeMode } from './theme/ThemeModeContext';
@@ -13,7 +15,6 @@ import { TalentPipeline } from './features/ops/TalentPipeline';
 import { ApprovalQueue } from './features/ops/ApprovalQueue';
 import { OpsDashboard } from './features/ops/OpsDashboard';
 import { OpsProjects } from './features/ops/OpsProjects';
-import { OpsProjectDetail } from './features/ops/OpsProjectDetail';
 import { ProjectApprovals } from './features/ops/ProjectApprovals';
 import { Cohorts } from './features/ops/Cohorts';
 import { Risks } from './features/ops/Risks';
@@ -31,6 +32,9 @@ import { MyCandidates } from './features/sponsor/MyCandidates';
 import { SubmitReview } from './features/sponsor/SubmitReview';
 import { ProjectMarketplace } from './features/candidate/ProjectMarketplace';
 import { ProjectDetail } from './features/candidate/ProjectDetail';
+import { Onboarding } from './features/candidate/Onboarding';
+import { SponsorOnboarding } from './features/sponsor/SponsorOnboarding';
+import { ProjectEditor } from './components/ProjectEditor';
 
 export default function App() {
   return (
@@ -82,7 +86,7 @@ function AppContent() {
                   path="/ops/projects/:id"
                   element={
                     <RequireRole allow={[AppRoles.ProgramOps]}>
-                      <OpsProjectDetail />
+                      <ProjectEditor />
                     </RequireRole>
                   }
                 />
@@ -127,10 +131,20 @@ function AppContent() {
                   }
                 />
                 <Route
+                  path="/onboarding"
+                  element={
+                    <RequireRole allow={[AppRoles.Candidate]}>
+                      <Onboarding />
+                    </RequireRole>
+                  }
+                />
+                <Route
                   path="/dashboard"
                   element={
                     <RequireRole allow={[AppRoles.Candidate]}>
-                      <CandidateDashboard />
+                      <RequireCandidateProfile>
+                        <CandidateDashboard />
+                      </RequireCandidateProfile>
                     </RequireRole>
                   }
                 />
@@ -138,7 +152,9 @@ function AppContent() {
                   path="/profile"
                   element={
                     <RequireRole allow={[AppRoles.Candidate]}>
-                      <MyProfile />
+                      <RequireCandidateProfile>
+                        <MyProfile />
+                      </RequireCandidateProfile>
                     </RequireRole>
                   }
                 />
@@ -146,7 +162,9 @@ function AppContent() {
                   path="/assignments"
                   element={
                     <RequireRole allow={[AppRoles.Candidate]}>
-                      <Assignments />
+                      <RequireCandidateProfile>
+                        <Assignments />
+                      </RequireCandidateProfile>
                     </RequireRole>
                   }
                 />
@@ -154,7 +172,9 @@ function AppContent() {
                   path="/tasks"
                   element={
                     <RequireRole allow={[AppRoles.Candidate]}>
-                      <Tasks />
+                      <RequireCandidateProfile>
+                        <Tasks />
+                      </RequireCandidateProfile>
                     </RequireRole>
                   }
                 />
@@ -162,7 +182,9 @@ function AppContent() {
                   path="/deliverables"
                   element={
                     <RequireRole allow={[AppRoles.Candidate]}>
-                      <Deliverables />
+                      <RequireCandidateProfile>
+                        <Deliverables />
+                      </RequireCandidateProfile>
                     </RequireRole>
                   }
                 />
@@ -170,7 +192,9 @@ function AppContent() {
                   path="/evaluations"
                   element={
                     <RequireRole allow={[AppRoles.Candidate]}>
-                      <Evaluations />
+                      <RequireCandidateProfile>
+                        <Evaluations />
+                      </RequireCandidateProfile>
                     </RequireRole>
                   }
                 />
@@ -186,7 +210,9 @@ function AppContent() {
                   path="/marketplace"
                   element={
                     <RequireRole allow={[AppRoles.Candidate]}>
-                      <ProjectMarketplace />
+                      <RequireCandidateProfile>
+                        <ProjectMarketplace />
+                      </RequireCandidateProfile>
                     </RequireRole>
                   }
                 />
@@ -194,7 +220,17 @@ function AppContent() {
                   path="/marketplace/:id"
                   element={
                     <RequireRole allow={[AppRoles.Candidate]}>
-                      <ProjectDetail />
+                      <RequireCandidateProfile>
+                        <ProjectDetail />
+                      </RequireCandidateProfile>
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/sponsor-onboarding"
+                  element={
+                    <RequireRole allow={[AppRoles.Sponsor]}>
+                      <SponsorOnboarding />
                     </RequireRole>
                   }
                 />
@@ -202,7 +238,19 @@ function AppContent() {
                   path="/projects"
                   element={
                     <RequireRole allow={[AppRoles.Sponsor]}>
-                      <MyProjects />
+                      <RequireSponsorProfile>
+                        <MyProjects />
+                      </RequireSponsorProfile>
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/projects/:id/edit"
+                  element={
+                    <RequireRole allow={[AppRoles.Sponsor]}>
+                      <RequireSponsorProfile>
+                        <ProjectEditor />
+                      </RequireSponsorProfile>
                     </RequireRole>
                   }
                 />
@@ -210,7 +258,9 @@ function AppContent() {
                   path="/projects/:id/matches"
                   element={
                     <RequireRole allow={[AppRoles.Sponsor]}>
-                      <ProjectMatches />
+                      <RequireSponsorProfile>
+                        <ProjectMatches />
+                      </RequireSponsorProfile>
                     </RequireRole>
                   }
                 />
@@ -218,7 +268,9 @@ function AppContent() {
                   path="/candidates"
                   element={
                     <RequireRole allow={[AppRoles.Sponsor]}>
-                      <MyCandidates />
+                      <RequireSponsorProfile>
+                        <MyCandidates />
+                      </RequireSponsorProfile>
                     </RequireRole>
                   }
                 />
@@ -226,7 +278,9 @@ function AppContent() {
                   path="/candidates/:assignmentId/review"
                   element={
                     <RequireRole allow={[AppRoles.Sponsor]}>
-                      <SubmitReview />
+                      <RequireSponsorProfile>
+                        <SubmitReview />
+                      </RequireSponsorProfile>
                     </RequireRole>
                   }
                 />

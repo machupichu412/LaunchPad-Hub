@@ -40,11 +40,17 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ICohortRepository, CohortRepository>();
         services.AddScoped<IOpsDashboardRepository, OpsDashboardRepository>();
         services.AddScoped<IProjectInterestRepository, ProjectInterestRepository>();
+        services.AddScoped<IAuditLog, AuditLog>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
 
         services.AddSingleton<ICandidateDtoMapper, CandidateDtoMapper>();
         services.AddSingleton<IMatchingEngine, MatchingEngine>();
 
-        services.AddScoped<INotificationPublisher, ServiceBusNotificationPublisher>();
+        // ServiceBusNotificationPublisher stays registered under its own concrete type —
+        // CompositeNotificationPublisher (the actual INotificationPublisher) wraps it to
+        // add an always-on in-app Notification row alongside the best-effort async email.
+        services.AddScoped<ServiceBusNotificationPublisher>();
+        services.AddScoped<INotificationPublisher, CompositeNotificationPublisher>();
         services.AddScoped<IEmailNotifier, GraphEmailNotifier>();
 
         return services;
