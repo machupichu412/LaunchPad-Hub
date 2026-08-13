@@ -97,9 +97,11 @@ export function OpsDashboard() {
     <>
       <div className={styles.header}>
         <div>
-          <Caption1 className={styles.eyebrow}>PROGRAM OPERATIONS</Caption1>
-          <Title1 style={{ display: 'block' }}>Program health at a glance</Title1>
-          <Body1>Approve proposed matches, monitor cohort health, and stay ahead of the risks that matter most.</Body1>
+          <Caption1 block className={styles.eyebrow}>PROGRAM OPERATIONS</Caption1>
+          <Title1 block style={{ marginTop: tokens.spacingVerticalXXS }}>Program health at a glance</Title1>
+          <Body1 block style={{ marginTop: tokens.spacingVerticalXS }}>
+            Approve proposed matches, monitor cohort health, and stay ahead of the risks that matter most.
+          </Body1>
         </div>
         <Button appearance="primary" icon={<CheckmarkCircleRegular />} onClick={() => navigate('/ops/approvals')}>
           Review approvals

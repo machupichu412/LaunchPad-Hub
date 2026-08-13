@@ -45,6 +45,7 @@ const useStyles = makeStyles({
   },
   bannerBody: {
     color: tokens.colorNeutralForeground2,
+    marginTop: tokens.spacingVerticalXS,
   },
   tileGrid: {
     display: 'grid',
@@ -118,8 +119,8 @@ export function CandidateDashboard() {
           <RocketRegular />
         </span>
         <div>
-          <Title1 className={styles.bannerTitle}>Welcome back, {firstName}</Title1>
-          <Body1 className={styles.bannerBody}>
+          <Title1 block className={styles.bannerTitle}>Welcome back, {firstName}</Title1>
+          <Body1 block className={styles.bannerBody}>
             {project ? `You're working on ${project.projectName}.` : "You don't have an active project assignment yet."}
           </Body1>
         </div>
@@ -153,7 +154,7 @@ export function CandidateDashboard() {
         </Card>
       )}
 
-      <Title2>Upcoming tasks</Title2>
+      <Title2 block style={{ marginBottom: tokens.spacingVerticalS }}>Upcoming tasks</Title2>
       {!project && <Body1>Nothing here yet — an active assignment will show your tasks.</Body1>}
       {project && upcomingTasks.length === 0 && <Body1>You're all caught up.</Body1>}
       {upcomingTasks.length > 0 && (

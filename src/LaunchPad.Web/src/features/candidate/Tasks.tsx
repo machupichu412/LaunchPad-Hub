@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Badge, Body1, Button, Card, Spinner, Title2, Title3, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Button, Card, Spinner, Title3, makeStyles, tokens } from '@fluentui/react-components';
 import { getAssignmentTodos, getMyAssignment, updateTodoStatus } from '../../api/assignments';
+import { PageHeader } from '../../components/PageHeader';
 import type { ProjectTodoDto, TodoStatus } from '../../api/types';
 
 const useStyles = makeStyles({
@@ -64,7 +65,7 @@ export function Tasks() {
 
   return (
     <>
-      <Title2>Tasks</Title2>
+      <PageHeader title="Tasks" />
       {todosLoading && <Spinner label="Loading tasks..." />}
       {todos && (
         <div className={styles.board}>

@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Body1, Card, Caption1, Spinner, Title2, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Card, Caption1, Spinner, makeStyles, tokens } from '@fluentui/react-components';
 import { WarningRegular } from '@fluentui/react-icons';
 import { getAtRiskCandidates } from '../../api/ops';
+import { PageHeader } from '../../components/PageHeader';
 import type { RiskCandidateDto } from '../../api/types';
 
 const useStyles = makeStyles({
@@ -52,10 +53,12 @@ export function Risks() {
 
   return (
     <>
-      <Title2>Risk register</Title2>
-      <Body1>Every at-risk candidate we're tracking across the program, ordered by severity.</Body1>
+      <PageHeader
+        title="Risk register"
+        subtitle="Every at-risk candidate we're tracking across the program, ordered by severity."
+      />
 
-      {risks && risks.length === 0 && <Body1 style={{ display: 'block', marginTop: tokens.spacingVerticalM }}>No flagged candidates right now.</Body1>}
+      {risks && risks.length === 0 && <Body1 block>No flagged candidates right now.</Body1>}
 
       {risks?.map((risk) => {
         const severity = severityOf(risk);

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Body1, Button, Card, Caption1, Input, Spinner, Title2, Title3, makeStyles, tokens } from '@fluentui/react-components';
+import { Body1, Button, Card, Caption1, Input, Spinner, Title3, makeStyles, tokens } from '@fluentui/react-components';
 import { CheckmarkRegular, DismissRegular } from '@fluentui/react-icons';
 import { approveProject, getPendingApprovalProjects, rejectProject } from '../../api/projects';
+import { PageHeader } from '../../components/PageHeader';
 
 // Demo-only: same single-cohort simplification used elsewhere until real cohort
 // selection exists.
@@ -52,14 +53,16 @@ export function ProjectApprovals() {
 
   return (
     <>
-      <Title2>Project Approvals</Title2>
-      <Body1>Review projects sponsors have submitted. Approving makes a project visible to candidates on the marketplace.</Body1>
+      <PageHeader
+        title="Project Approvals"
+        subtitle="Review projects sponsors have submitted. Approving makes a project visible to candidates on the marketplace."
+      />
 
       {isLoading && <Spinner label="Loading the queue..." />}
       {isError && <Body1>Failed to load the queue: {(error as Error).message}</Body1>}
       {projects && projects.length === 0 && <Body1>Nothing pending approval right now.</Body1>}
 
-      <div style={{ marginTop: tokens.spacingVerticalM }}>
+      <div>
         {projects?.map((project) => (
           <Card key={project.projectId} className={styles.card}>
             <div>

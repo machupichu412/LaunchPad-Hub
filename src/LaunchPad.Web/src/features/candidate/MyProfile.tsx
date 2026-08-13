@@ -10,12 +10,12 @@ import {
   Select,
   Spinner,
   Textarea,
-  Title2,
   Title3,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
 import { getMyCandidateProfile, updateMyCandidateProfile } from '../../api/candidates';
+import { PageHeader } from '../../components/PageHeader';
 import type { Availability } from '../../api/types';
 
 const useStyles = makeStyles({
@@ -103,9 +103,9 @@ export function MyProfile() {
 
   return (
     <>
-      <Title2>My Profile</Title2>
+      <PageHeader title="My Profile" />
 
-      <div className={styles.layout} style={{ marginTop: tokens.spacingVerticalM }}>
+      <div className={styles.layout}>
         <Card className={styles.summaryCard}>
           <Avatar name={profile.displayName} size={72} />
           <Title3>{profile.displayName}</Title3>

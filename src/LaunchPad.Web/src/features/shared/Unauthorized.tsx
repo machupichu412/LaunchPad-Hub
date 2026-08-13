@@ -1,10 +1,10 @@
-import { Title2, Body1 } from '@fluentui/react-components';
+import { PageHeader } from '../../components/PageHeader';
 
 export function Unauthorized() {
   return (
-    <>
-      <Title2>Not authorized</Title2>
-      <Body1>Your account doesn't have access to this page. Contact Program Ops if this seems wrong.</Body1>
-    </>
+    <PageHeader
+      title="Not authorized"
+      subtitle="Your account doesn't have access to this page. Contact Program Ops if this seems wrong."
+    />
   );
 }

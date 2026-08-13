@@ -72,8 +72,8 @@ export function ProjectDetail() {
       {project && (
         <Card className={styles.card}>
           <div>
-            <Title2>{project.name}</Title2>
-            <Caption1>
+            <Title2 block>{project.name}</Title2>
+            <Caption1 block style={{ marginTop: tokens.spacingVerticalXXS }}>
               {project.sponsorName} &middot; {project.availabilityNeeded === 'FullTime' ? 'Full-time' : 'Part-time'}
             </Caption1>
           </div>
