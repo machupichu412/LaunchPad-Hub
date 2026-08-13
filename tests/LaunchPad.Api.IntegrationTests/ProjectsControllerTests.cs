@@ -8,6 +8,7 @@ using LaunchPad.Application.Projects;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
 using LaunchPad.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -201,6 +202,21 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
     }
 
     [Fact]
+    public async Task RecommendMatch_AsOwningSponsor_Succeeds_AndRecordsAnAuditEvent()
+    {
+        var (ownerOid, projectId, assignmentId) = await SeedProjectWithProposedMatchAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, ownerOid.ToString());
+
+        var response = await client.PostAsync($"/api/projects/{projectId}/matches/{assignmentId}/recommend", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await GetAuditEventsAsync("Assignment", assignmentId)).Should().Contain(e => e.Action == "SponsorRecommend");
+    }
+
+    [Fact]
     public async Task RecommendMatch_AsNonOwningSponsor_IsForbidden()
     {
         var (_, projectId, assignmentId) = await SeedProjectWithProposedMatchAsync();
@@ -228,6 +244,17 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var matchesAfter = await (await client.GetAsync($"/api/projects/{projectId}/matches")).Content.ReadFromJsonAsync<List<ProjectMatchDto>>(TestJsonOptions.Default);
         matchesAfter.Should().BeEmpty();
+
+        (await GetAuditEventsAsync("Assignment", assignmentId)).Should().Contain(e => e.Action == "SponsorReject");
+    }
+
+    private async Task<IReadOnlyList<AuditEvent>> GetAuditEventsAsync(string entityName, int entityId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        return await db.AuditEvents
+            .Where(e => e.EntityName == entityName && e.EntityId == entityId.ToString())
+            .ToListAsync();
     }
 
     private async Task<(Guid OwnerOid, int ProjectId)> SeedPendingOpsProjectAsync()
@@ -282,6 +309,8 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
 
         var publisher = (FakeNotificationPublisher)_factory.Services.GetRequiredService<INotificationPublisher>();
         publisher.Sent.Should().Contain(m => m.ToUpn == "owner@example.com" && m.Subject.Contains("submitted"));
+
+        (await GetAuditEventsAsync("Project", projectId)).Should().Contain(e => e.Action == "Submit");
     }
 
     [Fact]
@@ -328,6 +357,8 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
 
         var publisher = (FakeNotificationPublisher)_factory.Services.GetRequiredService<INotificationPublisher>();
         publisher.Sent.Should().Contain(m => m.ToUpn == "pending-owner@example.com" && m.Subject.Contains("approved"));
+
+        (await GetAuditEventsAsync("Project", projectId)).Should().Contain(e => e.Action == "Approve");
     }
 
     [Fact]
@@ -362,6 +393,8 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
 
         var publisher = (FakeNotificationPublisher)_factory.Services.GetRequiredService<INotificationPublisher>();
         publisher.Sent.Should().Contain(m => m.ToUpn == "pending-owner@example.com" && m.Body.Contains("Scope too broad"));
+
+        (await GetAuditEventsAsync("Project", projectId)).Should().Contain(e => e.Action == "Reject" && e.Reason == "Scope too broad for this cohort.");
     }
 
     [Fact]

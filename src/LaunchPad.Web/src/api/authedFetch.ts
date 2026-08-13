@@ -30,9 +30,12 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   const response = await fetch(`${baseUrl}${input}`, {
     ...init,
     headers: {
+      // Defaults first so a caller-supplied Content-Type (e.g. the raw
+      // image/jpeg body avatar uploads send, see api/avatar.ts) overrides it —
+      // only Authorization is never overridable by a call site.
+      'Content-Type': 'application/json',
       ...init.headers,
       Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
     },
   });
 
