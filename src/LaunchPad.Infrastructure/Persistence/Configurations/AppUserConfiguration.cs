@@ -12,6 +12,7 @@ public class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
         builder.HasKey(u => u.AppUserId);
         builder.Property(u => u.Upn).HasMaxLength(256).IsRequired();
         builder.Property(u => u.DisplayName).HasMaxLength(200).IsRequired();
+        builder.Property(u => u.AvatarBlobPath).HasMaxLength(500);
 
         builder.HasIndex(u => u.EntraObjectId).IsUnique();
     }
