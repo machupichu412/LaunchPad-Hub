@@ -7,6 +7,7 @@ using LaunchPad.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+
 namespace LaunchPad.Api.Controllers;
 
 // Real two-stage flow: Run proposes up to 3 ranked candidates per open project
@@ -27,6 +28,7 @@ public class MatchingController : ControllerBase
     private readonly IMatchingEngine _matchingEngine;
     private readonly IAppUserRepository _appUsers;
     private readonly ICurrentUser _currentUser;
+    private readonly IAuditLog _auditLog;
 
     public MatchingController(
         IAssignmentRepository assignments,
@@ -34,7 +36,8 @@ public class MatchingController : ControllerBase
         IProjectInterestRepository projectInterests,
         IMatchingEngine matchingEngine,
         IAppUserRepository appUsers,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        IAuditLog auditLog)
     {
         _assignments = assignments;
         _projects = projects;
@@ -42,6 +45,7 @@ public class MatchingController : ControllerBase
         _matchingEngine = matchingEngine;
         _appUsers = appUsers;
         _currentUser = currentUser;
+        _auditLog = auditLog;
     }
 
     [HttpPost("run")]
@@ -142,6 +146,7 @@ public class MatchingController : ControllerBase
         }
 
         await _assignments.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "OpsApprove", ct: ct);
         return Ok(ToDto(assignment));
     }
 
@@ -153,6 +158,7 @@ public class MatchingController : ControllerBase
 
         assignment.Status = AssignmentStatus.Withdrawn;
         await _assignments.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "OpsDeny", ct: ct);
         return Ok(ToDto(assignment));
     }
 
