@@ -24,6 +24,7 @@ public class LaunchPadDbContext : DbContext
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<ProjectTodo> ProjectTodos => Set<ProjectTodo>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Deliverable> Deliverables => Set<Deliverable>();
     public DbSet<CommunityPost> CommunityPosts => Set<CommunityPost>();
     public DbSet<CommunityComment> CommunityComments => Set<CommunityComment>();
