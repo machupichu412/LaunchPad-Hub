@@ -10,25 +10,23 @@ import {
   Input,
   Spinner,
   Switch,
-  Title2,
   Title3,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
 import { SearchRegular, StarFilled, StarRegular } from '@fluentui/react-icons';
 import { getOpenProjects, rateProjectInterest } from '../../api/projects';
+import { PageHeader } from '../../components/PageHeader';
 import type { ProjectDto } from '../../api/types';
 
 const useStyles = makeStyles({
   search: {
     maxWidth: '420px',
-    marginTop: tokens.spacingVerticalM,
   },
   toolbarRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: tokens.spacingVerticalM,
     marginBottom: tokens.spacingVerticalL,
   },
   categoryRow: {
@@ -135,8 +133,10 @@ export function ProjectMarketplace() {
 
   return (
     <>
-      <Title2>Project Marketplace</Title2>
-      <Body1>Browse open projects and rate your interest — it's one of several signals used to propose matches.</Body1>
+      <PageHeader
+        title="Project Marketplace"
+        subtitle="Browse open projects and rate your interest — it's one of several signals used to propose matches."
+      />
 
       <div className={styles.toolbarRow}>
         <Input

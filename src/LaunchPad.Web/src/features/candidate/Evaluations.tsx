@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Body1, Card, CardHeader, Caption1, Spinner, Title2, Title3, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Card, CardHeader, Caption1, Spinner, Title3, makeStyles, tokens } from '@fluentui/react-components';
 import { getAssignmentEvaluations, getMyAssignment } from '../../api/assignments';
+import { PageHeader } from '../../components/PageHeader';
 
 const useStyles = makeStyles({
   card: {
@@ -38,7 +39,7 @@ export function Evaluations() {
 
   return (
     <>
-      <Title2>Evaluations</Title2>
+      <PageHeader title="Evaluations" />
       {evaluationsLoading && <Spinner label="Loading your evaluations..." />}
       {evaluations && evaluations.length === 0 && <Body1>No evaluations submitted yet.</Body1>}
       {evaluations?.map((evaluation) => (

@@ -308,12 +308,43 @@ public static class LocalDemoSeeder
         var kudosComment = new CommunityComment { Post = kudosPost, Author = sponsorUser, Body = "This looks great, nice work!", CreatedUtc = DateTime.UtcNow.AddHours(-20) };
         var kudosReaction = new CommunityPostReaction { Post = kudosPost, AppUser = sponsorUser };
 
+        // A few notifications so the header bell has real content without needing the
+        // full publish pipeline (project submit/approve/review) to fire first.
+        var notifications = new[]
+        {
+            new Notification
+            {
+                RecipientAppUserId = candidateUsers[1].AppUserId,
+                Subject = "Midpoint review received",
+                Body = "Sam Sponsor submitted your midpoint review for Internal Dashboard Revamp.",
+                CreatedUtc = DateTime.UtcNow.AddDays(-18),
+                IsRead = true,
+            },
+            new Notification
+            {
+                RecipientAppUserId = candidateUsers[0].AppUserId,
+                Subject = "You've been proposed for a project",
+                Body = "You're a proposed match for Design System Refresh — the sponsor is reviewing candidates now.",
+                CreatedUtc = DateTime.UtcNow.AddDays(-1),
+                IsRead = false,
+            },
+            new Notification
+            {
+                RecipientAppUserId = sponsorUser.AppUserId,
+                Subject = "New project pending approval",
+                Body = "\"Mentorship Program Refresh\" is saved as a draft — submit it when you're ready for Program Ops to review.",
+                CreatedUtc = DateTime.UtcNow.AddHours(-3),
+                IsRead = false,
+            },
+        };
+
         db.AddRange(todos);
         db.Add(review);
         db.Add(deliverable);
         db.AddRange(kudosPost, questionPost, announcementPost);
         db.Add(kudosComment);
         db.Add(kudosReaction);
+        db.AddRange(notifications);
         db.SaveChanges();
     }
 }

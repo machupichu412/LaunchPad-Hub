@@ -1,5 +1,6 @@
 using LaunchPad.Application.Cohorts;
 using LaunchPad.Domain.Entities;
+using LaunchPad.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace LaunchPad.Infrastructure.Persistence.Repositories;
@@ -15,6 +16,9 @@ public sealed class CohortRepository : ICohortRepository
             .OrderByDescending(c => c.StartDate)
             .Select(c => new CohortSummary(c, c.Candidates.Count, c.Projects.Count))
             .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Cohort>> GetActiveAsync(CancellationToken ct = default) =>
+        await _db.Cohorts.Where(c => c.Status == CohortStatus.Active).ToListAsync(ct);
 
     public Task<int> GetDefaultProgramIdAsync(CancellationToken ct = default) =>
         _db.Programs.OrderBy(p => p.ProgramId).Select(p => p.ProgramId).FirstAsync(ct);

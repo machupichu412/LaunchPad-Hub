@@ -2,6 +2,7 @@ using System.Security.Claims;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Identity.Web;
 
 namespace LaunchPad.Api.Middleware;
 
@@ -13,14 +14,25 @@ namespace LaunchPad.Api.Middleware;
 public sealed class AppUserProvisioningMiddleware
 {
     private readonly RequestDelegate _next;
-    public AppUserProvisioningMiddleware(RequestDelegate next) => _next = next;
+    private readonly ILogger<AppUserProvisioningMiddleware> _logger;
+
+    public AppUserProvisioningMiddleware(RequestDelegate next, ILogger<AppUserProvisioningMiddleware> logger)
+    {
+        _next = next;
+        _logger = logger;
+    }
 
     public async Task InvokeAsync(HttpContext context, LaunchPadDbContext db)
     {
         if (context.User.Identity?.IsAuthenticated == true)
         {
-            var oidClaim = context.User.FindFirstValue("oid");
-            if (oidClaim is not null && Guid.TryParse(oidClaim, out var entraObjectId))
+            // GetObjectId() (Microsoft.Identity.Web), not a raw FindFirstValue("oid") —
+            // see the matching note in CurrentUser.cs. A mismatch here means this
+            // block silently never provisions a row at all, which then surfaces much
+            // later as a confusing "your account isn't provisioned yet" from whichever
+            // endpoint tried to resolve the caller's own row — hence the warning below.
+            var oid = context.User.GetObjectId();
+            if (oid is not null && Guid.TryParse(oid, out var entraObjectId))
             {
                 var exists = await db.AppUsers.AnyAsync(u => u.EntraObjectId == entraObjectId);
                 if (!exists)
@@ -35,6 +47,12 @@ public sealed class AppUserProvisioningMiddleware
                     });
                     await db.SaveChangesAsync();
                 }
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Authenticated request had no resolvable object id claim — AppUser was not provisioned. ClaimTypes present: {ClaimTypes}",
+                    string.Join(", ", context.User.Claims.Select(c => c.Type).Distinct()));
             }
         }
 

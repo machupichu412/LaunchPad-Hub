@@ -13,4 +13,12 @@ public sealed class SponsorRepository : ISponsorRepository
         _db.Sponsors
             .Include(s => s.AppUser)
             .FirstOrDefaultAsync(s => s.AppUser.EntraObjectId == entraObjectId, ct);
+
+    public async Task<Sponsor> AddAsync(Sponsor sponsor, CancellationToken ct = default)
+    {
+        await _db.Sponsors.AddAsync(sponsor, ct);
+        return sponsor;
+    }
+
+    public Task SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 }

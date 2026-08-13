@@ -30,6 +30,10 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AppUserId"));
 
+                    b.Property<string>("AvatarBlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<DateTime>("CreatedUtc")
                         .HasColumnType("datetime2");
 
@@ -425,6 +429,40 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.HasIndex("AssignmentId");
 
                     b.ToTable("Deliverable", (string)null);
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.Notification", b =>
+                {
+                    b.Property<int>("NotificationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("NotificationId"));
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("RecipientAppUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.HasKey("NotificationId");
+
+                    b.HasIndex("RecipientAppUserId", "IsRead");
+
+                    b.ToTable("Notification", (string)null);
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.Program", b =>
@@ -862,6 +900,17 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Assignment");
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.Notification", b =>
+                {
+                    b.HasOne("LaunchPad.Domain.Entities.AppUser", "RecipientAppUser")
+                        .WithMany()
+                        .HasForeignKey("RecipientAppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RecipientAppUser");
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.Project", b =>

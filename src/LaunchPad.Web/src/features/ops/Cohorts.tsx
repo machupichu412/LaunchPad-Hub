@@ -9,18 +9,17 @@ import {
   Field,
   Input,
   Spinner,
-  Title2,
   Title3,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
 import { CalendarRegular, PeopleRegular, BriefcaseRegular } from '@fluentui/react-icons';
 import { createCohort, getCohorts } from '../../api/cohorts';
+import { PageHeader } from '../../components/PageHeader';
 
 const useStyles = makeStyles({
   form: {
     padding: tokens.spacingVerticalL,
-    marginTop: tokens.spacingVerticalM,
     marginBottom: tokens.spacingVerticalXL,
     maxWidth: '480px',
   },
@@ -75,8 +74,7 @@ export function Cohorts() {
 
   return (
     <>
-      <Title2>Cohorts</Title2>
-      <Body1>Manage the running seasonal cohorts.</Body1>
+      <PageHeader title="Cohorts" subtitle="Manage the running seasonal cohorts." />
 
       <Card className={styles.form}>
         <Title3>New cohort</Title3>

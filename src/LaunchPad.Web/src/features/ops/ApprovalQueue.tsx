@@ -1,19 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Badge, Body1, Button, Card, Caption1, Spinner, Title2, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Button, Card, Caption1, Spinner, makeStyles, tokens } from '@fluentui/react-components';
 import { ArrowSyncRegular, CheckmarkRegular, DismissRegular } from '@fluentui/react-icons';
 import { approveMatch, denyMatch, getMatchingQueue, runMatching } from '../../api/matching';
+import { PageHeader } from '../../components/PageHeader';
 
 // Demo-only: same single-cohort simplification used elsewhere until real cohort
 // selection exists.
 const DEMO_COHORT_ID = 1;
 
 const useStyles = makeStyles({
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: tokens.spacingVerticalM,
-  },
   card: {
     padding: tokens.spacingVerticalM,
     marginBottom: tokens.spacingVerticalS,
@@ -53,20 +48,20 @@ export function ApprovalQueue() {
 
   return (
     <>
-      <div className={styles.header}>
-        <div>
-          <Title2>Approval queue</Title2>
-          <Body1>Review matches proposed by the matching engine. Approving staffs the candidate; denying returns them to the pool.</Body1>
-        </div>
-        <Button
-          appearance="primary"
-          icon={<ArrowSyncRegular />}
-          disabled={runMutation.isPending}
-          onClick={() => runMutation.mutate()}
-        >
-          {runMutation.isPending ? 'Running...' : 'Run matching'}
-        </Button>
-      </div>
+      <PageHeader
+        title="Approval queue"
+        subtitle="Review matches proposed by the matching engine. Approving staffs the candidate; denying returns them to the pool."
+        actions={
+          <Button
+            appearance="primary"
+            icon={<ArrowSyncRegular />}
+            disabled={runMutation.isPending}
+            onClick={() => runMutation.mutate()}
+          >
+            {runMutation.isPending ? 'Running...' : 'Run matching'}
+          </Button>
+        }
+      />
       {runMutation.isSuccess && <Body1>Proposed {runMutation.data.proposedCount} new match(es).</Body1>}
       {runMutation.isError && <Body1>Failed to run matching: {(runMutation.error as Error).message}</Body1>}
 

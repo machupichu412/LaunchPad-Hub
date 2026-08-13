@@ -5,11 +5,7 @@ import {
   Badge,
   Body1,
   Button,
-  Card,
   Caption1,
-  Field,
-  Input,
-  Select,
   Spinner,
   Table,
   TableBody,
@@ -17,13 +13,11 @@ import {
   TableHeader,
   TableHeaderCell,
   TableRow,
-  Textarea,
-  Title2,
-  Title3,
   tokens,
 } from '@fluentui/react-components';
 import { createProject, getMyProjects, submitProject } from '../../api/projects';
-import type { Availability } from '../../api/types';
+import { PageHeader } from '../../components/PageHeader';
+import { ProjectForm, type ProjectFormValues } from '../../components/ProjectForm';
 
 // Demo-only: the local seed data creates exactly one cohort, which is always
 // CohortId 1. Once cohort selection exists (Phase 2), this becomes a dropdown.
@@ -39,35 +33,28 @@ export function MyProjects() {
     queryFn: getMyProjects,
   });
 
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [availability, setAvailability] = useState<Availability>('PartTime');
-  const [requiredSkillsInput, setRequiredSkillsInput] = useState('');
-  const [preferredSkillsInput, setPreferredSkillsInput] = useState('');
-
-  const parseSkillNames = (input: string) =>
-    input
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+  const [formValues, setFormValues] = useState<ProjectFormValues>({
+    name: '',
+    description: '',
+    availabilityNeeded: 'PartTime',
+    requiredSkillNames: [],
+    preferredSkillNames: [],
+  });
 
   const createMutation = useMutation({
     mutationFn: () =>
       createProject({
         cohortId: DEMO_COHORT_ID,
-        name,
-        description: description.trim().length > 0 ? description.trim() : null,
-        availabilityNeeded: availability,
+        name: formValues.name,
+        description: formValues.description.trim().length > 0 ? formValues.description.trim() : null,
+        availabilityNeeded: formValues.availabilityNeeded,
         startDate: null,
         endDate: null,
-        requiredSkillNames: parseSkillNames(requiredSkillsInput),
-        preferredSkillNames: parseSkillNames(preferredSkillsInput),
+        requiredSkillNames: formValues.requiredSkillNames,
+        preferredSkillNames: formValues.preferredSkillNames,
       }),
     onSuccess: () => {
-      setName('');
-      setDescription('');
-      setRequiredSkillsInput('');
-      setPreferredSkillsInput('');
+      setFormValues({ name: '', description: '', availabilityNeeded: 'PartTime', requiredSkillNames: [], preferredSkillNames: [] });
       queryClient.invalidateQueries({ queryKey: ['projects', 'mine'] });
     },
   });
@@ -79,66 +66,19 @@ export function MyProjects() {
 
   return (
     <>
-      <Title2>My Projects</Title2>
+      <PageHeader title="My Projects" />
 
-      <Card
-        style={{
-          marginTop: tokens.spacingVerticalM,
-          marginBottom: tokens.spacingVerticalXL,
-          padding: tokens.spacingVerticalM,
-          maxWidth: '520px',
-        }}
-      >
-        <Title3>New project</Title3>
-        <Field label="Name">
-          <Input value={name} onChange={(_, data) => setName(data.value)} />
-        </Field>
-        <Field label="Description" style={{ marginTop: tokens.spacingVerticalS }}>
-          <Textarea
-            value={description}
-            onChange={(_, data) => setDescription(data.value)}
-            resize="vertical"
-            placeholder="What will the candidate be working on?"
-          />
-        </Field>
-        <Field label="Availability needed" style={{ marginTop: tokens.spacingVerticalS }}>
-          <Select value={availability} onChange={(_, data) => setAvailability(data.value as Availability)}>
-            <option value="PartTime">Part-time</option>
-            <option value="FullTime">Full-time</option>
-          </Select>
-        </Field>
-        <Field
-          label="Required skills"
-          hint="Comma-separated — candidates must have all of these to be matched."
-          style={{ marginTop: tokens.spacingVerticalS }}
-        >
-          <Input
-            value={requiredSkillsInput}
-            onChange={(_, data) => setRequiredSkillsInput(data.value)}
-            placeholder="e.g. React, TypeScript"
-          />
-        </Field>
-        <Field
-          label="Preferred skills"
-          hint="Comma-separated — nice to have, not required to match."
-          style={{ marginTop: tokens.spacingVerticalS }}
-        >
-          <Input
-            value={preferredSkillsInput}
-            onChange={(_, data) => setPreferredSkillsInput(data.value)}
-            placeholder="e.g. Figma, Power BI"
-          />
-        </Field>
-        <Button
-          appearance="primary"
-          style={{ marginTop: tokens.spacingVerticalM }}
-          disabled={name.trim().length === 0 || createMutation.isPending}
-          onClick={() => createMutation.mutate()}
-        >
-          {createMutation.isPending ? 'Creating...' : 'Create project'}
-        </Button>
-        {createMutation.isError && <Body1>Failed to create project: {(createMutation.error as Error).message}</Body1>}
-      </Card>
+      <div style={{ marginBottom: tokens.spacingVerticalXL }}>
+        <ProjectForm
+          heading="New project"
+          values={formValues}
+          onChange={setFormValues}
+          onSubmit={() => createMutation.mutate()}
+          isSubmitting={createMutation.isPending}
+          submitLabel="Create project"
+          errorMessage={createMutation.isError ? `Failed to create project: ${(createMutation.error as Error).message}` : undefined}
+        />
+      </div>
 
       {isLoading && <Spinner label="Loading your projects..." />}
       {isError && <Body1>Failed to load your projects: {(error as Error).message}</Body1>}
@@ -182,6 +122,13 @@ export function MyProjects() {
                       Submit for approval
                     </Button>
                   )}
+                  <Button
+                    size="small"
+                    onClick={() => navigate(`/projects/${project.projectId}/edit`)}
+                    style={{ marginRight: tokens.spacingHorizontalXS }}
+                  >
+                    Edit
+                  </Button>
                   <Button size="small" onClick={() => navigate(`/projects/${project.projectId}/matches`)}>
                     Review matches
                   </Button>

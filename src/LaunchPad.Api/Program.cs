@@ -6,6 +6,7 @@ using LaunchPad.Application.Common;
 using LaunchPad.Application.Projects;
 using LaunchPad.Infrastructure.DependencyInjection;
 using LaunchPad.Infrastructure.Persistence;
+using LaunchPad.Infrastructure.Storage;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -79,6 +80,18 @@ if (useInMemoryForLocalDemo)
     builder.Services.RemoveAll<DbContextOptions<LaunchPadDbContext>>();
     builder.Services.RemoveAll<IDbContextOptionsConfiguration<LaunchPadDbContext>>();
     builder.Services.AddDbContext<LaunchPadDbContext>(o => o.UseInMemoryDatabase("launchpad-local-demo"));
+}
+
+// Same "gracefully degrade for local dev" shape as the DB provider swap above: a
+// real storage account (Storage:AccountUrl) gets the Blob-backed implementation;
+// this sandbox (and any dev box without one provisioned) falls back to local disk.
+if (string.IsNullOrWhiteSpace(builder.Configuration["Storage:AccountUrl"]))
+{
+    builder.Services.AddSingleton<IProfilePictureStorage, LocalDiskProfilePictureStorage>();
+}
+else
+{
+    builder.Services.AddSingleton<IProfilePictureStorage, BlobProfilePictureStorage>();
 }
 
 builder.Services.AddControllers()

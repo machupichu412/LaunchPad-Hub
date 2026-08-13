@@ -8,12 +8,12 @@ import {
   Field,
   Input,
   Spinner,
-  Title2,
   Title3,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
 import { createDeliverable, getAssignmentDeliverables, getMyAssignment } from '../../api/assignments';
+import { PageHeader } from '../../components/PageHeader';
 
 const useStyles = makeStyles({
   form: {
@@ -69,7 +69,7 @@ export function Deliverables() {
 
   return (
     <>
-      <Title2>Deliverables</Title2>
+      <PageHeader title="Deliverables" />
 
       <Card className={styles.form}>
         <Title3>Submit a deliverable</Title3>

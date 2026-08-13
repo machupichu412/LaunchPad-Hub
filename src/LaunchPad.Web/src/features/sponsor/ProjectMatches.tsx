@@ -1,8 +1,9 @@
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Badge, Body1, Button, Card, Caption1, Spinner, Title2, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Button, Card, Caption1, Spinner, makeStyles, tokens } from '@fluentui/react-components';
 import { CheckmarkRegular, DismissRegular } from '@fluentui/react-icons';
 import { getProjectMatches, recommendMatch, rejectMatch } from '../../api/matches';
+import { PageHeader } from '../../components/PageHeader';
 
 const useStyles = makeStyles({
   card: {
@@ -48,8 +49,10 @@ export function ProjectMatches() {
 
   return (
     <>
-      <Title2>Review matches</Title2>
-      <Body1>Pick one candidate to recommend for this project — Program Ops approves from there.</Body1>
+      <PageHeader
+        title="Review matches"
+        subtitle="Pick one candidate to recommend for this project — Program Ops approves from there."
+      />
 
       {isLoading && <Spinner label="Loading matches..." />}
       {isError && <Body1>Failed to load matches: {(error as Error).message}</Body1>}

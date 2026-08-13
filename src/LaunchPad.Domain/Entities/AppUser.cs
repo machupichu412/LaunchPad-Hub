@@ -12,4 +12,8 @@ public class AppUser
     public string DisplayName { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Opaque storage key (not a public URL) resolved via IProfilePictureStorage —
+    /// never rendered directly, always fetched through the authenticated /api/me/avatar proxy.</summary>
+    public string? AvatarBlobPath { get; set; }
 }

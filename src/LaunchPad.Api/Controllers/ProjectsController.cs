@@ -33,6 +33,7 @@ public class ProjectsController : ControllerBase
     private readonly ICurrentUser _currentUser;
     private readonly IAuthorizationService _authorization;
     private readonly INotificationPublisher _notifications;
+    private readonly IAuditLog _auditLog;
     private readonly IConfiguration _configuration;
     private readonly IValidator<CreateProjectRequest> _createValidator;
     private readonly IValidator<UpdateProjectRequest> _updateValidator;
@@ -50,6 +51,7 @@ public class ProjectsController : ControllerBase
         ICurrentUser currentUser,
         IAuthorizationService authorization,
         INotificationPublisher notifications,
+        IAuditLog auditLog,
         IConfiguration configuration,
         IValidator<CreateProjectRequest> createValidator,
         IValidator<UpdateProjectRequest> updateValidator,
@@ -66,6 +68,7 @@ public class ProjectsController : ControllerBase
         _currentUser = currentUser;
         _authorization = authorization;
         _notifications = notifications;
+        _auditLog = auditLog;
         _configuration = configuration;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
@@ -275,6 +278,7 @@ public class ProjectsController : ControllerBase
         project.RejectionReason = null;
 
         await _projects.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Project", project.ProjectId.ToString(), "Submit", ct: ct);
 
         var sponsorUpn = project.Sponsor.AppUser.Upn;
         await _notifications.PublishAsync(new NotificationMessage(
@@ -313,6 +317,7 @@ public class ProjectsController : ControllerBase
         project.ApprovalStatus = Domain.Enums.ProjectApprovalStatus.Approved;
 
         await _projects.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Project", project.ProjectId.ToString(), "Approve", ct: ct);
 
         await _notifications.PublishAsync(new NotificationMessage(
             project.Sponsor.AppUser.Upn,
@@ -343,6 +348,7 @@ public class ProjectsController : ControllerBase
         project.RejectionReason = request.Reason;
 
         await _projects.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Project", project.ProjectId.ToString(), "Reject", reason: request.Reason, ct: ct);
 
         await _notifications.PublishAsync(new NotificationMessage(
             project.Sponsor.AppUser.Upn,
@@ -399,6 +405,7 @@ public class ProjectsController : ControllerBase
         }
 
         await _assignments.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "SponsorRecommend", ct: ct);
         return Ok(ToMatchDto(assignment));
     }
 
@@ -421,6 +428,7 @@ public class ProjectsController : ControllerBase
 
         assignment.Status = AssignmentStatus.Withdrawn;
         await _assignments.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "SponsorReject", ct: ct);
         return Ok(ToMatchDto(assignment));
     }
 

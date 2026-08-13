@@ -6,6 +6,7 @@ using LaunchPad.Application.Reviews;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
 using LaunchPad.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -73,6 +74,11 @@ public class ReviewsControllerTests : IClassFixture<CustomWebApplicationFactory>
         var dto = await response.Content.ReadFromJsonAsync<SponsorReviewDto>(TestJsonOptions.Default);
         dto!.Strengths.Should().Be("Fast learner, clear communicator.");
         dto.RecommendConversion.Should().BeTrue();
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        var auditEvents = await db.AuditEvents.Where(e => e.EntityName == "Review" && e.EntityId == dto.ReviewId.ToString()).ToListAsync();
+        auditEvents.Should().Contain(e => e.Action == "Submit");
     }
 
     [Fact]

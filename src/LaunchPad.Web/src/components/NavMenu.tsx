@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Body1, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import {
   BriefcaseRegular,
@@ -21,6 +22,8 @@ import {
 } from '@fluentui/react-icons';
 import { AppRoles } from '../auth/roles';
 import { useActiveRole } from '../auth/ActiveRoleContext';
+import { getMyCandidateProfile } from '../api/candidates';
+import { getMySponsorProfile } from '../api/sponsors';
 
 const useStyles = makeStyles({
   list: {
@@ -95,11 +98,34 @@ export function NavMenu() {
   const styles = useStyles();
   const { activeRole } = useActiveRole();
 
+  // Same ['candidates','me'] query RequireCandidateProfile/MyProfile/Onboarding
+  // already use — cache-shared, so this adds no extra request. Only fetched while
+  // viewing as Candidate; other roles never hit this endpoint from here.
+  const { data: candidateProfile } = useQuery({
+    queryKey: ['candidates', 'me'],
+    queryFn: getMyCandidateProfile,
+    enabled: activeRole === AppRoles.Candidate,
+  });
+  const isOnboardingCandidate = activeRole === AppRoles.Candidate && !candidateProfile;
+
+  // Same ['sponsors','me'] query RequireSponsorProfile/SponsorOnboarding already
+  // use — cache-shared, so this adds no extra request. Only fetched while viewing
+  // as Sponsor; other roles never hit this endpoint from here.
+  const { data: sponsorProfile } = useQuery({
+    queryKey: ['sponsors', 'me'],
+    queryFn: getMySponsorProfile,
+    enabled: activeRole === AppRoles.Sponsor,
+  });
+  const isOnboardingSponsor = activeRole === AppRoles.Sponsor && !sponsorProfile;
+
   return (
     <ul className={styles.list}>
       <NavLink to="/" icon={<HomeRegular />}>Home</NavLink>
 
-      {activeRole === AppRoles.Candidate && (
+      {/* Every link below redirects straight back to /onboarding via
+          RequireCandidateProfile until a profile exists — showing them before then
+          is just a dead-end loop, so the Candidate nav stays down to Home alone. */}
+      {activeRole === AppRoles.Candidate && !isOnboardingCandidate && (
         <>
           <NavLink to="/dashboard" icon={<GridRegular />}>Dashboard</NavLink>
           <NavLink to="/profile" icon={<PersonRegular />}>My Profile</NavLink>
@@ -112,7 +138,10 @@ export function NavMenu() {
         </>
       )}
 
-      {activeRole === AppRoles.Sponsor && (
+      {/* Every link below redirects straight back to /sponsor-onboarding via
+          RequireSponsorProfile until a profile exists — showing them before then
+          is just a dead-end loop, so the Sponsor nav stays down to Home alone. */}
+      {activeRole === AppRoles.Sponsor && !isOnboardingSponsor && (
         <>
           <NavLink to="/projects" icon={<FolderRegular />}>My Projects</NavLink>
           <NavLink to="/candidates" icon={<PeopleRegular />}>My Candidates</NavLink>

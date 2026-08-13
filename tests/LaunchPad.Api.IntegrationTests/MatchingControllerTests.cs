@@ -6,6 +6,7 @@ using LaunchPad.Application.Matching;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
 using LaunchPad.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -161,6 +162,18 @@ public class MatchingControllerTests : IClassFixture<CustomWebApplicationFactory
 
         var queueAfterApprove = await (await opsClient.GetAsync($"/api/matching/queue?cohortId={cohortId}")).Content.ReadFromJsonAsync<List<PendingAssignmentDto>>(TestJsonOptions.Default);
         queueAfterApprove.Should().BeEmpty();
+
+        (await GetAuditEventsAsync("Assignment", picked.AssignmentId)).Should().Contain(e => e.Action == "SponsorRecommend");
+        (await GetAuditEventsAsync("Assignment", picked.AssignmentId)).Should().Contain(e => e.Action == "OpsApprove");
+    }
+
+    private async Task<IReadOnlyList<AuditEvent>> GetAuditEventsAsync(string entityName, int entityId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        return await db.AuditEvents
+            .Where(e => e.EntityName == entityName && e.EntityId == entityId.ToString())
+            .ToListAsync();
     }
 
     [Fact]
@@ -249,5 +262,7 @@ public class MatchingControllerTests : IClassFixture<CustomWebApplicationFactory
         denyResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var queueAfter = await (await opsClient.GetAsync($"/api/matching/queue?cohortId={cohortId}")).Content.ReadFromJsonAsync<List<PendingAssignmentDto>>(TestJsonOptions.Default);
         queueAfter.Should().BeEmpty();
+
+        (await GetAuditEventsAsync("Assignment", assignmentId)).Should().Contain(e => e.Action == "OpsDeny");
     }
 }

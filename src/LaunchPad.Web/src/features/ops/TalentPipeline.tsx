@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Body1, Card, Caption1, Input, Spinner, Title2, Title3, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Card, Caption1, Input, Spinner, Title3, makeStyles, tokens } from '@fluentui/react-components';
 import { SearchRegular } from '@fluentui/react-icons';
 import { getCandidatesByCohort } from '../../api/candidates';
+import { CandidateAvatar } from '../../components/CandidateAvatar';
+import { PageHeader } from '../../components/PageHeader';
 
 // Demo-only: the local seed data creates exactly one cohort, which is always
 // CohortId 1. Once cohort selection exists (Phase 2), this becomes a route param.
@@ -10,9 +12,7 @@ const DEMO_COHORT_ID = 1;
 
 const useStyles = makeStyles({
   search: {
-    maxWidth: '420px',
-    marginTop: tokens.spacingVerticalM,
-    marginBottom: tokens.spacingVerticalL,
+    width: '280px',
   },
   grid: {
     display: 'grid',
@@ -24,6 +24,11 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalXS,
+  },
+  cardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
   },
   skillRow: {
     display: 'flex',
@@ -63,15 +68,18 @@ export function TalentPipeline() {
 
   return (
     <>
-      <Title2>Candidates</Title2>
-      <Body1>Browse the current cohort of participating candidates.</Body1>
-
-      <Input
-        className={styles.search}
-        contentBefore={<SearchRegular />}
-        placeholder="Search candidates..."
-        value={search}
-        onChange={(_, data) => setSearch(data.value)}
+      <PageHeader
+        title="Candidates"
+        subtitle="Browse the current cohort of participating candidates."
+        actions={
+          <Input
+            className={styles.search}
+            contentBefore={<SearchRegular />}
+            placeholder="Search candidates..."
+            value={search}
+            onChange={(_, data) => setSearch(data.value)}
+          />
+        }
       />
 
       {filtered.length === 0 && <Body1>No candidates match.</Body1>}
@@ -79,7 +87,10 @@ export function TalentPipeline() {
       <div className={styles.grid}>
         {filtered.map((candidate) => (
           <Card key={candidate.candidateId} className={styles.card}>
-            <Title3>{candidate.displayName}</Title3>
+            <div className={styles.cardHeader}>
+              <CandidateAvatar candidateId={candidate.candidateId} name={candidate.displayName} />
+              <Title3>{candidate.displayName}</Title3>
+            </div>
             {(candidate.school || candidate.degree) && (
               <Caption1>
                 {candidate.school}

@@ -10,12 +10,12 @@ import {
   Select,
   Spinner,
   Textarea,
-  Title2,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
 import { HeartFilled, HeartRegular } from '@fluentui/react-icons';
 import { addCommunityComment, createCommunityPost, getCommunityPosts, toggleCommunityReaction } from '../../api/community';
+import { PageHeader } from '../../components/PageHeader';
 import type { CommunityPostDto, CommunityPostType } from '../../api/types';
 
 const useStyles = makeStyles({
@@ -151,7 +151,7 @@ export function Community() {
 
   return (
     <>
-      <Title2>Community</Title2>
+      <PageHeader title="Community" />
 
       <Card className={styles.composer}>
         <Textarea

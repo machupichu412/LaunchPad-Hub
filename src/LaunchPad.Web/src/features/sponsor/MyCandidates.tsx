@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Body1, Button, Card, Caption1, Spinner, Title2, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Button, Card, Caption1, Spinner, makeStyles, tokens } from '@fluentui/react-components';
 import { getMyCandidates } from '../../api/sponsors';
+import { CandidateAvatar } from '../../components/CandidateAvatar';
+import { PageHeader } from '../../components/PageHeader';
 
 const useStyles = makeStyles({
   grid: {
@@ -15,6 +17,11 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalXS,
+  },
+  cardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
   },
 });
 
@@ -31,8 +38,7 @@ export function MyCandidates() {
 
   return (
     <>
-      <Title2>My Candidates</Title2>
-      <Body1>Candidates working on your projects.</Body1>
+      <PageHeader title="My Candidates" subtitle="Candidates working on your projects." />
 
       {isLoading && <Spinner label="Loading your candidates..." />}
       {isError && <Body1>Failed to load your candidates: {(error as Error).message}</Body1>}
@@ -41,9 +47,12 @@ export function MyCandidates() {
       <div className={styles.grid}>
         {candidates?.map((candidate) => (
           <Card key={candidate.assignmentId} className={styles.card}>
-            <Body1>
-              <strong>{candidate.candidateName}</strong>
-            </Body1>
+            <div className={styles.cardHeader}>
+              <CandidateAvatar candidateId={candidate.candidateId} name={candidate.candidateName} />
+              <Body1>
+                <strong>{candidate.candidateName}</strong>
+              </Body1>
+            </div>
             <Caption1>{candidate.projectName}</Caption1>
             <Badge appearance="tint" color={candidate.status === 'Active' ? 'success' : 'informative'}>
               {candidate.status}

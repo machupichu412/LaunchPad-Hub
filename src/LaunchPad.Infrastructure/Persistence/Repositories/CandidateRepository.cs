@@ -33,5 +33,11 @@ public sealed class CandidateRepository : ICandidateRepository
             .Where(c => c.CohortId == cohortId)
             .ToListAsync(ct);
 
+    public async Task<Candidate> AddAsync(Candidate candidate, CancellationToken ct = default)
+    {
+        await _db.Candidates.AddAsync(candidate, ct);
+        return candidate;
+    }
+
     public Task SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 }

@@ -9,13 +9,13 @@ import {
   Caption1,
   Input,
   Spinner,
-  Title2,
   Title3,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
 import { SearchRegular } from '@fluentui/react-icons';
 import { getProjectsByCohort } from '../../api/projects';
+import { PageHeader } from '../../components/PageHeader';
 
 // Demo-only: same single-cohort simplification used by TalentPipeline/MyProjects
 // until real cohort selection exists.
@@ -23,14 +23,12 @@ const DEMO_COHORT_ID = 1;
 
 const useStyles = makeStyles({
   search: {
-    maxWidth: '420px',
-    marginTop: tokens.spacingVerticalM,
+    width: '280px',
   },
   categoryRow: {
     display: 'flex',
     gap: tokens.spacingHorizontalXS,
     flexWrap: 'wrap',
-    marginTop: tokens.spacingVerticalM,
     marginBottom: tokens.spacingVerticalL,
   },
   grid: {
@@ -86,15 +84,18 @@ export function OpsProjects() {
 
   return (
     <>
-      <Title2>Projects</Title2>
-      <Body1>Browse sponsored projects across the cohort.</Body1>
-
-      <Input
-        className={styles.search}
-        contentBefore={<SearchRegular />}
-        placeholder="Search projects, skills, sponsors..."
-        value={search}
-        onChange={(_, data) => setSearch(data.value)}
+      <PageHeader
+        title="Projects"
+        subtitle="Browse sponsored projects across the cohort."
+        actions={
+          <Input
+            className={styles.search}
+            contentBefore={<SearchRegular />}
+            placeholder="Search projects, skills, sponsors..."
+            value={search}
+            onChange={(_, data) => setSearch(data.value)}
+          />
+        }
       />
 
       {categories.length > 0 && (

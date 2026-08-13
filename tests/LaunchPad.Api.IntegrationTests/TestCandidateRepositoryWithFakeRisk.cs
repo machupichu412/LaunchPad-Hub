@@ -27,6 +27,9 @@ public sealed class TestCandidateRepositoryWithFakeRisk : ICandidateRepository
     public Task<IReadOnlyList<Candidate>> GetByCohortAsync(int cohortId, CancellationToken ct = default) =>
         _inner.GetByCohortAsync(cohortId, ct);
 
+    public Task<Candidate> AddAsync(Candidate candidate, CancellationToken ct = default) =>
+        _inner.AddAsync(candidate, ct);
+
     public Task SaveChangesAsync(CancellationToken ct = default) => _inner.SaveChangesAsync(ct);
 
     public Task<CandidateRisk?> GetRiskAsync(int candidateId, CancellationToken ct = default) =>

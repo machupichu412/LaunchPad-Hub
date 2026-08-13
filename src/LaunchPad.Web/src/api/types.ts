@@ -43,6 +43,36 @@ export interface UpdateCandidateProfileRequest {
   skillNames: string[];
 }
 
+export interface CreateCandidateProfileRequest {
+  location: string | null;
+  availability: Availability;
+  graduationDate: string | null;
+  linkedInUrl: string | null;
+  portfolioUrl: string | null;
+  bio: string | null;
+  school: string | null;
+  degree: string | null;
+  gpa: number | null;
+  skillIds: number[];
+}
+
+export interface SkillDto {
+  skillId: number;
+  name: string;
+  skillCategoryId: number;
+  skillCategoryName: string;
+}
+
+export interface SkillCategoryDto {
+  skillCategoryId: number;
+  name: string;
+}
+
+export interface CreateSkillRequest {
+  name: string;
+  skillCategoryId: number;
+}
+
 export type ProjectApprovalStatus = 'Draft' | 'PendingOps' | 'Approved' | 'Rejected';
 export type ProjectStatus = 'Open' | 'InProgress' | 'Completed' | 'Cancelled';
 
@@ -94,6 +124,11 @@ export type UpdateProjectRequest = Omit<CreateProjectRequest, 'cohortId'>;
 export interface SponsorDto {
   sponsorId: number;
   displayName: string;
+  organization: string | null;
+  title: string | null;
+}
+
+export interface CreateSponsorProfileRequest {
   organization: string | null;
   title: string | null;
 }
@@ -301,4 +336,20 @@ export interface SponsorCandidateDto {
   projectName: string;
   status: AssignmentStatus;
   startDate: string | null;
+}
+
+export interface NotificationDto {
+  notificationId: number;
+  subject: string;
+  body: string;
+  isRead: boolean;
+  createdUtc: string;
+}
+
+export interface SearchResultDto {
+  type: 'Project' | 'Candidate';
+  id: number;
+  title: string;
+  subtitle: string;
+  url: string;
 }

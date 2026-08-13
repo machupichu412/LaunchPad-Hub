@@ -8,11 +8,11 @@ import {
   Field,
   Select,
   Textarea,
-  Title2,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
 import { submitReview } from '../../api/reviews';
+import { PageHeader } from '../../components/PageHeader';
 import type { Checkpoint } from '../../api/types';
 
 const useStyles = makeStyles({
@@ -21,7 +21,6 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalM,
-    marginTop: tokens.spacingVerticalM,
   },
   ratingRow: {
     display: 'grid',
@@ -85,17 +84,16 @@ export function SubmitReview() {
 
   if (submitMutation.isSuccess) {
     return (
-      <>
-        <Title2>Review submitted</Title2>
-        <Body1>Thanks — your {checkpoint.toLowerCase()} review has been recorded.</Body1>
-      </>
+      <PageHeader
+        title="Review submitted"
+        subtitle={`Thanks — your ${checkpoint.toLowerCase()} review has been recorded.`}
+      />
     );
   }
 
   return (
     <>
-      <Title2>Submit review</Title2>
-      <Body1>Rate the candidate's engagement and share qualitative feedback.</Body1>
+      <PageHeader title="Submit review" subtitle="Rate the candidate's engagement and share qualitative feedback." />
 
       <div className={styles.form}>
         <Field label="Checkpoint">

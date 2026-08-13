@@ -22,6 +22,7 @@ public class ReviewsController : ControllerBase
     private readonly IAppUserRepository _appUsers;
     private readonly ICurrentUser _currentUser;
     private readonly IAuthorizationService _authorization;
+    private readonly IAuditLog _auditLog;
     private readonly IValidator<SubmitReviewRequest> _validator;
 
     public ReviewsController(
@@ -30,6 +31,7 @@ public class ReviewsController : ControllerBase
         IAppUserRepository appUsers,
         ICurrentUser currentUser,
         IAuthorizationService authorization,
+        IAuditLog auditLog,
         IValidator<SubmitReviewRequest> validator)
     {
         _assignments = assignments;
@@ -37,6 +39,7 @@ public class ReviewsController : ControllerBase
         _appUsers = appUsers;
         _currentUser = currentUser;
         _authorization = authorization;
+        _auditLog = auditLog;
         _validator = validator;
     }
 
@@ -84,6 +87,9 @@ public class ReviewsController : ControllerBase
 
         await _reviews.AddAsync(review, ct);
         await _reviews.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(
+            _currentUser.EntraObjectId, "Review", review.ReviewId.ToString(), "Submit",
+            data: new { review.AssignmentId, review.Checkpoint }, ct: ct);
 
         return Ok(ToDto(review));
     }

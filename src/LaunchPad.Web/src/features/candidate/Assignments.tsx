@@ -6,13 +6,13 @@ import {
   Card,
   CardHeader,
   Spinner,
-  Title2,
   Title3,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
 import { getMyAssignment } from '../../api/assignments';
 import { getOpenProjects } from '../../api/projects';
+import { PageHeader } from '../../components/PageHeader';
 
 const useStyles = makeStyles({
   activeCard: {
@@ -47,9 +47,9 @@ export function Assignments() {
 
   return (
     <>
-      <Title2>Assignments</Title2>
+      <PageHeader title="Assignments" />
 
-      <Title3 style={{ display: 'block', marginTop: tokens.spacingVerticalL }}>Your match</Title3>
+      <Title3 block>Your match</Title3>
       {assignmentLoading && <Spinner label="Loading your match..." />}
       {!assignmentLoading && !assignment && <Body1>You don't have an active assignment yet.</Body1>}
       {assignment && (
@@ -85,7 +85,7 @@ export function Assignments() {
         </Card>
       )}
 
-      <Title3 style={{ display: 'block', marginTop: tokens.spacingVerticalXL }}>Browse open projects</Title3>
+      <Title3 block style={{ marginTop: tokens.spacingVerticalXL }}>Browse open projects</Title3>
       {openLoading && <Spinner label="Loading open projects..." />}
       {isError && <Body1>Failed to load open projects: {(error as Error).message}</Body1>}
       {openProjects && openProjects.length === 0 && <Body1>No open projects in your cohort right now.</Body1>}
