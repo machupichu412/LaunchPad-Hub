@@ -13,9 +13,16 @@ public class AssignmentConfiguration : IEntityTypeConfiguration<Assignment>
         builder.Property(a => a.MatchScore).HasColumnType("decimal(5,2)");
         builder.Property(a => a.RowVersion).IsRowVersion();
 
+        // Restrict, not the default Cascade: Cohort cascades to both Candidate and
+        // Project, and Candidate already cascades to Assignment — a second cascade
+        // path in from Project would give Assignment two cascade paths back to
+        // Cohort, which SQL Server rejects outright at migration time (Error 1785,
+        // "may cause cycles or multiple cascade paths"). Deleting a Project should
+        // never have silently wiped Assignment/Review/Deliverable history anyway.
         builder.HasOne(a => a.Project)
             .WithMany(p => p.Assignments)
-            .HasForeignKey(a => a.ProjectId);
+            .HasForeignKey(a => a.ProjectId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(a => a.Candidate)
             .WithMany(c => c.Assignments)

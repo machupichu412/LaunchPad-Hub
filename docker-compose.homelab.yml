@@ -1,0 +1,40 @@
+# Local Tier-1 SQL emulation for LaunchPad (see the "Homelab Azure-service
+# emulation" plan). Replaces the EF Core in-memory provider used by the
+# "LocalDemo" launch profile with a real SQL Server engine, so migrations get
+# checked against the actual features CLAUDE.md relies on that InMemory can't
+# represent at all: the filtered unique index on Assignment (one active
+# assignment per candidate) and the vCandidateRisk view.
+#
+# Usage: see scripts/run-local-full.sh, which drives this compose file for you.
+# Manual usage: copy .env.example to .env, set MSSQL_SA_PASSWORD, then
+#   docker compose -f docker-compose.homelab.yml up -d
+#
+# Image note: mcr.microsoft.com/azure-sql-edge is used here because it has a
+# native arm64 build (works on Apple Silicon / arm64 homelab boxes) with the
+# same SQL surface area this app needs. GitHub Actions' ubuntu-latest runners
+# are x86_64 — the CI equivalent of this container (see
+# .github/workflows/deploy.yml's integration-real-sql job) uses
+# mcr.microsoft.com/mssql/server:2022-latest instead. Don't copy-paste one
+# image into the other's context; they're deliberately different per host arch.
+
+services:
+  sql:
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    platform: linux/arm64
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env — see .env.example}
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - launchpad-sql-data:/var/opt/mssql
+    # No container-level healthcheck: azure-sql-edge doesn't bundle sqlcmd/mssql-tools
+    # (confirmed by actually running this image — `find / -iname sqlcmd` comes back
+    # empty), unlike the full mssql/server image CI uses. Readiness is checked from
+    # the host instead — see scripts/run-local-full.sh, which polls the TCP port and
+    # then leans on EF Core's EnableRetryOnFailure for the last few seconds of SQL
+    # Server's own internal startup.
+
+volumes:
+  launchpad-sql-data:

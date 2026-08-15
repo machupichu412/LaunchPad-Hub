@@ -20,6 +20,9 @@ public sealed class CohortRepository : ICohortRepository
     public async Task<IReadOnlyList<Cohort>> GetActiveAsync(CancellationToken ct = default) =>
         await _db.Cohorts.Where(c => c.Status == CohortStatus.Active).ToListAsync(ct);
 
+    public Task<Cohort?> GetByIdAsync(int cohortId, CancellationToken ct = default) =>
+        _db.Cohorts.FirstOrDefaultAsync(c => c.CohortId == cohortId, ct);
+
     public Task<int> GetDefaultProgramIdAsync(CancellationToken ct = default) =>
         _db.Programs.OrderBy(p => p.ProgramId).Select(p => p.ProgramId).FirstAsync(ct);
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,7 +9,6 @@ import {
   Caption1,
   CounterBadge,
   Divider,
-  Input,
   Menu,
   MenuItem,
   MenuList,
@@ -24,12 +23,11 @@ import {
   mergeClasses,
   tokens,
 } from '@fluentui/react-components';
-import { AlertRegular, ChevronDownRegular, SearchRegular, WeatherMoonRegular, WeatherSunnyRegular } from '@fluentui/react-icons';
+import { AlertRegular, ChevronDownRegular, WeatherMoonRegular, WeatherSunnyRegular } from '@fluentui/react-icons';
 import { useActiveRole } from '../auth/ActiveRoleContext';
 import { roleHomePath, roleLabel, type AppRole } from '../auth/roles';
 import { useThemeMode } from '../theme/ThemeModeContext';
 import { getMyNotifications, getUnreadNotificationCount, markAllNotificationsRead, markNotificationRead } from '../api/notifications';
-import { search } from '../api/search';
 import { useMyAvatarUrl } from '../auth/useMyAvatarUrl';
 import { AvatarEditorDialog } from './AvatarEditorDialog';
 
@@ -43,44 +41,7 @@ const useStyles = makeStyles({
     borderBottomStyle: 'solid',
     borderBottomColor: tokens.colorNeutralStroke2,
   },
-  searchWrap: {
-    position: 'relative',
-    flexGrow: 1,
-    maxWidth: '360px',
-  },
-  searchResults: {
-    position: 'absolute',
-    top: 'calc(100% + 4px)',
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    backgroundColor: tokens.colorNeutralBackground1,
-    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
-    borderRadius: tokens.borderRadiusMedium,
-    boxShadow: tokens.shadow16,
-    maxHeight: '360px',
-    overflowY: 'auto',
-    padding: tokens.spacingVerticalXS,
-  },
-  searchGroupLabel: {
-    display: 'block',
-    padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalS}`,
-  },
-  resultButton: {
-    display: 'flex',
-    flexDirection: 'column',
-    width: '100%',
-    textAlign: 'left',
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-    borderRadius: tokens.borderRadiusSmall,
-    border: 'none',
-    backgroundColor: 'transparent',
-    cursor: 'pointer',
-    ':hover': {
-      backgroundColor: tokens.colorSubtleBackgroundHover,
-    },
-  },
-  // Everything past the search box is "account controls" — a distinct group
+  // Everything past this point is "account controls" — a distinct group
   // pinned to the far right, set apart by the divider below rather than blending
   // into one undifferentiated row of buttons.
   actions: {
@@ -177,44 +138,6 @@ export function Header() {
     navigate(roleHomePath(role));
   };
 
-  // --- Search: debounced, server-side, role-scoped (see SearchController) ---
-  const searchBoxRef = useRef<HTMLDivElement>(null);
-  const [searchInput, setSearchInput] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
-
-  useEffect(() => {
-    const handle = setTimeout(() => setDebouncedQuery(searchInput.trim()), 300);
-    return () => clearTimeout(handle);
-  }, [searchInput]);
-
-  useEffect(() => {
-    function closeIfOutside(event: MouseEvent) {
-      if (searchBoxRef.current && !searchBoxRef.current.contains(event.target as Node)) {
-        setSearchOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', closeIfOutside);
-    return () => document.removeEventListener('mousedown', closeIfOutside);
-  }, []);
-
-  const { data: searchResults, isFetching: searching } = useQuery({
-    queryKey: ['search', debouncedQuery],
-    queryFn: () => search(debouncedQuery),
-    enabled: debouncedQuery.length >= 2,
-  });
-
-  const goToResult = (url: string) => {
-    setSearchOpen(false);
-    setSearchInput('');
-    setDebouncedQuery('');
-    navigate(url);
-  };
-
-  const projectResults = (searchResults ?? []).filter((r) => r.type === 'Project');
-  const candidateResults = (searchResults ?? []).filter((r) => r.type === 'Candidate');
-  const showDropdown = searchOpen && debouncedQuery.length >= 2;
-
   // --- Notifications: unread count polls in the background; the list only loads
   // once the popover is actually opened. ---
   const { data: unreadCount } = useQuery({
@@ -243,55 +166,6 @@ export function Header() {
 
   return (
     <header className={styles.root}>
-      <div className={styles.searchWrap} ref={searchBoxRef}>
-        <Input
-          contentBefore={<SearchRegular />}
-          placeholder="Search projects, candidates..."
-          appearance="filled-lighter"
-          value={searchInput}
-          onChange={(_, data) => {
-            setSearchInput(data.value);
-            setSearchOpen(true);
-          }}
-          onFocus={() => setSearchOpen(true)}
-          style={{ width: '100%' }}
-        />
-        {showDropdown && (
-          <div className={styles.searchResults}>
-            {searching && <Spinner size="tiny" label="Searching..." style={{ padding: tokens.spacingVerticalS }} />}
-            {!searching && projectResults.length === 0 && candidateResults.length === 0 && (
-              <Body1 style={{ display: 'block', padding: tokens.spacingVerticalS }}>No results.</Body1>
-            )}
-            {projectResults.length > 0 && (
-              <div>
-                <Caption1 className={styles.searchGroupLabel}>
-                  <strong>Projects</strong>
-                </Caption1>
-                {projectResults.map((r) => (
-                  <button key={`project-${r.id}`} type="button" className={styles.resultButton} onClick={() => goToResult(r.url)}>
-                    <Body1 block>{r.title}</Body1>
-                    <Caption1 block>{r.subtitle}</Caption1>
-                  </button>
-                ))}
-              </div>
-            )}
-            {candidateResults.length > 0 && (
-              <div>
-                <Caption1 className={styles.searchGroupLabel}>
-                  <strong>Candidates</strong>
-                </Caption1>
-                {candidateResults.map((r) => (
-                  <button key={`candidate-${r.id}`} type="button" className={styles.resultButton} onClick={() => goToResult(r.url)}>
-                    <Body1 block>{r.title}</Body1>
-                    <Caption1 block>{r.subtitle}</Caption1>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       <div className={styles.actions}>
         <Divider vertical className={styles.divider} />
 

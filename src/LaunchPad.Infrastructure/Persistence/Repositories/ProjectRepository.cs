@@ -10,16 +10,21 @@ public sealed class ProjectRepository : IProjectRepository
     private readonly LaunchPadDbContext _db;
     public ProjectRepository(LaunchPadDbContext db) => _db = db;
 
+    // Assignments is included everywhere a ProjectDto might be built from the result —
+    // CommittedCandidateCount/SpotsRemaining are derived from it (see ProjectsController.ToDto)
+    // rather than stored, per CLAUDE.md's "don't duplicate state" rule.
     public Task<Project?> GetWithSponsorAsync(int projectId, CancellationToken ct = default) =>
         _db.Projects
             .Include(p => p.Sponsor).ThenInclude(s => s.AppUser)
             .Include(p => p.Skills).ThenInclude(ps => ps.Skill).ThenInclude(s => s.SkillCategory)
+            .Include(p => p.Assignments)
             .FirstOrDefaultAsync(p => p.ProjectId == projectId, ct);
 
     public async Task<IReadOnlyList<Project>> GetByCohortAsync(int cohortId, CancellationToken ct = default) =>
         await _db.Projects
             .Include(p => p.Sponsor).ThenInclude(s => s.AppUser)
             .Include(p => p.Skills).ThenInclude(ps => ps.Skill).ThenInclude(s => s.SkillCategory)
+            .Include(p => p.Assignments)
             .Where(p => p.CohortId == cohortId)
             .ToListAsync(ct);
 
@@ -27,6 +32,7 @@ public sealed class ProjectRepository : IProjectRepository
         await _db.Projects
             .Include(p => p.Sponsor).ThenInclude(s => s.AppUser)
             .Include(p => p.Skills).ThenInclude(ps => ps.Skill).ThenInclude(s => s.SkillCategory)
+            .Include(p => p.Assignments)
             .Where(p => p.CohortId == cohortId && p.ApprovalStatus == ProjectApprovalStatus.Approved && p.Status == ProjectStatus.Open)
             .ToListAsync(ct);
 
@@ -34,6 +40,7 @@ public sealed class ProjectRepository : IProjectRepository
         await _db.Projects
             .Include(p => p.Sponsor).ThenInclude(s => s.AppUser)
             .Include(p => p.Skills).ThenInclude(ps => ps.Skill).ThenInclude(s => s.SkillCategory)
+            .Include(p => p.Assignments)
             .Where(p => p.SponsorId == sponsorId)
             .ToListAsync(ct);
 

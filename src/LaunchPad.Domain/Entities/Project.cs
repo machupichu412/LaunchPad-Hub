@@ -16,6 +16,15 @@ public class Project : Entity
     public ProjectApprovalStatus ApprovalStatus { get; set; }
     public ProjectStatus Status { get; set; }
     public string? RejectionReason { get; set; }
+    public int MaxCandidates { get; set; } = 1;
+
+    /// <summary>Opaque Graph drive-item ID of this project's SharePoint folder
+    /// ({parent}/{Cohort}/Projects/{Name}) — null until FolderProvisioningRunner sets it.</summary>
+    public string? SharePointFolderId { get; set; }
+
+    /// <summary>Human-facing "open in SharePoint" deep link — the one deliberate exception
+    /// to the opaque-key rule, captured once at provisioning time.</summary>
+    public string? SharePointFolderWebUrl { get; set; }
 
     public Cohort Cohort { get; set; } = null!;
     public Sponsor Sponsor { get; set; } = null!;

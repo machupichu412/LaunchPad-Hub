@@ -8,6 +8,8 @@ public interface ICohortRepository
 {
     Task<IReadOnlyList<CohortSummary>> GetAllWithCountsAsync(CancellationToken ct = default);
 
+    Task<Cohort?> GetByIdAsync(int cohortId, CancellationToken ct = default);
+
     /// <summary>Cohorts with Status == Active — candidate self-onboarding auto-assigns
     /// to the single active cohort; more than one (or zero) is treated as ambiguous by
     /// the caller, not resolved here.</summary>

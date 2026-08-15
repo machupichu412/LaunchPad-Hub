@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Badge,
@@ -8,14 +9,16 @@ import {
   Caption1,
   Field,
   Input,
+  Select,
   Spinner,
   Title3,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
-import { CalendarRegular, PeopleRegular, BriefcaseRegular } from '@fluentui/react-icons';
-import { createCohort, getCohorts } from '../../api/cohorts';
+import { CalendarRegular, PeopleRegular, BriefcaseRegular, FolderRegular } from '@fluentui/react-icons';
+import { createCohort, getCohorts, updateCohortStatus } from '../../api/cohorts';
 import { PageHeader } from '../../components/PageHeader';
+import type { CohortStatus } from '../../api/types';
 
 const useStyles = makeStyles({
   form: {
@@ -49,6 +52,7 @@ const useStyles = makeStyles({
 
 export function Cohorts() {
   const styles = useStyles();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { data: cohorts, isLoading, isError, error } = useQuery({
@@ -71,6 +75,11 @@ export function Cohorts() {
   });
 
   const canCreate = name.trim().length > 0 && startDate.length > 0 && endDate.length > 0;
+
+  const statusMutation = useMutation({
+    mutationFn: ({ cohortId, status }: { cohortId: number; status: CohortStatus }) => updateCohortStatus(cohortId, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cohorts'] }),
+  });
 
   return (
     <>
@@ -117,9 +126,39 @@ export function Cohorts() {
               <span className={styles.stat}><BriefcaseRegular /> {cohort.projectCount}</span>
               <span className={styles.stat}><CalendarRegular /> {cohort.startDate} → {cohort.endDate}</span>
             </div>
+            <Field label="Status" style={{ marginTop: tokens.spacingVerticalM }}>
+              <Select
+                value={cohort.status}
+                disabled={statusMutation.isPending}
+                onChange={(_, data) => statusMutation.mutate({ cohortId: cohort.cohortId, status: data.value as CohortStatus })}
+              >
+                <option value="Planned">Planned</option>
+                <option value="Active">Active</option>
+                <option value="Completed">Completed</option>
+              </Select>
+            </Field>
+            <Button
+              appearance="secondary"
+              icon={<PeopleRegular />}
+              style={{ marginTop: tokens.spacingVerticalM }}
+              onClick={() => navigate(`/pipeline/${cohort.cohortId}`)}
+            >
+              View candidates
+            </Button>
+            {cohort.sharePointFolderWebUrl && (
+              <Button
+                appearance="secondary"
+                icon={<FolderRegular />}
+                style={{ marginTop: tokens.spacingVerticalS }}
+                onClick={() => window.open(cohort.sharePointFolderWebUrl!, '_blank', 'noopener')}
+              >
+                View in SharePoint
+              </Button>
+            )}
           </Card>
         ))}
       </div>
+      {statusMutation.isError && <Body1>Failed to update status: {(statusMutation.error as Error).message}</Body1>}
     </>
   );
 }

@@ -6,6 +6,7 @@ export interface ProjectFormValues {
   name: string;
   description: string;
   availabilityNeeded: Availability;
+  maxCandidates: number;
   requiredSkillNames: string[];
   preferredSkillNames: string[];
 }
@@ -60,8 +61,20 @@ export function ProjectForm({
         </Select>
       </Field>
       <Field
+        label="Max candidates"
+        hint="How many spots this project has — matching and sponsor requests fill up to this many."
+        style={{ marginTop: tokens.spacingVerticalS }}
+      >
+        <Input
+          type="number"
+          min={1}
+          value={String(values.maxCandidates)}
+          onChange={(_, data) => onChange({ ...values, maxCandidates: Math.max(1, Number(data.value) || 1) })}
+        />
+      </Field>
+      <Field
         label="Required skills"
-        hint="Candidates must have all of these to be matched."
+        hint="Weighted heavily in matching — not an absolute requirement, but candidates missing these will score much lower."
         style={{ marginTop: tokens.spacingVerticalS }}
       >
         <SkillTagPicker
@@ -72,7 +85,7 @@ export function ProjectForm({
       </Field>
       <Field
         label="Preferred skills"
-        hint="Nice to have, not required to match."
+        hint="Nice to have — weighted less than required skills."
         style={{ marginTop: tokens.spacingVerticalS }}
       >
         <SkillTagPicker

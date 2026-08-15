@@ -120,5 +120,6 @@ public class SponsorsController : ControllerBase
         ProjectName = assignment.Project.Name,
         Status = assignment.Status,
         StartDate = assignment.StartDate,
+        SharePointFolderWebUrl = assignment.Candidate.SharePointFolderWebUrl,
     };
 }

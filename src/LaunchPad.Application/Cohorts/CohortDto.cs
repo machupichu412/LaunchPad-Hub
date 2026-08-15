@@ -13,4 +13,7 @@ public class CohortDto
     public CohortStatus Status { get; set; }
     public int CandidateCount { get; set; }
     public int ProjectCount { get; set; }
+
+    /// <summary>"Open in SharePoint" deep link — null until FolderProvisioningRunner sets it.</summary>
+    public string? SharePointFolderWebUrl { get; set; }
 }

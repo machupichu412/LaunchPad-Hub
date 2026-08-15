@@ -67,7 +67,8 @@ public static class LocalDemoSeeder
 
         // Two more Open/Approved projects in the main cohort so the Ops "Run matching"
         // action and Projects catalog (category filter chips) have real material —
-        // these deliberately stay unstaffed, unlike the one above.
+        // these deliberately stay unstaffed, unlike the one above. MaxCandidates=3
+        // exercises the multi-spot gallery/request flow in a local demo.
         var project2 = new Project
         {
             Cohort = cohort,
@@ -77,6 +78,7 @@ public static class LocalDemoSeeder
             AvailabilityNeeded = Availability.FullTime,
             StartDate = cohort.StartDate,
             EndDate = cohort.EndDate,
+            MaxCandidates = 3,
             ApprovalStatus = ProjectApprovalStatus.Approved,
             Status = ProjectStatus.Open,
             Skills = new List<ProjectSkill>
@@ -196,6 +198,10 @@ public static class LocalDemoSeeder
             {
                 AppUser = candidateUsers[2], Cohort = cohort, Location = "Remote",
                 Availability = Availability.FullTime, Status = CandidateStatus.TalentPlus,
+                // Shares vocabulary with project2's description ("actionable", "insights",
+                // "support tickets") on purpose — makes the TF-IDF text-similarity term
+                // visibly move this candidate's score in a local demo.
+                Bio = "Built actionable insights dashboards from support ticket data using Python and Power BI.",
                 Skills = new List<CandidateSkill>
                 {
                     new() { Skill = skillPowerBi, Proficiency = 4, Source = SkillSource.OpsVerified },
@@ -271,13 +277,36 @@ public static class LocalDemoSeeder
             RecommendConversion = true,
         };
 
+        // Attached to the "Draft dashboard wireframes" todo above — demos the optional
+        // deliverable-to-todo link a candidate can set when submitting.
         var deliverable = new Deliverable
         {
             Assignment = assignment,
+            ProjectTodo = todos[1],
             Title = "Dashboard Wireframes v1",
             FileName = "dashboard-wireframes-v1.pdf",
             Status = DeliverableStatus.Submitted,
             SubmittedUtc = DateTime.UtcNow.AddDays(-18),
+        };
+
+        // A Final review alongside the Midpoint one so HireOutcomeRule has something to
+        // evaluate — the local in-memory demo has no real vCandidateRisk view backing
+        // CandidateRisk though, so the suggestion badge itself only renders against a real
+        // SQL Server target (see docker-compose.homelab.yml's LocalFull profile).
+        var finalReview = new Review
+        {
+            Assignment = assignment,
+            ReviewType = ReviewType.SponsorOnCandidate,
+            Checkpoint = Checkpoint.Final,
+            SubmittedBy = sponsorUser.AppUserId,
+            Commitment = 5,
+            Availability = 4,
+            Guidance = 5,
+            OutputQuality = 5,
+            Comments = "Finished strong — the metrics integration shipped ahead of schedule.",
+            Strengths = "Took full ownership of the API integration and mentored a newer candidate along the way.",
+            GrowthAreas = "Keep building confidence presenting to stakeholders.",
+            RecommendConversion = true,
         };
 
         var kudosPost = new CommunityPost
@@ -340,6 +369,7 @@ public static class LocalDemoSeeder
 
         db.AddRange(todos);
         db.Add(review);
+        db.Add(finalReview);
         db.Add(deliverable);
         db.AddRange(kudosPost, questionPost, announcementPost);
         db.Add(kudosComment);

@@ -17,6 +17,18 @@ public class ProjectDto
     public ProjectStatus Status { get; set; }
     public string? RejectionReason { get; set; }
     public string SponsorTeamsLink { get; set; } = string.Empty;
+    public int MaxCandidates { get; set; }
+
+    /// <summary>"Open in SharePoint" deep link — null until FolderProvisioningRunner sets it.</summary>
+    public string? SharePointFolderWebUrl { get; set; }
+
+    /// <summary>Count of assignments in {SponsorApproved, OpsApproved, Active} — used to
+    /// block shrinking MaxCandidates below what's already committed.</summary>
+    public int CommittedCandidateCount { get; set; }
+
+    /// <summary>MaxCandidates minus assignments in {Proposed, SponsorApproved, OpsApproved,
+    /// Active} — derived, never stored, per CLAUDE.md's "don't duplicate state" rule.</summary>
+    public int SpotsRemaining { get; set; }
 
     /// <summary>The requesting candidate's own 1-5 rating for this project, or null if
     /// they haven't rated it. Only ever populated on candidate-facing actions — see

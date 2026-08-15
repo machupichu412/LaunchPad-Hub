@@ -5,6 +5,7 @@ using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
 using LaunchPad.Application.Notifications;
 using LaunchPad.Application.Projects;
+using LaunchPad.Application.Sponsors;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
 using LaunchPad.Infrastructure.Persistence;
@@ -354,6 +355,9 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var dto = await response.Content.ReadFromJsonAsync<ProjectDto>(TestJsonOptions.Default);
         dto!.ApprovalStatus.Should().Be(ProjectApprovalStatus.Approved);
+        // Approve publishes a FolderProvisioningJob; FakeFolderProvisioningJobPublisher runs it
+        // inline, so the project's SharePoint fields are already backfilled in this same response.
+        dto.SharePointFolderWebUrl.Should().NotBeNullOrEmpty();
 
         var publisher = (FakeNotificationPublisher)_factory.Services.GetRequiredService<INotificationPublisher>();
         publisher.Sent.Should().Contain(m => m.ToUpn == "pending-owner@example.com" && m.Subject.Contains("approved"));
@@ -406,6 +410,58 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
         client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
 
         var response = await client.PostAsJsonAsync($"/api/projects/{projectId}/reject", new RejectProjectRequest { Reason = "" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Reject_WhenAlreadyApproved_FlipsToRejected_AndDoesNotResendApprovedNotification()
+    {
+        var (_, projectId) = await SeedPendingOpsProjectAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+
+        (await client.PostAsync($"/api/projects/{projectId}/approve", content: null)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/projects/{projectId}/reject",
+            new RejectProjectRequest { Reason = "Revisiting — this no longer fits the cohort." });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<ProjectDto>(TestJsonOptions.Default);
+        dto!.ApprovalStatus.Should().Be(ProjectApprovalStatus.Rejected);
+        dto.RejectionReason.Should().Be("Revisiting — this no longer fits the cohort.");
+    }
+
+    [Fact]
+    public async Task Approve_WhenAlreadyRejected_FlipsToApproved_AndClearsRejectionReason()
+    {
+        var (_, projectId) = await SeedPendingOpsProjectAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+
+        (await client.PostAsJsonAsync($"/api/projects/{projectId}/reject", new RejectProjectRequest { Reason = "Not ready yet." }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await client.PostAsync($"/api/projects/{projectId}/approve", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<ProjectDto>(TestJsonOptions.Default);
+        dto!.ApprovalStatus.Should().Be(ProjectApprovalStatus.Approved);
+        dto.RejectionReason.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Approve_WhenStillDraft_ReturnsBadRequest()
+    {
+        var (_, projectId, _) = await SeedProjectAsync(); // Seeded Draft
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+
+        var response = await client.PostAsync($"/api/projects/{projectId}/approve", content: null);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -473,5 +529,236 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
         var response = await client.PostAsJsonAsync($"/api/projects/{projectId}/interest", new RateInterestRequest { Rating = 9 });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    private async Task<(Guid SponsorOid, int ProjectId, int[] CandidateIds)> SeedApprovedProjectWithEligibleCandidatesAsync(
+        int maxCandidates = 1, int candidateCount = 1)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+
+        var sponsorOid = Guid.NewGuid();
+        var unique = Guid.NewGuid();
+        var program = new Domain.Entities.Program { Name = "Eligible Test Program" };
+        var cohort = new Cohort { Program = program, Name = "Eligible Test Cohort", StartDate = new DateOnly(2026, 1, 1), EndDate = new DateOnly(2026, 6, 1), Status = CohortStatus.Active };
+        var sponsor = new Sponsor { AppUser = new AppUser { EntraObjectId = sponsorOid, Upn = $"eligible-sponsor-{unique}@example.com", DisplayName = "Eligible Sponsor" } };
+        var project = new Project
+        {
+            Cohort = cohort,
+            Sponsor = sponsor,
+            Name = "Eligible Project",
+            AvailabilityNeeded = Availability.PartTime,
+            MaxCandidates = maxCandidates,
+            ApprovalStatus = ProjectApprovalStatus.Approved,
+            Status = ProjectStatus.Open,
+        };
+
+        var candidates = Enumerable.Range(0, candidateCount).Select(i => new Candidate
+        {
+            Cohort = cohort,
+            AppUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = $"eligible-candidate-{i}-{unique}@example.com", DisplayName = $"Eligible Candidate {i}" },
+            Availability = Availability.PartTime,
+            Status = CandidateStatus.InProgress,
+        }).ToList();
+
+        db.AddRange(program, cohort, sponsor, project);
+        db.AddRange(candidates);
+        await db.SaveChangesAsync();
+
+        return (sponsorOid, project.ProjectId, candidates.Select(c => c.CandidateId).ToArray());
+    }
+
+    [Fact]
+    public async Task GetEligibleCandidates_BeforeApproval_ReturnsBadRequest()
+    {
+        var (ownerOid, projectId, _) = await SeedProjectAsync(); // Seeded Draft
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, ownerOid.ToString());
+
+        var response = await client.GetAsync($"/api/projects/{projectId}/eligible-candidates");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task GetEligibleCandidates_AfterApproval_ReturnsScoredCandidates_StructurallyWithoutAHiddenScoreField()
+    {
+        var (sponsorOid, projectId, candidateIds) = await SeedApprovedProjectWithEligibleCandidatesAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
+
+        var response = await client.GetAsync($"/api/projects/{projectId}/eligible-candidates");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var candidates = await response.Content.ReadFromJsonAsync<List<SponsorCandidateMatchDto>>(TestJsonOptions.Default);
+        candidates.Should().ContainSingle(c => c.CandidateId == candidateIds[0]);
+
+        // Structural guarantee, not a client-side filter — SponsorCandidateMatchDto has no
+        // AverageScore/risk-flag properties to leak in the first place (see CLAUDE.md).
+        var raw = await response.Content.ReadAsStringAsync();
+        raw.Should().NotContain("averageScore").And.NotContain("hasPerformanceRisk");
+    }
+
+    [Fact]
+    public async Task RequestAssignment_AsOwningSponsor_CreatesSponsorApprovedAssignment_AndRecordsAnAuditEvent()
+    {
+        var (sponsorOid, projectId, candidateIds) = await SeedApprovedProjectWithEligibleCandidatesAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
+
+        var response = await client.PostAsync($"/api/projects/{projectId}/candidates/{candidateIds[0]}/request", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<ProjectMatchDto>(TestJsonOptions.Default);
+        dto!.CandidateId.Should().Be(candidateIds[0]);
+
+        (await GetAuditEventsAsync("Assignment", dto.AssignmentId)).Should().Contain(e => e.Action == "SponsorDirectRequest");
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        var assignment = await db.Assignments.FindAsync(dto.AssignmentId);
+        assignment!.Status.Should().Be(AssignmentStatus.SponsorApproved);
+    }
+
+    [Fact]
+    public async Task RequestAssignment_BeforeApproval_ReturnsBadRequest()
+    {
+        var (ownerOid, projectId, _) = await SeedProjectAsync(); // Seeded Draft
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, ownerOid.ToString());
+
+        var response = await client.PostAsync($"/api/projects/{projectId}/candidates/999999/request", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task RequestAssignment_WhenProjectSpotsAreFull_ReturnsConflict()
+    {
+        var (sponsorOid, projectId, candidateIds) = await SeedApprovedProjectWithEligibleCandidatesAsync(maxCandidates: 1, candidateCount: 2);
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
+
+        var firstRequest = await client.PostAsync($"/api/projects/{projectId}/candidates/{candidateIds[0]}/request", content: null);
+        firstRequest.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var secondRequest = await client.PostAsync($"/api/projects/{projectId}/candidates/{candidateIds[1]}/request", content: null);
+
+        secondRequest.StatusCode.Should().Be(HttpStatusCode.Conflict, "the project's only spot is already spoken for");
+    }
+
+    [Fact]
+    public async Task RequestAssignment_WhenCandidateAlreadyHasALiveAssignmentElsewhere_ReturnsConflict()
+    {
+        var (sponsorOid, projectId, candidateIds) = await SeedApprovedProjectWithEligibleCandidatesAsync(maxCandidates: 2);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+            var project = await db.Projects.FindAsync(projectId);
+            var elsewhereProject = new Project { CohortId = project!.CohortId, SponsorId = project.SponsorId, Name = "Elsewhere Project", AvailabilityNeeded = Availability.PartTime, ApprovalStatus = ProjectApprovalStatus.Approved, Status = ProjectStatus.InProgress };
+            db.Add(elsewhereProject);
+            await db.SaveChangesAsync();
+            db.Add(new Assignment { ProjectId = elsewhereProject.ProjectId, CandidateId = candidateIds[0], Status = AssignmentStatus.Active, StartDate = new DateOnly(2026, 1, 1) });
+            await db.SaveChangesAsync();
+        }
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
+
+        var response = await client.PostAsync($"/api/projects/{projectId}/candidates/{candidateIds[0]}/request", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict, "a candidate with a live assignment elsewhere is excluded from the eligible pool");
+    }
+
+    [Fact]
+    public async Task GetAssignedCandidates_ReturnsTheDirectlyRequestedCandidate()
+    {
+        var (sponsorOid, projectId, candidateIds) = await SeedApprovedProjectWithEligibleCandidatesAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
+
+        await client.PostAsync($"/api/projects/{projectId}/candidates/{candidateIds[0]}/request", content: null);
+
+        var response = await client.GetAsync($"/api/projects/{projectId}/assigned-candidates");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var assigned = await response.Content.ReadFromJsonAsync<List<SponsorCandidateDto>>(TestJsonOptions.Default);
+        assigned.Should().ContainSingle(a => a.CandidateId == candidateIds[0] && a.Status == AssignmentStatus.SponsorApproved);
+    }
+
+    [Fact]
+    public async Task Cancel_WithdrawsAssignments_SetsProjectCancelled_AndRecordsAnAuditEvent()
+    {
+        var (sponsorOid, projectId, candidateIds) = await SeedApprovedProjectWithEligibleCandidatesAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
+
+        var requestResponse = await client.PostAsync($"/api/projects/{projectId}/candidates/{candidateIds[0]}/request", content: null);
+        var requested = await requestResponse.Content.ReadFromJsonAsync<ProjectMatchDto>(TestJsonOptions.Default);
+
+        var cancelResponse = await client.PostAsJsonAsync($"/api/projects/{projectId}/cancel", new RejectProjectRequest { Reason = "Sponsor pulled funding." });
+
+        cancelResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await cancelResponse.Content.ReadFromJsonAsync<ProjectDto>(TestJsonOptions.Default);
+        dto!.Status.Should().Be(ProjectStatus.Cancelled);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        var assignment = await db.Assignments.FindAsync(requested!.AssignmentId);
+        assignment!.Status.Should().Be(AssignmentStatus.Withdrawn, "cancelling a project frees its candidates back into the open pool");
+
+        (await GetAuditEventsAsync("Project", projectId)).Should().Contain(e => e.Action == "ProjectCancelled");
+    }
+
+    [Fact]
+    public async Task Cancel_WithEmptyReason_ReturnsValidationProblem()
+    {
+        var (sponsorOid, projectId, _) = await SeedApprovedProjectWithEligibleCandidatesAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
+
+        var response = await client.PostAsJsonAsync($"/api/projects/{projectId}/cancel", new RejectProjectRequest { Reason = "" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Update_ShrinkingMaxCandidatesBelowCommittedCount_ReturnsConflict()
+    {
+        var (sponsorOid, projectId, candidateIds) = await SeedApprovedProjectWithEligibleCandidatesAsync(maxCandidates: 2, candidateCount: 2);
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
+
+        await client.PostAsync($"/api/projects/{projectId}/candidates/{candidateIds[0]}/request", content: null);
+        await client.PostAsync($"/api/projects/{projectId}/candidates/{candidateIds[1]}/request", content: null);
+
+        var response = await client.PutAsJsonAsync($"/api/projects/{projectId}", new UpdateProjectRequest
+        {
+            Name = "Eligible Project",
+            AvailabilityNeeded = Availability.PartTime,
+            MaxCandidates = 1,
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict, "2 candidates are already committed to this project's 2 spots");
     }
 }

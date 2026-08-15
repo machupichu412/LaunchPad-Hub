@@ -1,5 +1,14 @@
 import { authedFetch } from './authedFetch';
-import type { CreateProjectRequest, ProjectDto, RateInterestRequest, RejectProjectRequest, UpdateProjectRequest } from './types';
+import type {
+  CreateProjectRequest,
+  ProjectDto,
+  ProjectMatchDto,
+  RateInterestRequest,
+  RejectProjectRequest,
+  SponsorCandidateDto,
+  SponsorCandidateMatchDto,
+  UpdateProjectRequest,
+} from './types';
 
 export async function getMyProjects(): Promise<ProjectDto[]> {
   const response = await authedFetch('/api/projects/mine');
@@ -70,5 +79,29 @@ export async function approveProject(projectId: number): Promise<ProjectDto> {
 export async function rejectProject(projectId: number, request: RejectProjectRequest): Promise<ProjectDto> {
   const response = await authedFetch(`/api/projects/${projectId}/reject`, { method: 'POST', body: JSON.stringify(request) });
   if (!response.ok) throw new Error(`Failed to reject project ${projectId}: ${response.status}`);
+  return response.json() as Promise<ProjectDto>;
+}
+
+export async function getEligibleCandidates(projectId: number): Promise<SponsorCandidateMatchDto[]> {
+  const response = await authedFetch(`/api/projects/${projectId}/eligible-candidates`);
+  if (!response.ok) throw new Error(`Failed to load eligible candidates: ${response.status}`);
+  return response.json() as Promise<SponsorCandidateMatchDto[]>;
+}
+
+export async function requestAssignment(projectId: number, candidateId: number): Promise<ProjectMatchDto> {
+  const response = await authedFetch(`/api/projects/${projectId}/candidates/${candidateId}/request`, { method: 'POST' });
+  if (!response.ok) throw new Error(`Failed to request candidate: ${response.status}`);
+  return response.json() as Promise<ProjectMatchDto>;
+}
+
+export async function getAssignedCandidates(projectId: number): Promise<SponsorCandidateDto[]> {
+  const response = await authedFetch(`/api/projects/${projectId}/assigned-candidates`);
+  if (!response.ok) throw new Error(`Failed to load assigned candidates: ${response.status}`);
+  return response.json() as Promise<SponsorCandidateDto[]>;
+}
+
+export async function cancelProject(projectId: number, request: RejectProjectRequest): Promise<ProjectDto> {
+  const response = await authedFetch(`/api/projects/${projectId}/cancel`, { method: 'POST', body: JSON.stringify(request) });
+  if (!response.ok) throw new Error(`Failed to cancel project ${projectId}: ${response.status}`);
   return response.json() as Promise<ProjectDto>;
 }

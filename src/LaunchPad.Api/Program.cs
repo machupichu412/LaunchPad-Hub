@@ -3,9 +3,13 @@ using LaunchPad.Api.Authorization;
 using LaunchPad.Api.LocalDemo;
 using LaunchPad.Api.Middleware;
 using LaunchPad.Application.Common;
+using LaunchPad.Application.Matching;
 using LaunchPad.Application.Projects;
+using LaunchPad.Application.SharePoint;
 using LaunchPad.Infrastructure.DependencyInjection;
+using LaunchPad.Infrastructure.Matching;
 using LaunchPad.Infrastructure.Persistence;
+using LaunchPad.Infrastructure.SharePoint;
 using LaunchPad.Infrastructure.Storage;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -51,8 +55,11 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(Policies.ManageOwnAssignment, p =>
         p.Requirements.Add(new OwnsAssignmentRequirement()));
 
+    // Sponsor included so a project owner can reach AssignmentsController at all — the
+    // per-action ManageOwnAssignment resource check (OwnsAssignmentHandler) still scopes
+    // them to assignments on their own projects, same defense-in-depth shape as elsewhere.
     options.AddPolicy(Policies.ViewOwnAssignment, p =>
-        p.RequireRole(Roles.Candidate, Roles.ProgramOps, Roles.Executive));
+        p.RequireRole(Roles.Candidate, Roles.Sponsor, Roles.ProgramOps, Roles.Executive));
 
     // Fail closed: every endpoint requires auth unless explicitly opted out.
     options.FallbackPolicy = new AuthorizationPolicyBuilder()
@@ -80,6 +87,52 @@ if (useInMemoryForLocalDemo)
     builder.Services.RemoveAll<DbContextOptions<LaunchPadDbContext>>();
     builder.Services.RemoveAll<IDbContextOptionsConfiguration<LaunchPadDbContext>>();
     builder.Services.AddDbContext<LaunchPadDbContext>(o => o.UseInMemoryDatabase("launchpad-local-demo"));
+}
+
+// Same dev-only opt-in as the in-memory swap above, but for the "LocalFull" profile
+// (a real SQL Server container — see docker-compose.homelab.yml) where migrations
+// have already been applied and LocalDemoSeeder.Seed's own idempotency check
+// (db.Programs.Any()) makes it safe to call on every startup against a
+// persistent database, not just a throwaway in-memory one.
+var seedOnStartup = builder.Environment.IsDevelopment()
+    && builder.Configuration.GetValue<bool>("Database:SeedOnStartup");
+
+// Cohort-wide matching normally runs off the request thread via the "matching-jobs"
+// Service Bus queue + CohortMatchingFunction. No Service Bus emulator exists in this repo
+// (see docker-compose.homelab.yml's Tier 1/2 split), so local/demo runs fall back to
+// running the job immediately in-process instead — same dev-only opt-in shape as the DB
+// and storage swaps above.
+var runMatchingInlineForLocalDemo = builder.Environment.IsDevelopment()
+    && builder.Configuration.GetValue<bool>("Matching:RunInlineForLocalDemo");
+
+builder.Services.AddScoped<IMatchingJobPublisher>(sp => runMatchingInlineForLocalDemo
+    ? sp.GetRequiredService<InlineMatchingJobPublisher>()
+    : sp.GetRequiredService<ServiceBusMatchingJobPublisher>());
+
+// Folder provisioning normally runs off the request thread via the "sharepoint-provisioning"
+// Service Bus queue + SharePointProvisioningFunction — same dev-only inline fallback shape
+// as matching above.
+var provisionFoldersInlineForLocalDemo = builder.Environment.IsDevelopment()
+    && builder.Configuration.GetValue<bool>("SharePoint:ProvisionInlineForLocalDemo");
+
+builder.Services.AddScoped<IFolderProvisioningJobPublisher>(sp => provisionFoldersInlineForLocalDemo
+    ? sp.GetRequiredService<InlineFolderProvisioningJobPublisher>()
+    : sp.GetRequiredService<ServiceBusFolderProvisioningJobPublisher>());
+
+// Same "gracefully degrade for local dev" shape as the profile-picture storage swap below: a
+// real SharePoint site (SharePoint:SiteId) gets the Graph-backed implementations; this sandbox
+// (and any dev box without one configured) falls back to local disk. IFolderProvisioner is also
+// consumed by the Functions host (see its own Program.cs) — IDocumentStorage is Api-only, since
+// only this host has the deliverable upload/download endpoints.
+if (string.IsNullOrWhiteSpace(builder.Configuration["SharePoint:SiteId"]))
+{
+    builder.Services.AddSingleton<IFolderProvisioner>(sp => sp.GetRequiredService<LocalDiskFolderProvisioner>());
+    builder.Services.AddSingleton<IDocumentStorage>(sp => sp.GetRequiredService<LocalDiskDocumentStorage>());
+}
+else
+{
+    builder.Services.AddSingleton<IFolderProvisioner>(sp => sp.GetRequiredService<GraphFolderProvisioner>());
+    builder.Services.AddSingleton<IDocumentStorage>(sp => sp.GetRequiredService<GraphDocumentStorage>());
 }
 
 // Same "gracefully degrade for local dev" shape as the DB provider swap above: a
@@ -127,7 +180,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-if (useInMemoryForLocalDemo)
+if (useInMemoryForLocalDemo || seedOnStartup)
 {
     using var seedScope = app.Services.CreateScope();
     LocalDemoSeeder.Seed(seedScope.ServiceProvider.GetRequiredService<LaunchPadDbContext>());

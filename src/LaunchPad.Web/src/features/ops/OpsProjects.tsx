@@ -13,9 +13,10 @@ import {
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
-import { SearchRegular } from '@fluentui/react-icons';
+import { SearchRegular, FolderRegular } from '@fluentui/react-icons';
 import { getProjectsByCohort } from '../../api/projects';
 import { PageHeader } from '../../components/PageHeader';
+import { projectStatusLabel } from '../../utils/statusLabels';
 
 // Demo-only: same single-cohort simplification used by TalentPipeline/MyProjects
 // until real cohort selection exists.
@@ -120,7 +121,7 @@ export function OpsProjects() {
           <Card key={project.projectId} className={styles.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <Title3>{project.name}</Title3>
-              <Badge appearance="tint" color={project.status === 'Open' ? 'success' : 'informative'}>{project.status}</Badge>
+              <Badge appearance="tint" color={project.status === 'Open' ? 'success' : 'informative'}>{projectStatusLabel(project.status)}</Badge>
             </div>
             <Caption1>{project.sponsorName}</Caption1>
             {project.description && <Body1>{project.description}</Body1>}
@@ -132,6 +133,15 @@ export function OpsProjects() {
             <Button appearance="primary" onClick={() => navigate(`/ops/projects/${project.projectId}`)}>
               Open project
             </Button>
+            {project.sharePointFolderWebUrl && (
+              <Button
+                appearance="secondary"
+                icon={<FolderRegular />}
+                onClick={() => window.open(project.sharePointFolderWebUrl!, '_blank', 'noopener')}
+              >
+                View in SharePoint
+              </Button>
+            )}
           </Card>
         ))}
       </div>

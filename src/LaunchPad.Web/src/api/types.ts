@@ -3,6 +3,8 @@
 // can't drift from the backend — see launchpad-build-guide.md §7.1.
 
 export type Availability = 'PartTime' | 'FullTime';
+export type CandidateStatus = 'InProgress' | 'Hire' | 'TalentPlus' | 'NoHire';
+export type SuggestedHireOutcome = 'NoHire' | 'Hire' | 'TalentPlus';
 
 export interface CandidateDto {
   candidateId: number;
@@ -18,10 +20,20 @@ export interface CandidateDto {
   degree: string | null;
   gpa: number | null;
   skills: string[];
+  status: CandidateStatus;
   outcome: string;
   averageScore?: number | null;
   hasPerformanceRisk?: boolean | null;
   hasEngagementRisk?: boolean | null;
+  /** A recommendation, not a decision — see the "Set outcome" action on TalentPipeline. */
+  suggestedHireOutcome?: SuggestedHireOutcome | null;
+  /** Null until folder provisioning has run — see "View in SharePoint" links. */
+  sharePointFolderWebUrl: string | null;
+}
+
+export interface UpdateCandidateStatusRequest {
+  status: CandidateStatus;
+  reason: string | null;
 }
 
 export interface MeResponse {
@@ -96,8 +108,15 @@ export interface ProjectDto {
   status: ProjectStatus;
   rejectionReason: string | null;
   sponsorTeamsLink: string;
+  maxCandidates: number;
+  /** Count of assignments in {SponsorApproved, OpsApproved, Active} — the floor when editing maxCandidates. */
+  committedCandidateCount: number;
+  /** maxCandidates minus assignments in {Proposed, SponsorApproved, OpsApproved, Active} — derived, never stored. */
+  spotsRemaining: number;
   myInterestRating: number | null;
   requiredSkills: ProjectSkillDto[];
+  /** Null until folder provisioning has run — see "View in SharePoint" links. */
+  sharePointFolderWebUrl: string | null;
 }
 
 export interface RateInterestRequest {
@@ -115,6 +134,7 @@ export interface CreateProjectRequest {
   availabilityNeeded: Availability;
   startDate: string | null;
   endDate: string | null;
+  maxCandidates: number;
   requiredSkillNames: string[];
   preferredSkillNames: string[];
 }
@@ -169,17 +189,22 @@ export interface UpdateTodoStatusRequest {
   status: TodoStatus;
 }
 
+export interface CreateTodoRequest {
+  title: string;
+  priority: TodoPriority;
+  dueDate: string | null;
+}
+
 export interface DeliverableDto {
   deliverableId: number;
   title: string;
   fileName: string;
   status: DeliverableStatus;
   submittedUtc: string;
-}
-
-export interface CreateDeliverableRequest {
-  title: string;
-  fileName: string;
+  projectTodoId: number | null;
+  projectTodoTitle: string | null;
+  /** Whether a file actually made it to SharePoint — gates the download button. */
+  hasFile: boolean;
 }
 
 /** Never carries a numeric or star rating — see CLAUDE.md's "hidden ratings" control. */
@@ -240,12 +265,18 @@ export interface CohortDto {
   status: CohortStatus;
   candidateCount: number;
   projectCount: number;
+  /** Null until folder provisioning has run — see "View in SharePoint" links. */
+  sharePointFolderWebUrl: string | null;
 }
 
 export interface CreateCohortRequest {
   name: string;
   startDate: string;
   endDate: string;
+}
+
+export interface UpdateCohortStatusRequest {
+  status: CohortStatus;
 }
 
 export interface PendingAssignmentDto {
@@ -260,8 +291,10 @@ export interface PendingAssignmentDto {
   matchRationale: string | null;
 }
 
+/** Matching now runs async (Service Bus + a Function, or the local-dev inline fallback) —
+ * Run publishes the job and returns immediately, so there's no synchronous proposed count. */
 export interface RunMatchingResult {
-  proposedCount: number;
+  queued: boolean;
 }
 
 export interface MatchFunnelDto {
@@ -336,6 +369,27 @@ export interface SponsorCandidateDto {
   projectName: string;
   status: AssignmentStatus;
   startDate: string | null;
+  /** The candidate's own folder — null until folder provisioning has run. */
+  sharePointFolderWebUrl: string | null;
+}
+
+/** A sponsor's eligible-candidate browsing view for one project. Never carries a hidden
+ * performance score/risk flag — the backend DTO structurally can't, see CLAUDE.md. */
+export interface SponsorCandidateMatchDto {
+  candidateId: number;
+  displayName: string;
+  location: string | null;
+  availability: Availability;
+  graduationDate: string | null;
+  bio: string | null;
+  school: string | null;
+  degree: string | null;
+  gpa: number | null;
+  skills: string[];
+  score: number;
+  rationale: string;
+  interestRating: number | null;
+  hasPendingAssignmentElsewhere: boolean;
 }
 
 export interface NotificationDto {

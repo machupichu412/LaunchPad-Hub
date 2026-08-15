@@ -75,4 +75,19 @@ public class CandidatesControllerRedactionTests : IClassFixture<CustomWebApplica
         dto!.AverageScore.Should().NotBeNull();
         dto.HasPerformanceRisk.Should().BeTrue();
     }
+
+    [Theory]
+    [InlineData(Roles.Sponsor)]
+    [InlineData(Roles.HiringManager)]
+    public async Task Get_OmitsSuggestedHireOutcome_ForUnauthorizedRoles(string role)
+    {
+        var candidateId = await SeedCandidateAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, role);
+
+        var json = await client.GetStringAsync($"/api/candidates/{candidateId}");
+
+        json.Should().NotContain("suggestedHireOutcome");
+    }
 }

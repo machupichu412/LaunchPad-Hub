@@ -10,31 +10,31 @@ public sealed class MatchingEngine : IMatchingEngine
         var scored = candidates
             .Where(c => c.Availability == project.AvailabilityNeeded)
             .Select(c => Score(project, c, requiredSkillIds, preferredSkillIds))
-            .Where(s => s is not null)
-            .OrderByDescending(s => s!.Result.Score)
-            .ThenByDescending(s => s!.PerformanceForTieBreak)
-            .ThenByDescending(s => s!.GraduationForTieBreak)
+            .OrderByDescending(s => s.Result.Score)
+            .ThenByDescending(s => s.PerformanceForTieBreak)
+            .ThenByDescending(s => s.GraduationForTieBreak)
             .Take(topN)
-            .Select(s => s!.Result)
+            .Select(s => s.Result)
             .ToList();
 
         return scored;
     }
 
-    private static ScoredCandidate? Score(
+    private static ScoredCandidate Score(
         MatchProject project, MatchCandidate c, IReadOnlySet<int> requiredSkillIds, IReadOnlySet<int> preferredSkillIds)
     {
         var candidateSkillIds = c.SkillIds.ToHashSet();
         var requiredMatchedCount = requiredSkillIds.Count(candidateSkillIds.Contains);
         var preferredMatchedCount = preferredSkillIds.Count(candidateSkillIds.Contains);
 
-        // Eligibility gate: ALL required skills must be present, not just one — a partial
-        // match on required skills isn't eligible at all (Matching Logic Doc: "Having
-        // 100% of required skills allows eligibility... Pass or fail").
-        if (requiredSkillIds.Count > 0 && requiredMatchedCount < requiredSkillIds.Count)
-        {
-            return null;
-        }
+        // Required skills are no longer a hard eligibility gate — a candidate missing some
+        // (or all) required skills still gets ranked, just scored heavily against it, since
+        // required-skill coverage carries roughly 3x the weight of preferred below. Same
+        // squared-ratio shape as preferred skills: rewards near-complete coverage more than
+        // a linear scale would. No required skills requested = full credit.
+        var requiredSkillScore = requiredSkillIds.Count == 0
+            ? 1m
+            : (decimal)Math.Pow((double)requiredMatchedCount / requiredSkillIds.Count, 2);
 
         // Squared ratio per the doc — rewards near-complete preferred-skill coverage more
         // than a linear scale would. No preferred skills requested = full credit, never a
@@ -52,16 +52,22 @@ public sealed class MatchingEngine : IMatchingEngine
             : project.EndDate.Value <= c.GraduationDate.Value;
         var graduationScore = graduationAligned == false ? 0m : 1m;
 
+        // Text similarity (e.g. TF-IDF cosine between project description and candidate
+        // bio) is a small bonus signal, never a gate — missing/unset contributes 0.
+        var textSimilarityScore = c.TextSimilarityScore ?? 0m;
+
         decimal compositeFraction;
         if (c.PastPerformanceScore is decimal performance)
         {
-            compositeFraction = preferredSkillScore * 0.65m + performance * 0.25m + graduationScore * 0.10m;
+            compositeFraction = requiredSkillScore * 0.45m + preferredSkillScore * 0.15m
+                + performance * 0.25m + graduationScore * 0.10m + textSimilarityScore * 0.05m;
         }
         else
         {
-            // First project — no review history to weigh, so the doc's own override
-            // reweights entirely onto preferred skills + graduation proximity.
-            compositeFraction = preferredSkillScore * 0.95m + graduationScore * 0.05m;
+            // First project — no review history to weigh, so performance's weight is
+            // redistributed onto required/preferred skills, graduation, and text similarity.
+            compositeFraction = requiredSkillScore * 0.65m + preferredSkillScore * 0.20m
+                + graduationScore * 0.05m + textSimilarityScore * 0.10m;
         }
 
         // Interest "feeds in slightly": a small additive nudge, never a gate. Unrated
@@ -75,7 +81,7 @@ public sealed class MatchingEngine : IMatchingEngine
         var rationale = BuildRationale(
             requiredMatchedCount, requiredSkillIds.Count,
             preferredMatchedCount, preferredSkillIds.Count,
-            c.PastPerformanceScore, graduationAligned, ratedInterest);
+            c.PastPerformanceScore, graduationAligned, ratedInterest, textSimilarityScore);
 
         return new ScoredCandidate(
             new MatchResult(c.CandidateId, score, rationale),
@@ -86,7 +92,7 @@ public sealed class MatchingEngine : IMatchingEngine
     private static string BuildRationale(
         int requiredMatchedCount, int requiredCount,
         int preferredMatchedCount, int preferredCount,
-        decimal? pastPerformanceScore, bool? graduationAligned, byte? interestRating)
+        decimal? pastPerformanceScore, bool? graduationAligned, byte? interestRating, decimal textSimilarityScore)
     {
         var parts = new List<string>
         {
@@ -106,6 +112,11 @@ public sealed class MatchingEngine : IMatchingEngine
         if (interestRating is byte rating)
         {
             parts.Add($"candidate rated their interest {rating}/5");
+        }
+
+        if (textSimilarityScore > 0m)
+        {
+            parts.Add($"resume/description text similarity {Math.Round(textSimilarityScore * 100m)}%");
         }
 
         return string.Join("; ", parts) + ".";

@@ -1,5 +1,11 @@
 import { authedFetch } from './authedFetch';
-import type { CandidateDashboardDto, CandidateDto, CreateCandidateProfileRequest, UpdateCandidateProfileRequest } from './types';
+import type {
+  CandidateDashboardDto,
+  CandidateDto,
+  CreateCandidateProfileRequest,
+  UpdateCandidateProfileRequest,
+  UpdateCandidateStatusRequest,
+} from './types';
 
 export async function getCandidate(candidateId: number): Promise<CandidateDto> {
   const response = await authedFetch(`/api/candidates/${candidateId}`);
@@ -49,6 +55,15 @@ export async function getMyCandidateDashboard(): Promise<CandidateDashboardDto> 
   const response = await authedFetch('/api/candidates/me/dashboard');
   if (!response.ok) throw new Error(`Failed to load your dashboard: ${response.status}`);
   return response.json() as Promise<CandidateDashboardDto>;
+}
+
+export async function updateCandidateStatus(candidateId: number, request: UpdateCandidateStatusRequest): Promise<CandidateDto> {
+  const response = await authedFetch(`/api/candidates/${candidateId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) throw new Error(`Failed to update candidate status: ${response.status}`);
+  return response.json() as Promise<CandidateDto>;
 }
 
 /** null when the candidate has no photo set (server returns 404) — not an error. */
