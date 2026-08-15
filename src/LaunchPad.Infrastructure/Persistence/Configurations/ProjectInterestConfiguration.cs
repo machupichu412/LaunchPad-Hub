@@ -12,9 +12,13 @@ public class ProjectInterestConfiguration : IEntityTypeConfiguration<ProjectInte
         builder.HasKey(pi => pi.ProjectInterestId);
         builder.Property(pi => pi.RowVersion).IsRowVersion();
 
+        // Restrict, not the default Cascade — same multiple-cascade-paths conflict as
+        // AssignmentConfiguration's Project relationship (Cohort cascades to both
+        // Candidate and Project, and Candidate already cascades here).
         builder.HasOne(pi => pi.Project)
             .WithMany(p => p.Interests)
-            .HasForeignKey(pi => pi.ProjectId);
+            .HasForeignKey(pi => pi.ProjectId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(pi => pi.Candidate)
             .WithMany()

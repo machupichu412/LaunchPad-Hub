@@ -27,13 +27,18 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
 
   const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 
+  // A FormData body (multipart deliverable uploads, see api/assignments.ts) must never get
+  // an explicit Content-Type — the browser sets its own boundary-bearing multipart value,
+  // and pre-setting application/json here would strip that boundary and break the upload.
+  const isFormData = init.body instanceof FormData;
+
   const response = await fetch(`${baseUrl}${input}`, {
     ...init,
     headers: {
       // Defaults first so a caller-supplied Content-Type (e.g. the raw
       // image/jpeg body avatar uploads send, see api/avatar.ts) overrides it —
       // only Authorization is never overridable by a call site.
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...init.headers,
       Authorization: `Bearer ${accessToken}`,
     },

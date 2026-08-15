@@ -6,6 +6,7 @@ using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
 using LaunchPad.Application.Notifications;
 using LaunchPad.Application.Projects;
+using LaunchPad.Application.SharePoint;
 using LaunchPad.Application.Skills;
 using LaunchPad.Application.Sponsors;
 using LaunchPad.Domain.Entities;
@@ -35,10 +36,13 @@ public class ProjectsController : ControllerBase
     private readonly INotificationPublisher _notifications;
     private readonly IAuditLog _auditLog;
     private readonly IConfiguration _configuration;
+    private readonly IMatchingEngine _matchingEngine;
+    private readonly ITextSimilarityScorer _textSimilarityScorer;
     private readonly IValidator<CreateProjectRequest> _createValidator;
     private readonly IValidator<UpdateProjectRequest> _updateValidator;
     private readonly IValidator<RejectProjectRequest> _rejectValidator;
     private readonly IValidator<RateInterestRequest> _rateInterestValidator;
+    private readonly IFolderProvisioningJobPublisher _folderProvisioning;
 
     public ProjectsController(
         IProjectRepository projects,
@@ -53,10 +57,13 @@ public class ProjectsController : ControllerBase
         INotificationPublisher notifications,
         IAuditLog auditLog,
         IConfiguration configuration,
+        IMatchingEngine matchingEngine,
+        ITextSimilarityScorer textSimilarityScorer,
         IValidator<CreateProjectRequest> createValidator,
         IValidator<UpdateProjectRequest> updateValidator,
         IValidator<RejectProjectRequest> rejectValidator,
-        IValidator<RateInterestRequest> rateInterestValidator)
+        IValidator<RateInterestRequest> rateInterestValidator,
+        IFolderProvisioningJobPublisher folderProvisioning)
     {
         _projects = projects;
         _sponsors = sponsors;
@@ -70,10 +77,13 @@ public class ProjectsController : ControllerBase
         _notifications = notifications;
         _auditLog = auditLog;
         _configuration = configuration;
+        _matchingEngine = matchingEngine;
+        _textSimilarityScorer = textSimilarityScorer;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
         _rejectValidator = rejectValidator;
         _rateInterestValidator = rateInterestValidator;
+        _folderProvisioning = folderProvisioning;
     }
 
     [HttpGet("{id:int}")]
@@ -218,6 +228,7 @@ public class ProjectsController : ControllerBase
             AvailabilityNeeded = request.AvailabilityNeeded,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
+            MaxCandidates = request.MaxCandidates,
             ApprovalStatus = Domain.Enums.ProjectApprovalStatus.Draft,
             Status = Domain.Enums.ProjectStatus.Open,
         };
@@ -244,11 +255,18 @@ public class ProjectsController : ControllerBase
         var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
         if (!auth.Succeeded) return Forbid();
 
+        var committedCount = await _assignments.GetCommittedCountForProjectAsync(id, ct);
+        if (request.MaxCandidates < committedCount)
+        {
+            return Conflict($"MaxCandidates can't be lower than the {committedCount} candidate(s) already committed to this project.");
+        }
+
         project.Name = request.Name;
         project.Description = request.Description;
         project.AvailabilityNeeded = request.AvailabilityNeeded;
         project.StartDate = request.StartDate;
         project.EndDate = request.EndDate;
+        project.MaxCandidates = request.MaxCandidates;
         project.Skills = await ResolveSkillsAsync(request.RequiredSkillNames, request.PreferredSkillNames, ct);
 
         await _projects.SaveChangesAsync(ct);
@@ -300,8 +318,10 @@ public class ProjectsController : ControllerBase
         return Ok(ToDto(project));
     }
 
-    /// <summary>Ops approves a PendingOps project: -> Approved. Now visible to candidates
-    /// via GetOpenProjects/GetOpenDetail.</summary>
+    /// <summary>Ops approves a project: -> Approved. Now visible to candidates via
+    /// GetOpenProjects/GetOpenDetail. Also usable to reverse an earlier Reject decision
+    /// (Rejected -> Approved) — Ops needs to be able to revisit a past call, not just
+    /// make the first one; only Draft (not yet submitted by the sponsor) is off limits.</summary>
     [HttpPost("{id:int}/approve")]
     [Authorize(Policy = Policies.ApproveProject)]
     public async Task<ActionResult<ProjectDto>> Approve(int id, CancellationToken ct)
@@ -309,26 +329,36 @@ public class ProjectsController : ControllerBase
         var project = await _projects.GetWithSponsorAsync(id, ct);
         if (project is null) return NotFound();
 
-        if (project.ApprovalStatus != Domain.Enums.ProjectApprovalStatus.PendingOps)
+        if (project.ApprovalStatus == Domain.Enums.ProjectApprovalStatus.Draft)
         {
-            return BadRequest("Only a PendingOps project can be approved.");
+            return BadRequest("A Draft project hasn't been submitted for review yet.");
         }
 
+        var wasAlreadyApproved = project.ApprovalStatus == Domain.Enums.ProjectApprovalStatus.Approved;
         project.ApprovalStatus = Domain.Enums.ProjectApprovalStatus.Approved;
+        project.RejectionReason = null;
 
         await _projects.SaveChangesAsync(ct);
         await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Project", project.ProjectId.ToString(), "Approve", ct: ct);
 
-        await _notifications.PublishAsync(new NotificationMessage(
-            project.Sponsor.AppUser.Upn,
-            $"Project approved: {project.Name}",
-            $"Your project \"{project.Name}\" has been approved and is now visible to candidates on the marketplace."), ct);
+        if (!wasAlreadyApproved)
+        {
+            await _notifications.PublishAsync(new NotificationMessage(
+                project.Sponsor.AppUser.Upn,
+                $"Project approved: {project.Name}",
+                $"Your project \"{project.Name}\" has been approved and is now visible to candidates on the marketplace."), ct);
+
+            await _folderProvisioning.PublishAsync(
+                new FolderProvisioningJob(FolderProvisioningTargetType.Project, project.ProjectId), ct);
+        }
 
         return Ok(ToDto(project));
     }
 
-    /// <summary>Ops rejects a PendingOps project: -> Rejected, with a reason the sponsor
-    /// can act on. The sponsor can edit and resubmit (Submit accepts Rejected too).</summary>
+    /// <summary>Ops rejects a project: -> Rejected, with a reason the sponsor can act on.
+    /// The sponsor can edit and resubmit (Submit accepts Rejected too). Also usable to
+    /// reverse an earlier Approve decision (Approved -> Rejected) — see Approve's doc
+    /// comment for why revisiting a past decision is allowed.</summary>
     [HttpPost("{id:int}/reject")]
     [Authorize(Policy = Policies.ApproveProject)]
     public async Task<ActionResult<ProjectDto>> Reject(int id, RejectProjectRequest request, CancellationToken ct)
@@ -339,22 +369,26 @@ public class ProjectsController : ControllerBase
         var project = await _projects.GetWithSponsorAsync(id, ct);
         if (project is null) return NotFound();
 
-        if (project.ApprovalStatus != Domain.Enums.ProjectApprovalStatus.PendingOps)
+        if (project.ApprovalStatus == Domain.Enums.ProjectApprovalStatus.Draft)
         {
-            return BadRequest("Only a PendingOps project can be rejected.");
+            return BadRequest("A Draft project hasn't been submitted for review yet.");
         }
 
+        var wasAlreadyRejected = project.ApprovalStatus == Domain.Enums.ProjectApprovalStatus.Rejected;
         project.ApprovalStatus = Domain.Enums.ProjectApprovalStatus.Rejected;
         project.RejectionReason = request.Reason;
 
         await _projects.SaveChangesAsync(ct);
         await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Project", project.ProjectId.ToString(), "Reject", reason: request.Reason, ct: ct);
 
-        await _notifications.PublishAsync(new NotificationMessage(
-            project.Sponsor.AppUser.Upn,
-            $"Project not approved: {project.Name}",
-            $"Your project \"{project.Name}\" was not approved. Reason: {request.Reason}. " +
-            "You can edit and resubmit it for another review."), ct);
+        if (!wasAlreadyRejected)
+        {
+            await _notifications.PublishAsync(new NotificationMessage(
+                project.Sponsor.AppUser.Upn,
+                $"Project not approved: {project.Name}",
+                $"Your project \"{project.Name}\" was not approved. Reason: {request.Reason}. " +
+                "You can edit and resubmit it for another review."), ct);
+        }
 
         return Ok(ToDto(project));
     }
@@ -375,8 +409,243 @@ public class ProjectsController : ControllerBase
         return Ok(matches.Select(ToMatchDto).ToArray());
     }
 
-    /// <summary>Sponsor picks one of the proposed candidates: Proposed -> SponsorApproved. The other
-    /// candidates proposed for this same project are auto-withdrawn — one project, one pick.</summary>
+    /// <summary>Sponsor's eligible-candidate browsing gallery for one project — every candidate
+    /// in the cohort without a live assignment elsewhere, ranked with the same engine cohort-wide
+    /// matching uses. Only available once the project is Approved — sponsors can't browse (let
+    /// alone request) before Program Ops signs off.</summary>
+    [HttpGet("{id:int}/eligible-candidates")]
+    [Authorize(Policy = Policies.ViewTalentPipeline)]
+    public async Task<ActionResult<IReadOnlyList<SponsorCandidateMatchDto>>> GetEligibleCandidates(int id, CancellationToken ct)
+    {
+        var project = await _projects.GetWithSponsorAsync(id, ct);
+        if (project is null) return NotFound();
+
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        if (!auth.Succeeded) return Forbid();
+
+        if (project.ApprovalStatus != ProjectApprovalStatus.Approved)
+        {
+            return BadRequest("Candidates can only be browsed once this project is approved.");
+        }
+
+        var eligibleCandidates = await _assignments.GetEligibleCandidatesForMatchingAsync(project.CohortId, ct);
+        var performanceScores = await _assignments.GetAveragePerformanceScoresByCohortAsync(project.CohortId, ct);
+        var interestsForThisProject = (await _projectInterests.GetByCohortAsync(project.CohortId, ct))
+            .Where(i => i.ProjectId == id)
+            .ToDictionary(i => i.CandidateId, i => i.Rating);
+        var pendingElsewhere = await _assignments.GetCandidateIdsWithPendingAssignmentsElsewhereAsync(project.CohortId, id, ct);
+
+        var corpus = eligibleCandidates
+            .Select(c => c.Bio)
+            .Append(project.Description)
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .Select(text => text!)
+            .ToArray();
+        var textIndex = _textSimilarityScorer.Prepare(corpus);
+
+        var matchProject = new MatchProject(
+            project.ProjectId,
+            project.AvailabilityNeeded,
+            project.Skills.Select(s => (s.SkillId, s.IsRequired)).ToArray(),
+            project.EndDate);
+
+        var matchCandidates = eligibleCandidates
+            .Select(c => new MatchCandidate(
+                c.CandidateId,
+                c.Availability,
+                c.Skills.Select(cs => cs.SkillId).ToArray(),
+                c.GraduationDate,
+                performanceScores.TryGetValue(c.CandidateId, out var performance) ? performance : null,
+                interestsForThisProject.TryGetValue(c.CandidateId, out var rating)
+                    ? new Dictionary<int, byte> { [id] = rating }
+                    : null,
+                textIndex.CosineSimilarity(c.Bio, project.Description)))
+            .ToArray();
+
+        // Rank the whole eligible pool, not just a top-3 shortlist — the frontend's condensed
+        // gallery slices this client-side, and the full-screen gallery shows everyone.
+        var ranked = _matchingEngine.RankTopMatches(matchProject, matchCandidates, topN: matchCandidates.Length);
+        var candidatesById = eligibleCandidates.ToDictionary(c => c.CandidateId);
+
+        var dtos = ranked.Select(r =>
+        {
+            var c = candidatesById[r.CandidateId];
+            return new SponsorCandidateMatchDto
+            {
+                CandidateId = c.CandidateId,
+                DisplayName = c.AppUser.DisplayName,
+                Location = c.Location,
+                Availability = c.Availability,
+                GraduationDate = c.GraduationDate,
+                Bio = c.Bio,
+                School = c.School,
+                Degree = c.Degree,
+                Gpa = c.Gpa,
+                Skills = c.Skills.Select(s => s.Skill.Name).ToArray(),
+                Score = r.Score,
+                Rationale = r.Rationale,
+                InterestRating = interestsForThisProject.TryGetValue(c.CandidateId, out var rating) ? rating : null,
+                HasPendingAssignmentElsewhere = pendingElsewhere.Contains(c.CandidateId),
+            };
+        }).ToArray();
+
+        return Ok(dtos);
+    }
+
+    /// <summary>Sponsor directly requests a specific candidate from the eligible-candidates
+    /// gallery — the sponsor's own click is their approval, so this lands straight at
+    /// SponsorApproved (the same downstream Ops-approval queue as an engine-proposed match the
+    /// sponsor recommended). Only allowed once the project is Approved; the match score is
+    /// recomputed server-side rather than trusting anything the client sent.</summary>
+    [HttpPost("{id:int}/candidates/{candidateId:int}/request")]
+    [Authorize(Roles = Roles.Sponsor)]
+    public async Task<ActionResult<ProjectMatchDto>> RequestAssignment(int id, int candidateId, CancellationToken ct)
+    {
+        var project = await _projects.GetWithSponsorAsync(id, ct);
+        if (project is null) return NotFound();
+
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        if (!auth.Succeeded) return Forbid();
+
+        if (project.ApprovalStatus != ProjectApprovalStatus.Approved)
+        {
+            return BadRequest("Candidates can only be requested once this project is approved.");
+        }
+
+        var eligibleCandidates = await _assignments.GetEligibleCandidatesForMatchingAsync(project.CohortId, ct);
+        var candidate = eligibleCandidates.FirstOrDefault(c => c.CandidateId == candidateId);
+        if (candidate is null)
+        {
+            return Conflict("This candidate is no longer eligible — they may have just been committed to another project.");
+        }
+
+        var performanceScores = await _assignments.GetAveragePerformanceScoresByCohortAsync(project.CohortId, ct);
+        var interestsForThisProject = (await _projectInterests.GetByCohortAsync(project.CohortId, ct))
+            .Where(i => i.ProjectId == id)
+            .ToDictionary(i => i.CandidateId, i => i.Rating);
+
+        var corpus = new[] { candidate.Bio, project.Description }
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .Select(text => text!)
+            .ToArray();
+        var textIndex = _textSimilarityScorer.Prepare(corpus);
+
+        var matchProject = new MatchProject(
+            project.ProjectId,
+            project.AvailabilityNeeded,
+            project.Skills.Select(s => (s.SkillId, s.IsRequired)).ToArray(),
+            project.EndDate);
+
+        var matchCandidate = new MatchCandidate(
+            candidate.CandidateId,
+            candidate.Availability,
+            candidate.Skills.Select(cs => cs.SkillId).ToArray(),
+            candidate.GraduationDate,
+            performanceScores.TryGetValue(candidate.CandidateId, out var performance) ? performance : null,
+            interestsForThisProject.TryGetValue(candidate.CandidateId, out var rating)
+                ? new Dictionary<int, byte> { [id] = rating }
+                : null,
+            textIndex.CosineSimilarity(candidate.Bio, project.Description));
+
+        // Availability mismatch is still a hard gate in the engine — an empty result means
+        // this candidate genuinely can't work on this project.
+        var scoreResult = _matchingEngine.RankTopMatches(matchProject, new[] { matchCandidate }, topN: 1).FirstOrDefault();
+        if (scoreResult is null)
+        {
+            return BadRequest("This candidate's availability doesn't match what the project needs.");
+        }
+
+        var sponsorAppUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        if (sponsorAppUserId is null) return Forbid();
+
+        var newAssignment = new Assignment
+        {
+            ProjectId = id,
+            CandidateId = candidateId,
+            MatchScore = scoreResult.Score,
+            MatchRationale = scoreResult.Rationale,
+            SponsorApprovedBy = sponsorAppUserId,
+        };
+
+        var result = await _assignments.TryCreateSponsorDirectRequestAsync(newAssignment, ct);
+        if (result.Outcome == SponsorDirectRequestOutcome.CandidateNoLongerEligible)
+        {
+            return Conflict("This candidate is no longer eligible — they may have just been committed to another project.");
+        }
+        if (result.Outcome == SponsorDirectRequestOutcome.ProjectFull)
+        {
+            return Conflict("This project's candidate spots are already full.");
+        }
+
+        await _auditLog.RecordAsync(
+            _currentUser.EntraObjectId, "Assignment", result.Assignment!.AssignmentId.ToString(), "SponsorDirectRequest", ct: ct);
+
+        return Ok(new ProjectMatchDto
+        {
+            AssignmentId = result.Assignment.AssignmentId,
+            CandidateId = candidate.CandidateId,
+            CandidateName = candidate.AppUser.DisplayName,
+            MatchScore = result.Assignment.MatchScore,
+            MatchRationale = result.Assignment.MatchRationale,
+        });
+    }
+
+    /// <summary>Every committed assignment (SponsorApproved/OpsApproved/Active) for a project —
+    /// the "Assigned candidates" section on the project's page.</summary>
+    [HttpGet("{id:int}/assigned-candidates")]
+    [Authorize(Policy = Policies.ViewTalentPipeline)]
+    public async Task<ActionResult<IReadOnlyList<SponsorCandidateDto>>> GetAssignedCandidates(int id, CancellationToken ct)
+    {
+        var project = await _projects.GetWithSponsorAsync(id, ct);
+        if (project is null) return NotFound();
+
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        if (!auth.Succeeded) return Forbid();
+
+        var committed = await _assignments.GetCommittedByProjectAsync(id, ct);
+        return Ok(committed.Select(a => new SponsorCandidateDto
+        {
+            AssignmentId = a.AssignmentId,
+            CandidateId = a.CandidateId,
+            CandidateName = a.Candidate.AppUser.DisplayName,
+            ProjectId = a.ProjectId,
+            ProjectName = project.Name,
+            Status = a.Status,
+            StartDate = a.StartDate,
+        }).ToArray());
+    }
+
+    /// <summary>"Deletes" a project: sets Status -> Cancelled (no true SQL delete — the
+    /// Assignment->Project FK is Restrict specifically to prevent cascade errors, see
+    /// AssignmentConfiguration) and bulk-withdraws its non-terminal assignments, freeing those
+    /// candidates back into the open pool immediately (Withdrawn isn't a live assignment, so no
+    /// extra exclusion logic is needed — see GetEligibleCandidatesForMatchingAsync).</summary>
+    [HttpPost("{id:int}/cancel")]
+    [Authorize(Policy = Policies.ViewTalentPipeline)]
+    public async Task<ActionResult<ProjectDto>> Cancel(int id, RejectProjectRequest request, CancellationToken ct)
+    {
+        var validation = await _rejectValidator.ValidateAsync(request, ct);
+        if (!validation.IsValid) return ValidationProblem(AddErrors(validation));
+
+        var project = await _projects.GetWithSponsorAsync(id, ct);
+        if (project is null) return NotFound();
+
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        if (!auth.Succeeded) return Forbid();
+
+        project.Status = Domain.Enums.ProjectStatus.Cancelled;
+        await _assignments.CancelProjectAssignmentsAsync(id, ct);
+        await _projects.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(
+            _currentUser.EntraObjectId, "Project", project.ProjectId.ToString(), "ProjectCancelled", reason: request.Reason, ct: ct);
+
+        return Ok(ToDto(project));
+    }
+
+    /// <summary>Sponsor picks one of the proposed candidates: Proposed -> SponsorApproved. Remaining
+    /// Proposed siblings on this project are only auto-withdrawn once this recommend actually fills
+    /// the project's last spot — a multi-spot project can carry more than one live shortlist
+    /// candidate at once, so an earlier recommend shouldn't foreclose the sponsor's other spots.</summary>
     [HttpPost("{id:int}/matches/{assignmentId:int}/recommend")]
     [Authorize(Roles = Roles.Sponsor)]
     public async Task<ActionResult<ProjectMatchDto>> RecommendMatch(int id, int assignmentId, CancellationToken ct)
@@ -398,10 +667,18 @@ public class ProjectsController : ControllerBase
         assignment.SponsorApprovedUtc = DateTime.UtcNow;
         assignment.SponsorApprovedBy = sponsorAppUserId;
 
-        var siblings = await _assignments.GetProposedByProjectAsync(id, ct);
-        foreach (var sibling in siblings.Where(a => a.AssignmentId != assignmentId))
+        // committedCount reads the DB, which still has this assignment as Proposed (the
+        // status flip above hasn't been saved yet) — so "+1" accounts for this recommend
+        // itself. Other merely-Proposed siblings don't count as committed; they're just
+        // still-live shortlist candidates competing for whatever spots remain.
+        var committedCount = await _assignments.GetCommittedCountForProjectAsync(id, ct);
+        if (assignment.Project.MaxCandidates - (committedCount + 1) <= 0)
         {
-            sibling.Status = AssignmentStatus.Withdrawn;
+            var siblings = await _assignments.GetProposedByProjectAsync(id, ct);
+            foreach (var sibling in siblings.Where(a => a.AssignmentId != assignmentId))
+            {
+                sibling.Status = AssignmentStatus.Withdrawn;
+            }
         }
 
         await _assignments.SaveChangesAsync(ct);
@@ -454,25 +731,37 @@ public class ProjectsController : ControllerBase
         return result;
     }
 
-    private static ProjectDto ToDto(Project project) => new()
+    private static ProjectDto ToDto(Project project)
     {
-        ProjectId = project.ProjectId,
-        CohortId = project.CohortId,
-        SponsorId = project.SponsorId,
-        SponsorName = project.Sponsor.AppUser.DisplayName,
-        Name = project.Name,
-        Description = project.Description,
-        AvailabilityNeeded = project.AvailabilityNeeded,
-        StartDate = project.StartDate,
-        EndDate = project.EndDate,
-        ApprovalStatus = project.ApprovalStatus,
-        Status = project.Status,
-        RejectionReason = project.RejectionReason,
-        SponsorTeamsLink = $"https://teams.microsoft.com/l/chat/0/0?users={Uri.EscapeDataString(project.Sponsor.AppUser.Upn)}",
-        RequiredSkills = project.Skills
-            .Select(s => new ProjectSkillDto { SkillName = s.Skill.Name, Category = s.Skill.SkillCategory.Name, IsRequired = s.IsRequired })
-            .ToArray()
-    };
+        var reservedOrCommittedCount = project.Assignments.Count(a => a.Status is AssignmentStatus.Proposed
+            or AssignmentStatus.SponsorApproved or AssignmentStatus.OpsApproved or AssignmentStatus.Active);
+        var committedCount = project.Assignments.Count(a => a.Status
+            is AssignmentStatus.SponsorApproved or AssignmentStatus.OpsApproved or AssignmentStatus.Active);
+
+        return new()
+        {
+            ProjectId = project.ProjectId,
+            CohortId = project.CohortId,
+            SponsorId = project.SponsorId,
+            SponsorName = project.Sponsor.AppUser.DisplayName,
+            Name = project.Name,
+            Description = project.Description,
+            AvailabilityNeeded = project.AvailabilityNeeded,
+            StartDate = project.StartDate,
+            EndDate = project.EndDate,
+            ApprovalStatus = project.ApprovalStatus,
+            Status = project.Status,
+            RejectionReason = project.RejectionReason,
+            SponsorTeamsLink = $"https://teams.microsoft.com/l/chat/0/0?users={Uri.EscapeDataString(project.Sponsor.AppUser.Upn)}",
+            MaxCandidates = project.MaxCandidates,
+            CommittedCandidateCount = committedCount,
+            SpotsRemaining = Math.Max(0, project.MaxCandidates - reservedOrCommittedCount),
+            RequiredSkills = project.Skills
+                .Select(s => new ProjectSkillDto { SkillName = s.Skill.Name, Category = s.Skill.SkillCategory.Name, IsRequired = s.IsRequired })
+                .ToArray(),
+            SharePointFolderWebUrl = project.SharePointFolderWebUrl,
+        };
+    }
 
     private Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary AddErrors(FluentValidation.Results.ValidationResult result)
     {

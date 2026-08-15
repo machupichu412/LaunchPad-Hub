@@ -21,28 +21,70 @@ public class MatchingEngineTests
     }
 
     [Fact]
-    public void RankTopMatches_ExcludesCandidatesMissingAllRequiredSkills()
+    public void RankTopMatches_MissingAllRequiredSkills_StillRanked_ButScoresMuchLower()
     {
+        // Required skills are a heavily-weighted signal now, not a hard gate — a candidate
+        // missing all of them still appears, just scored far below one who has them.
         var project = new MatchProject(1, Availability.FullTime, new[] { (SkillId: 1, IsRequired: true) });
-        var candidates = new[] { new MatchCandidate(1, Availability.FullTime, new[] { 99 }) };
+        var missingRequired = new MatchCandidate(1, Availability.FullTime, new[] { 99 });
+        var hasRequired = new MatchCandidate(2, Availability.FullTime, new[] { 1 });
 
-        var results = _sut.RankTopMatches(project, candidates);
+        var results = _sut.RankTopMatches(project, new[] { missingRequired, hasRequired });
 
-        results.Should().BeEmpty();
+        results.Should().HaveCount(2);
+        results.First(r => r.CandidateId == 1).Score.Should().BeLessThan(results.First(r => r.CandidateId == 2).Score);
     }
 
     [Fact]
-    public void RankTopMatches_ExcludesCandidatesWithOnlyAPartialRequiredSkillMatch()
+    public void RankTopMatches_PartialRequiredSkillMatch_ScoresBetweenZeroAndFullMatch()
     {
-        // Matching Logic Doc: required skills are pass/fail at 100%, not "at least one" —
-        // this is the fix to the pre-existing engine, which only excluded a candidate
-        // with zero required skills matched.
+        // Squared-ratio scoring: 1 of 2 required matched sits strictly between 0 of 2 and
+        // 2 of 2 — no more pass/fail cliff at 100% required coverage.
         var project = new MatchProject(1, Availability.FullTime, new[] { (1, true), (2, true) });
-        var candidates = new[] { new MatchCandidate(1, Availability.FullTime, new[] { 1 }) }; // has 1 of 2
+        var none = new MatchCandidate(1, Availability.FullTime, Array.Empty<int>());
+        var partial = new MatchCandidate(2, Availability.FullTime, new[] { 1 });
+        var full = new MatchCandidate(3, Availability.FullTime, new[] { 1, 2 });
 
-        var results = _sut.RankTopMatches(project, candidates);
+        var results = _sut.RankTopMatches(project, new[] { none, partial, full });
 
-        results.Should().BeEmpty();
+        var noneScore = results.First(r => r.CandidateId == 1).Score;
+        var partialScore = results.First(r => r.CandidateId == 2).Score;
+        var fullScore = results.First(r => r.CandidateId == 3).Score;
+
+        partialScore.Should().BeGreaterThan(noneScore);
+        partialScore.Should().BeLessThan(fullScore);
+    }
+
+    [Fact]
+    public void RankTopMatches_RequiredSkillsWeighDominantlyOverPreferred()
+    {
+        // All-required-no-preferred should still clearly outrank all-preferred-no-required —
+        // required carries roughly 3x preferred's weight in the composite.
+        var project = new MatchProject(1, Availability.FullTime, new[] { (1, true), (2, false) });
+        var allRequired = new MatchCandidate(1, Availability.FullTime, new[] { 1 });
+        var allPreferred = new MatchCandidate(2, Availability.FullTime, new[] { 2 });
+
+        var results = _sut.RankTopMatches(project, new[] { allRequired, allPreferred });
+
+        results.First(r => r.CandidateId == 1).Score.Should().BeGreaterThan(results.First(r => r.CandidateId == 2).Score);
+    }
+
+    [Fact]
+    public void RankTopMatches_TextSimilarityScore_FoldsIntoCompositeAsSmallBonus()
+    {
+        // Identical candidates apart from a precomputed text-similarity score — the one
+        // with a higher score should rank higher, but the effect stays bounded (small weight).
+        var project = new MatchProject(1, Availability.FullTime, new[] { (1, true) });
+        var noSimilarity = new MatchCandidate(1, Availability.FullTime, new[] { 1 }, TextSimilarityScore: null);
+        var highSimilarity = new MatchCandidate(2, Availability.FullTime, new[] { 1 }, TextSimilarityScore: 1.0m);
+
+        var results = _sut.RankTopMatches(project, new[] { noSimilarity, highSimilarity });
+
+        var lowScore = results.First(r => r.CandidateId == 1).Score;
+        var highScore = results.First(r => r.CandidateId == 2).Score;
+
+        highScore.Should().BeGreaterThan(lowScore);
+        (highScore - lowScore).Should().BeLessThan(15m);
     }
 
     [Fact]
@@ -78,15 +120,18 @@ public class MatchingEngineTests
     [Fact]
     public void RankTopMatches_NoPreferredSkillsRequested_GivesFullCreditNotZero()
     {
-        // A project that only lists required skills shouldn't cap every candidate's score
-        // just because it never asked for anything preferred.
-        var project = new MatchProject(1, Availability.FullTime, new[] { (1, true) });
-        var candidates = new[] { new MatchCandidate(1, Availability.FullTime, new[] { 1 }) };
+        // A project that lists zero preferred skills shouldn't score its candidates as if
+        // they're missing every preferred skill — same candidate, same required-skill
+        // match, but one project never asked for anything preferred while the other did
+        // and the candidate lacks it.
+        var projectWithNoPreferred = new MatchProject(1, Availability.FullTime, new[] { (1, true) });
+        var projectRequestingPreferred = new MatchProject(2, Availability.FullTime, new[] { (1, true), (2, false) });
+        var candidate = new MatchCandidate(1, Availability.FullTime, new[] { 1 });
 
-        var results = _sut.RankTopMatches(project, candidates);
+        var noPreferredResult = _sut.RankTopMatches(projectWithNoPreferred, new[] { candidate }).Single();
+        var missingPreferredResult = _sut.RankTopMatches(projectRequestingPreferred, new[] { candidate }).Single();
 
-        results.Should().ContainSingle();
-        results[0].Score.Should().Be(100m);
+        noPreferredResult.Score.Should().BeGreaterThan(missingPreferredResult.Score);
     }
 
     [Fact]

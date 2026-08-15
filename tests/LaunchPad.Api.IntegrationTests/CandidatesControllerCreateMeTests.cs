@@ -82,6 +82,25 @@ public class CandidatesControllerCreateMeTests : IClassFixture<CustomWebApplicat
         fetched!.CandidateId.Should().Be(created.CandidateId);
     }
 
+    /// <summary>Same inline-provisioning proof as CohortsControllerTests.Create_AsProgramOps_ProvisionsSharePointFolder,
+    /// extended to the candidate self-onboarding path.</summary>
+    [Fact]
+    public async Task CreateMe_AsNewCandidate_ProvisionsSharePointFolder()
+    {
+        var skillId = await SeedActiveCohortAndSkillAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Candidate);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, Guid.NewGuid().ToString());
+
+        var request = new CreateCandidateProfileRequest { Availability = Availability.PartTime, SkillIds = new[] { skillId } };
+        var response = await client.PostAsJsonAsync("/api/candidates/me", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await response.Content.ReadFromJsonAsync<CandidateDto>(TestJsonOptions.Default);
+        created!.SharePointFolderWebUrl.Should().NotBeNullOrEmpty();
+    }
+
     [Fact]
     public async Task CreateMe_WhenProfileAlreadyExists_ReturnsConflict()
     {

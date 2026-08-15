@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using LaunchPad.Application.Risk;
 using LaunchPad.Domain.Enums;
 
 namespace LaunchPad.Application.Candidates;
@@ -24,7 +25,14 @@ public class CandidateDto
     public string? Degree { get; set; }
     public decimal? Gpa { get; set; }
     public string[] Skills { get; set; } = Array.Empty<string>();
+    public CandidateStatus Status { get; set; }
     public string Outcome { get; set; } = string.Empty;
+
+    /// <summary>"Open in SharePoint" deep link — null until FolderProvisioningRunner sets it
+    /// (or the self-heal path in AssignmentsController.SubmitDeliverable does). Not part of
+    /// the hidden-ratings redaction — every role that can see a candidate at all sees this,
+    /// same as Outcome.</summary>
+    public string? SharePointFolderWebUrl { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public decimal? AverageScore { get; set; }
@@ -34,4 +42,9 @@ public class CandidateDto
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? HasEngagementRisk { get; set; }
+
+    /// <summary>A recommendation, not a decision — see HireOutcomeRule and
+    /// CandidatesController.UpdateStatus, which Ops uses to apply or override it.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SuggestedHireOutcome? SuggestedHireOutcome { get; set; }
 }

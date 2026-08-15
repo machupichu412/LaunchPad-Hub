@@ -13,7 +13,12 @@ public class PendingAssignmentDto
     public string? MatchRationale { get; set; }
 }
 
+/// <summary>Matching now runs async (Service Bus + CohortMatchingFunction, or the
+/// local-dev inline fallback) — Run publishes the job and returns immediately, so there's
+/// no synchronous proposed count to report anymore. Queued is always true on a 202; kept
+/// as a field (rather than an empty body) so the frontend has something to key a "job
+/// queued" toast off of.</summary>
 public class RunMatchingResult
 {
-    public int ProposedCount { get; set; }
+    public bool Queued { get; set; }
 }

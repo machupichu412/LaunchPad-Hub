@@ -8,6 +8,7 @@ public sealed class CreateProjectRequestValidator : AbstractValidator<CreateProj
     {
         RuleFor(r => r.CohortId).GreaterThan(0);
         RuleFor(r => r.Name).NotEmpty().MaximumLength(300);
+        RuleFor(r => r.MaxCandidates).GreaterThanOrEqualTo(1);
         RuleFor(r => r.EndDate)
             .GreaterThanOrEqualTo(r => r.StartDate)
             .When(r => r.StartDate.HasValue && r.EndDate.HasValue)
@@ -20,6 +21,7 @@ public sealed class UpdateProjectRequestValidator : AbstractValidator<UpdateProj
     public UpdateProjectRequestValidator()
     {
         RuleFor(r => r.Name).NotEmpty().MaximumLength(300);
+        RuleFor(r => r.MaxCandidates).GreaterThanOrEqualTo(1);
         RuleFor(r => r.EndDate)
             .GreaterThanOrEqualTo(r => r.StartDate)
             .When(r => r.StartDate.HasValue && r.EndDate.HasValue)

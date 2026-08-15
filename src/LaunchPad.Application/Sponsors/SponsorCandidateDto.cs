@@ -13,4 +13,5 @@ public class SponsorCandidateDto
     public string ProjectName { get; set; } = string.Empty;
     public AssignmentStatus Status { get; set; }
     public DateOnly? StartDate { get; set; }
+    public string? SharePointFolderWebUrl { get; set; }
 }

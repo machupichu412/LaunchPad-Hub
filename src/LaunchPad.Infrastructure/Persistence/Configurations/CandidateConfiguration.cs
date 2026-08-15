@@ -14,6 +14,8 @@ public class CandidateConfiguration : IEntityTypeConfiguration<Candidate>
         builder.Property(c => c.LinkedInUrl).HasMaxLength(500);
         builder.Property(c => c.PortfolioUrl).HasMaxLength(500);
         builder.Property(c => c.ResumeBlobPath).HasMaxLength(500);
+        builder.Property(c => c.SharePointFolderId).HasMaxLength(300);
+        builder.Property(c => c.SharePointFolderWebUrl).HasMaxLength(1000);
         builder.Property(c => c.Gpa).HasPrecision(3, 2);
         builder.Property(c => c.RowVersion).IsRowVersion();
 

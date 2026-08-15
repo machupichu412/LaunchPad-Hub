@@ -2,9 +2,12 @@
 set -euo pipefail
 
 # Runs the local demo: the API against an in-memory, pre-seeded database (no
-# Azure SQL, Service Bus, or Entra ID needed — see LocalDemoSeeder.cs and the
-# "LocalDemo" launch profile in src/LaunchPad.Api/Properties/launchSettings.json)
-# alongside the frontend dev server, both in one terminal. Ctrl+C stops both.
+# Azure SQL needed — see LocalDemoSeeder.cs and the "LocalDemo" launch profile
+# in src/LaunchPad.Api/Properties/launchSettings.json) alongside the frontend
+# dev server, both in one terminal. Ctrl+C stops both. A real Entra ID tenant
+# is still required to sign in — auth isn't emulated by this script, only the
+# database is (see scripts/setup-entra.sh). For a real local SQL Server
+# instead of in-memory, see scripts/run-local-full.sh.
 #
 # Usage: ./scripts/run-local-demo.sh
 
@@ -93,8 +96,10 @@ LaunchPad local demo is running:
   Frontend: http://localhost:${web_port}
   API:      http://localhost:${api_port}/swagger
 
-No real Entra ID sign-in needed — this runs against an in-memory, pre-seeded
-database. Press Ctrl+C to stop both processes.
+This runs against an in-memory, pre-seeded database — no SQL Server needed.
+Signing in still requires a real Entra ID tenant with your account in a
+SG-LaunchPad-* group (see scripts/setup-entra.sh). Press Ctrl+C to stop both
+processes.
 EOF
 
 wait

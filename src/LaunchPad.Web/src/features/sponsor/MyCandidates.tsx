@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Badge, Body1, Button, Card, Caption1, Spinner, makeStyles, tokens } from '@fluentui/react-components';
+import { FolderRegular } from '@fluentui/react-icons';
 import { getMyCandidates } from '../../api/sponsors';
 import { CandidateAvatar } from '../../components/CandidateAvatar';
 import { PageHeader } from '../../components/PageHeader';
@@ -58,12 +59,30 @@ export function MyCandidates() {
               {candidate.status}
             </Badge>
             {candidate.status === 'Active' && (
+              <>
+                <Button
+                  appearance="primary"
+                  style={{ marginTop: tokens.spacingVerticalXS }}
+                  onClick={() => navigate(`/candidates/${candidate.assignmentId}/review`)}
+                >
+                  Submit review
+                </Button>
+                <Button
+                  style={{ marginTop: tokens.spacingVerticalXXS }}
+                  onClick={() => navigate(`/candidates/${candidate.assignmentId}/todos`)}
+                >
+                  Manage to-dos
+                </Button>
+              </>
+            )}
+            {candidate.sharePointFolderWebUrl && (
               <Button
-                appearance="primary"
-                style={{ marginTop: tokens.spacingVerticalXS }}
-                onClick={() => navigate(`/candidates/${candidate.assignmentId}/review`)}
+                appearance="secondary"
+                icon={<FolderRegular />}
+                style={{ marginTop: tokens.spacingVerticalXXS }}
+                onClick={() => window.open(candidate.sharePointFolderWebUrl!, '_blank', 'noopener')}
               >
-                Submit review
+                View in SharePoint
               </Button>
             )}
           </Card>

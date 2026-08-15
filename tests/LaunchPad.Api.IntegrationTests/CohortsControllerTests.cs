@@ -72,6 +72,25 @@ public class CohortsControllerTests : IClassFixture<CustomWebApplicationFactory>
         dto.ProjectCount.Should().Be(0);
     }
 
+    /// <summary>Creating a cohort publishes a FolderProvisioningJob; FakeFolderProvisioningJobPublisher
+    /// runs it inline, so by the time the response comes back the cohort's SharePoint fields are
+    /// already backfilled — proves the publish-trigger wiring end to end without a real Graph call.</summary>
+    [Fact]
+    public async Task Create_AsProgramOps_ProvisionsSharePointFolder()
+    {
+        await SeedProgramAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+
+        var request = new CreateCohortRequest { Name = "Folder Cohort", StartDate = new DateOnly(2026, 6, 1), EndDate = new DateOnly(2026, 9, 1) };
+        var response = await client.PostAsJsonAsync("/api/cohorts", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<CohortDto>(TestJsonOptions.Default);
+        dto!.SharePointFolderWebUrl.Should().NotBeNullOrEmpty();
+    }
+
     [Fact]
     public async Task Create_AsSponsor_IsForbidden()
     {
@@ -101,5 +120,51 @@ public class CohortsControllerTests : IClassFixture<CustomWebApplicationFactory>
         var found = cohorts!.Single(c => c.CohortId == cohortId);
         found.CandidateCount.Should().Be(2);
         found.ProjectCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task UpdateStatus_AsProgramOps_ChangesStatus()
+    {
+        var cohortId = await SeedCohortWithCountsAsync(candidateCount: 0, projectCount: 0);
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+
+        var request = new UpdateCohortStatusRequest { Status = CohortStatus.Completed };
+        var response = await client.PatchAsJsonAsync($"/api/cohorts/{cohortId}/status", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<CohortDto>(TestJsonOptions.Default);
+        dto!.Status.Should().Be(CohortStatus.Completed);
+
+        var getResponse = await client.GetAsync("/api/cohorts");
+        var cohorts = await getResponse.Content.ReadFromJsonAsync<List<CohortDto>>(TestJsonOptions.Default);
+        cohorts!.Single(c => c.CohortId == cohortId).Status.Should().Be(CohortStatus.Completed);
+    }
+
+    [Fact]
+    public async Task UpdateStatus_AsSponsor_IsForbidden()
+    {
+        var cohortId = await SeedCohortWithCountsAsync(candidateCount: 0, projectCount: 0);
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+
+        var request = new UpdateCohortStatusRequest { Status = CohortStatus.Active };
+        var response = await client.PatchAsJsonAsync($"/api/cohorts/{cohortId}/status", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task UpdateStatus_ForUnknownCohort_ReturnsNotFound()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+
+        var request = new UpdateCohortStatusRequest { Status = CohortStatus.Active };
+        var response = await client.PatchAsJsonAsync("/api/cohorts/999999/status", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

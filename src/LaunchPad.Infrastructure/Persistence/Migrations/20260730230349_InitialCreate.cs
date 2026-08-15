@@ -249,7 +249,7 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                         column: x => x.ProjectId,
                         principalTable: "Project",
                         principalColumn: "ProjectId",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -417,8 +417,8 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                 CREATE VIEW dbo.vCandidateRisk AS
                 WITH scores AS (
                     SELECT a.CandidateId,
-                           AVG(CASE WHEN r.Checkpoint = 0 THEN r.OverallScore END) AS MidScore,
-                           AVG(CASE WHEN r.Checkpoint = 1 THEN r.OverallScore END) AS FinalScore,
+                           AVG(CASE WHEN r.[Checkpoint] = 0 THEN r.OverallScore END) AS MidScore,
+                           AVG(CASE WHEN r.[Checkpoint] = 1 THEN r.OverallScore END) AS FinalScore,
                            AVG(r.OverallScore) AS AvgScore
                     FROM dbo.Assignment a
                     JOIN dbo.Review r ON r.AssignmentId = a.AssignmentId AND r.ReviewType = 0

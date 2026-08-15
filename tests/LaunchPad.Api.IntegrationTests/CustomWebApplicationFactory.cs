@@ -1,6 +1,8 @@
 using LaunchPad.Application.Candidates;
+using LaunchPad.Application.Matching;
 using LaunchPad.Application.Notifications;
 using LaunchPad.Application.Reporting;
+using LaunchPad.Application.SharePoint;
 using LaunchPad.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
@@ -46,6 +48,20 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             // namespace — see FakeNotificationPublisher.
             services.RemoveAll<INotificationPublisher>();
             services.AddSingleton<INotificationPublisher, FakeNotificationPublisher>();
+
+            // Runs cohort matching synchronously in-request instead of publishing to a
+            // real Service Bus namespace — see FakeMatchingJobPublisher.
+            services.RemoveAll<IMatchingJobPublisher>();
+            services.AddScoped<IMatchingJobPublisher, FakeMatchingJobPublisher>();
+
+            // Same "run inline, no real external system" shape as matching above — see
+            // FakeFolderProvisioner/FakeDocumentStorage/FakeFolderProvisioningJobPublisher.
+            services.RemoveAll<IFolderProvisioner>();
+            services.AddSingleton<IFolderProvisioner, FakeFolderProvisioner>();
+            services.RemoveAll<IDocumentStorage>();
+            services.AddSingleton<IDocumentStorage, FakeDocumentStorage>();
+            services.RemoveAll<IFolderProvisioningJobPublisher>();
+            services.AddScoped<IFolderProvisioningJobPublisher, FakeFolderProvisioningJobPublisher>();
 
             services.AddAuthentication(TestAuthHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });

@@ -216,6 +216,14 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.Property<string>("School")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("SharePointFolderId")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("SharePointFolderWebUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -299,6 +307,14 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("ProgramId")
                         .HasColumnType("int");
+
+                    b.Property<string>("SharePointFolderId")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("SharePointFolderWebUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");
@@ -413,6 +429,13 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
 
+                    b.Property<int?>("ProjectTodoId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SharePointItemId")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -427,6 +450,8 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.HasKey("DeliverableId");
 
                     b.HasIndex("AssignmentId");
+
+                    b.HasIndex("ProjectTodoId");
 
                     b.ToTable("Deliverable", (string)null);
                 });
@@ -512,6 +537,11 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("EndDate")
                         .HasColumnType("date");
 
+                    b.Property<int>("MaxCandidates")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -525,6 +555,14 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
+
+                    b.Property<string>("SharePointFolderId")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("SharePointFolderWebUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<int>("SponsorId")
                         .HasColumnType("int");
@@ -785,7 +823,7 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.HasOne("LaunchPad.Domain.Entities.Project", "Project")
                         .WithMany("Assignments")
                         .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Candidate");
@@ -899,7 +937,14 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("LaunchPad.Domain.Entities.ProjectTodo", "ProjectTodo")
+                        .WithMany()
+                        .HasForeignKey("ProjectTodoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Assignment");
+
+                    b.Navigation("ProjectTodo");
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.Notification", b =>
@@ -943,7 +988,7 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.HasOne("LaunchPad.Domain.Entities.Project", "Project")
                         .WithMany("Interests")
                         .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Candidate");

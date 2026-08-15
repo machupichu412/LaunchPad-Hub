@@ -39,6 +39,9 @@ public static class AssignmentMappingExtensions
         FileName = deliverable.FileName,
         Status = deliverable.Status,
         SubmittedUtc = deliverable.SubmittedUtc,
+        ProjectTodoId = deliverable.ProjectTodoId,
+        ProjectTodoTitle = deliverable.ProjectTodo?.Title,
+        HasFile = deliverable.SharePointItemId is not null,
     };
 
     // Strengths/GrowthAreas/RecommendConversion only — OverallScore is never mapped here.

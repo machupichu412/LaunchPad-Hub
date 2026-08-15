@@ -20,6 +20,14 @@ public class Candidate : Entity
     public string? Degree { get; set; }
     public decimal? Gpa { get; set; }
 
+    /// <summary>Opaque Graph drive-item ID of this candidate's SharePoint folder
+    /// ({parent}/{Cohort}/Candidates/{Name}) — null until FolderProvisioningRunner sets it
+    /// (or AssignmentsController.SubmitDeliverable's synchronous self-heal path does).</summary>
+    public string? SharePointFolderId { get; set; }
+
+    /// <summary>Human-facing "open in SharePoint" deep link — captured once at provisioning time.</summary>
+    public string? SharePointFolderWebUrl { get; set; }
+
     public AppUser AppUser { get; set; } = null!;
     public Cohort Cohort { get; set; } = null!;
     public ICollection<CandidateSkill> Skills { get; set; } = new List<CandidateSkill>();

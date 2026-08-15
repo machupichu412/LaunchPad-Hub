@@ -1,8 +1,8 @@
 import { authedFetch } from './authedFetch';
 import type {
   CandidateEvaluationDto,
+  CreateTodoRequest,
   DeliverableDto,
-  CreateDeliverableRequest,
   MyAssignmentDto,
   ProjectTodoDto,
   UpdateTodoStatusRequest,
@@ -19,6 +19,15 @@ export async function getAssignmentTodos(assignmentId: number): Promise<ProjectT
   const response = await authedFetch(`/api/assignments/${assignmentId}/todos`);
   if (!response.ok) throw new Error(`Failed to load tasks: ${response.status}`);
   return response.json() as Promise<ProjectTodoDto[]>;
+}
+
+export async function createTodo(assignmentId: number, request: CreateTodoRequest): Promise<ProjectTodoDto> {
+  const response = await authedFetch(`/api/assignments/${assignmentId}/todos`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) throw new Error(`Failed to create task: ${response.status}`);
+  return response.json() as Promise<ProjectTodoDto>;
 }
 
 export async function updateTodoStatus(
@@ -40,16 +49,30 @@ export async function getAssignmentDeliverables(assignmentId: number): Promise<D
   return response.json() as Promise<DeliverableDto[]>;
 }
 
-export async function createDeliverable(
+export async function submitDeliverable(
   assignmentId: number,
-  request: CreateDeliverableRequest,
+  params: { title: string; projectTodoId: number | null; file: File },
 ): Promise<DeliverableDto> {
+  const formData = new FormData();
+  formData.set('title', params.title);
+  if (params.projectTodoId !== null) formData.set('projectTodoId', String(params.projectTodoId));
+  formData.set('file', params.file);
+
+  // No explicit Content-Type here — authedFetch skips its JSON default for a FormData
+  // body so the browser can set its own multipart boundary.
   const response = await authedFetch(`/api/assignments/${assignmentId}/deliverables`, {
     method: 'POST',
-    body: JSON.stringify(request),
+    body: formData,
   });
   if (!response.ok) throw new Error(`Failed to submit deliverable: ${response.status}`);
   return response.json() as Promise<DeliverableDto>;
+}
+
+/** Fetches a deliverable's file content as an authenticated blob — mirrors getCandidateAvatarBlob's shape. */
+export async function downloadDeliverableFile(assignmentId: number, deliverableId: number): Promise<Blob> {
+  const response = await authedFetch(`/api/assignments/${assignmentId}/deliverables/${deliverableId}/file`);
+  if (!response.ok) throw new Error(`Failed to download deliverable: ${response.status}`);
+  return response.blob();
 }
 
 export async function getAssignmentEvaluations(assignmentId: number): Promise<CandidateEvaluationDto[]> {

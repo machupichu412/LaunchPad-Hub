@@ -13,6 +13,7 @@ import {
 import { getMyAssignment } from '../../api/assignments';
 import { getOpenProjects } from '../../api/projects';
 import { PageHeader } from '../../components/PageHeader';
+import { availabilityLabel } from '../../utils/statusLabels';
 
 const useStyles = makeStyles({
   activeCard: {
@@ -96,7 +97,7 @@ export function Assignments() {
               <Title3>{project.name}</Title3>
               {project.description && <Body1>{project.description}</Body1>}
               <Caption1 style={{ display: 'block', marginTop: tokens.spacingVerticalXS }}>
-                {project.availabilityNeeded}
+                {availabilityLabel(project.availabilityNeeded)}
               </Caption1>
               {project.requiredSkills.length > 0 && (
                 <Caption1 style={{ display: 'block' }}>

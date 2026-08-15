@@ -23,7 +23,8 @@ public class MatchingControllerTests : IClassFixture<CustomWebApplicationFactory
     private readonly CustomWebApplicationFactory _factory;
     public MatchingControllerTests(CustomWebApplicationFactory factory) => _factory = factory;
 
-    private async Task<(int CohortId, int ProjectId, Guid SponsorOid, int[] CandidateIds)> SeedMatchingScenarioAsync(int candidateCount = 3)
+    private async Task<(int CohortId, int ProjectId, Guid SponsorOid, int[] CandidateIds)> SeedMatchingScenarioAsync(
+        int candidateCount = 3, int maxCandidates = 3)
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
@@ -40,6 +41,7 @@ public class MatchingControllerTests : IClassFixture<CustomWebApplicationFactory
             Sponsor = sponsor,
             Name = "Test Project",
             AvailabilityNeeded = Availability.PartTime,
+            MaxCandidates = maxCandidates,
             ApprovalStatus = ProjectApprovalStatus.Approved,
             Status = ProjectStatus.Open,
             Skills = new List<ProjectSkill> { new() { Skill = skill, IsRequired = true } },
@@ -62,39 +64,47 @@ public class MatchingControllerTests : IClassFixture<CustomWebApplicationFactory
     }
 
     [Fact]
-    public async Task Run_AsProgramOps_ProposesUpToThreeMatchesPerProject()
+    public async Task Run_AsProgramOps_ProposesUpToMaxCandidatesSpotsPerProject()
     {
-        var (cohortId, projectId, sponsorOid, _) = await SeedMatchingScenarioAsync(candidateCount: 4);
+        var (cohortId, projectId, sponsorOid, _) = await SeedMatchingScenarioAsync(candidateCount: 4, maxCandidates: 3);
 
         var opsClient = _factory.CreateClient();
         opsClient.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
 
         var runResponse = await opsClient.PostAsync($"/api/matching/run?cohortId={cohortId}", content: null);
-        runResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        runResponse.StatusCode.Should().Be(HttpStatusCode.Accepted, "matching now runs async — the job is queued, not run synchronously");
         var runResult = await runResponse.Content.ReadFromJsonAsync<RunMatchingResult>(TestJsonOptions.Default);
-        runResult!.ProposedCount.Should().Be(3, "topN defaults to 3 even though 4 candidates were eligible");
+        runResult!.Queued.Should().BeTrue();
 
         var sponsorClient = _factory.CreateClient();
         sponsorClient.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
         sponsorClient.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
 
+        // The fake publisher runs the job synchronously in-request (see FakeMatchingJobPublisher),
+        // so the proposals already exist by the time this call lands.
         var matches = await (await sponsorClient.GetAsync($"/api/projects/{projectId}/matches")).Content.ReadFromJsonAsync<List<ProjectMatchDto>>(TestJsonOptions.Default);
-        matches.Should().HaveCount(3);
+        matches.Should().HaveCount(3, "MaxCandidates=3 caps proposals even though 4 candidates were eligible");
     }
 
     [Fact]
-    public async Task Run_TwiceInARow_DoesNotDuplicateProposalsForTheSameProject()
+    public async Task Run_TwiceInARow_DoesNotProposeBeyondRemainingSpots()
     {
-        var (cohortId, _, _, _) = await SeedMatchingScenarioAsync();
+        var (cohortId, projectId, sponsorOid, _) = await SeedMatchingScenarioAsync(candidateCount: 3, maxCandidates: 3);
 
-        var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+        var opsClient = _factory.CreateClient();
+        opsClient.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+        await opsClient.PostAsync($"/api/matching/run?cohortId={cohortId}", content: null);
 
-        var first = await (await client.PostAsync($"/api/matching/run?cohortId={cohortId}", content: null)).Content.ReadFromJsonAsync<RunMatchingResult>(TestJsonOptions.Default);
-        first!.ProposedCount.Should().BeGreaterThan(0);
+        var sponsorClient = _factory.CreateClient();
+        sponsorClient.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        sponsorClient.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
+        var afterFirstRun = await (await sponsorClient.GetAsync($"/api/projects/{projectId}/matches")).Content.ReadFromJsonAsync<List<ProjectMatchDto>>(TestJsonOptions.Default);
+        afterFirstRun.Should().HaveCount(3, "all 3 spots got filled by the first run");
 
-        var second = await (await client.PostAsync($"/api/matching/run?cohortId={cohortId}", content: null)).Content.ReadFromJsonAsync<RunMatchingResult>(TestJsonOptions.Default);
-        second!.ProposedCount.Should().Be(0, "the project already has matches awaiting sponsor/ops review");
+        await opsClient.PostAsync($"/api/matching/run?cohortId={cohortId}", content: null);
+
+        var afterSecondRun = await (await sponsorClient.GetAsync($"/api/projects/{projectId}/matches")).Content.ReadFromJsonAsync<List<ProjectMatchDto>>(TestJsonOptions.Default);
+        afterSecondRun.Should().HaveCount(3, "no spots remained, so the second run proposed nothing new");
     }
 
     [Fact]
@@ -131,9 +141,11 @@ public class MatchingControllerTests : IClassFixture<CustomWebApplicationFactory
     }
 
     [Fact]
-    public async Task FullTwoStageFlow_RecommendThenApprove_Succeeds_AndWithdrawsSiblingProposals()
+    public async Task FullTwoStageFlow_RecommendThenApprove_Succeeds_AndWithdrawsSiblingProposalsOnceSpotsAreFull()
     {
-        var (cohortId, projectId, sponsorOid, candidateIds) = await SeedMatchingScenarioAsync(candidateCount: 3);
+        // MaxCandidates=1 — a single-spot project, so recommending one candidate should
+        // immediately foreclose the other two (spotsRemaining hits 0 on this recommend).
+        var (cohortId, projectId, sponsorOid, candidateIds) = await SeedMatchingScenarioAsync(candidateCount: 3, maxCandidates: 1);
 
         var opsClient = _factory.CreateClient();
         opsClient.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
@@ -143,15 +155,14 @@ public class MatchingControllerTests : IClassFixture<CustomWebApplicationFactory
         sponsorClient.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
         sponsorClient.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
         var matches = await (await sponsorClient.GetAsync($"/api/projects/{projectId}/matches")).Content.ReadFromJsonAsync<List<ProjectMatchDto>>(TestJsonOptions.Default);
-        matches.Should().HaveCount(3);
+        matches.Should().HaveCount(1, "MaxCandidates=1 caps the run's proposals to a single spot");
         var picked = matches![0];
 
         var recommendResponse = await sponsorClient.PostAsync($"/api/projects/{projectId}/matches/{picked.AssignmentId}/recommend", content: null);
         recommendResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // The other two proposed candidates for this project are auto-withdrawn.
         var matchesAfterRecommend = await (await sponsorClient.GetAsync($"/api/projects/{projectId}/matches")).Content.ReadFromJsonAsync<List<ProjectMatchDto>>(TestJsonOptions.Default);
-        matchesAfterRecommend.Should().BeEmpty("recommending a winner withdraws the other Proposed candidates on this project");
+        matchesAfterRecommend.Should().BeEmpty("the project's only spot is now spoken for");
 
         // Now it's actionable in Ops's queue.
         var queue = await (await opsClient.GetAsync($"/api/matching/queue?cohortId={cohortId}")).Content.ReadFromJsonAsync<List<PendingAssignmentDto>>(TestJsonOptions.Default);
@@ -165,6 +176,30 @@ public class MatchingControllerTests : IClassFixture<CustomWebApplicationFactory
 
         (await GetAuditEventsAsync("Assignment", picked.AssignmentId)).Should().Contain(e => e.Action == "SponsorRecommend");
         (await GetAuditEventsAsync("Assignment", picked.AssignmentId)).Should().Contain(e => e.Action == "OpsApprove");
+    }
+
+    [Fact]
+    public async Task RecommendMatch_OnAMultiSpotProject_DoesNotWithdrawSiblingsWhileSpotsRemain()
+    {
+        // MaxCandidates=3 with 3 proposed candidates — recommending one still leaves 2
+        // spots open, so the other two Proposed siblings must survive.
+        var (cohortId, projectId, sponsorOid, _) = await SeedMatchingScenarioAsync(candidateCount: 3, maxCandidates: 3);
+
+        var opsClient = _factory.CreateClient();
+        opsClient.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+        await opsClient.PostAsync($"/api/matching/run?cohortId={cohortId}", content: null);
+
+        var sponsorClient = _factory.CreateClient();
+        sponsorClient.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        sponsorClient.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
+        var matches = await (await sponsorClient.GetAsync($"/api/projects/{projectId}/matches")).Content.ReadFromJsonAsync<List<ProjectMatchDto>>(TestJsonOptions.Default);
+        matches.Should().HaveCount(3);
+
+        var recommendResponse = await sponsorClient.PostAsync($"/api/projects/{projectId}/matches/{matches![0].AssignmentId}/recommend", content: null);
+        recommendResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var matchesAfterRecommend = await (await sponsorClient.GetAsync($"/api/projects/{projectId}/matches")).Content.ReadFromJsonAsync<List<ProjectMatchDto>>(TestJsonOptions.Default);
+        matchesAfterRecommend.Should().HaveCount(2, "2 spots remain open, so the other proposed candidates are still live options");
     }
 
     private async Task<IReadOnlyList<AuditEvent>> GetAuditEventsAsync(string entityName, int entityId)
@@ -239,6 +274,38 @@ public class MatchingControllerTests : IClassFixture<CustomWebApplicationFactory
         var response = await client.PostAsync($"/api/matching/{newlySponsorApproved.AssignmentId}/approve", content: null);
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Approve_WhenProjectSpotsAreAlreadyFull_ReturnsConflict()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+
+        var program = new Domain.Entities.Program { Name = "Full Program" };
+        var cohort = new Cohort { Program = program, Name = "Full Cohort", StartDate = new DateOnly(2026, 1, 1), EndDate = new DateOnly(2026, 6, 1), Status = CohortStatus.Active };
+        var sponsor = new Sponsor { AppUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "full-sponsor@example.com", DisplayName = "Full Sponsor" } };
+        var candidate1 = new Candidate { Cohort = cohort, AppUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "first@example.com", DisplayName = "First Candidate" }, Availability = Availability.PartTime, Status = CandidateStatus.InProgress };
+        var candidate2 = new Candidate { Cohort = cohort, AppUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "second@example.com", DisplayName = "Second Candidate" }, Availability = Availability.PartTime, Status = CandidateStatus.InProgress };
+        var project = new Project { Cohort = cohort, Sponsor = sponsor, Name = "One-Spot Project", AvailabilityNeeded = Availability.PartTime, MaxCandidates = 1, ApprovalStatus = ProjectApprovalStatus.Approved, Status = ProjectStatus.Open };
+
+        db.AddRange(program, cohort, sponsor, candidate1, candidate2, project);
+        await db.SaveChangesAsync();
+
+        var firstAssignment = new Assignment { ProjectId = project.ProjectId, CandidateId = candidate1.CandidateId, Status = AssignmentStatus.SponsorApproved };
+        var secondAssignment = new Assignment { ProjectId = project.ProjectId, CandidateId = candidate2.CandidateId, Status = AssignmentStatus.SponsorApproved };
+        db.AddRange(firstAssignment, secondAssignment);
+        await db.SaveChangesAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+
+        var firstApprove = await client.PostAsync($"/api/matching/{firstAssignment.AssignmentId}/approve", content: null);
+        firstApprove.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var secondApprove = await client.PostAsync($"/api/matching/{secondAssignment.AssignmentId}/approve", content: null);
+
+        secondApprove.StatusCode.Should().Be(HttpStatusCode.Conflict, "the project's only spot is already committed to a different candidate");
     }
 
     [Fact]

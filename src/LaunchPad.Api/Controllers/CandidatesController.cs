@@ -4,6 +4,9 @@ using LaunchPad.Application.Candidates;
 using LaunchPad.Application.Cohorts;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Community;
+using LaunchPad.Application.Reviews;
+using LaunchPad.Application.Risk;
+using LaunchPad.Application.SharePoint;
 using LaunchPad.Application.Skills;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
@@ -29,9 +32,13 @@ public class CandidatesController : ControllerBase
     private readonly ICurrentUser _currentUser;
     private readonly IValidator<UpdateCandidateProfileRequest> _updateValidator;
     private readonly IValidator<CreateCandidateProfileRequest> _createValidator;
+    private readonly IValidator<UpdateCandidateStatusRequest> _updateStatusValidator;
     private readonly IAssignmentRepository _assignments;
     private readonly ICommunityRepository _community;
     private readonly IProfilePictureStorage _profilePictures;
+    private readonly IReviewRepository _reviews;
+    private readonly IAuditLog _auditLog;
+    private readonly IFolderProvisioningJobPublisher _folderProvisioning;
 
     public CandidatesController(
         ICandidateRepository candidates,
@@ -42,9 +49,13 @@ public class CandidatesController : ControllerBase
         ICurrentUser currentUser,
         IValidator<UpdateCandidateProfileRequest> updateValidator,
         IValidator<CreateCandidateProfileRequest> createValidator,
+        IValidator<UpdateCandidateStatusRequest> updateStatusValidator,
         IAssignmentRepository assignments,
         ICommunityRepository community,
-        IProfilePictureStorage profilePictures)
+        IProfilePictureStorage profilePictures,
+        IReviewRepository reviews,
+        IAuditLog auditLog,
+        IFolderProvisioningJobPublisher folderProvisioning)
     {
         _candidates = candidates;
         _mapper = mapper;
@@ -54,9 +65,20 @@ public class CandidatesController : ControllerBase
         _currentUser = currentUser;
         _updateValidator = updateValidator;
         _createValidator = createValidator;
+        _updateStatusValidator = updateStatusValidator;
         _assignments = assignments;
         _community = community;
         _profilePictures = profilePictures;
+        _reviews = reviews;
+        _auditLog = auditLog;
+        _folderProvisioning = folderProvisioning;
+    }
+
+    private async Task<SuggestedHireOutcome?> ComputeSuggestedHireOutcomeAsync(int candidateId, CandidateRisk? risk, CancellationToken ct)
+    {
+        var latestFinalRecommend = await _reviews.GetLatestFinalRecommendConversionAsync(candidateId, ct);
+        return HireOutcomeRule.Evaluate(new HireOutcomeSignal(
+            candidateId, risk?.FinalScore, latestFinalRecommend, risk?.HasPerformanceRisk ?? false, risk?.HasEngagementRisk ?? false));
     }
 
     [HttpGet("{id:int}")]
@@ -68,7 +90,8 @@ public class CandidatesController : ControllerBase
 
         // Redaction happens inside the mapper — never filter scores here or in the client.
         var risk = await _candidates.GetRiskAsync(id, ct);
-        return Ok(_mapper.ToDto(candidate, risk, User));
+        var suggestion = await ComputeSuggestedHireOutcomeAsync(id, risk, ct);
+        return Ok(_mapper.ToDto(candidate, risk, suggestion, User));
     }
 
     /// <summary>The candidate's photo for roster/browse cards (see CandidateAvatar.tsx) —
@@ -97,7 +120,8 @@ public class CandidatesController : ControllerBase
         foreach (var candidate in candidates)
         {
             var risk = await _candidates.GetRiskAsync(candidate.CandidateId, ct);
-            dtos.Add(_mapper.ToDto(candidate, risk, User));
+            var suggestion = await ComputeSuggestedHireOutcomeAsync(candidate.CandidateId, risk, ct);
+            dtos.Add(_mapper.ToDto(candidate, risk, suggestion, User));
         }
 
         return Ok(dtos);
@@ -206,9 +230,14 @@ public class CandidatesController : ControllerBase
         await _candidates.AddAsync(candidate, ct);
         await _candidates.SaveChangesAsync(ct);
 
+        await _folderProvisioning.PublishAsync(
+            new FolderProvisioningJob(FolderProvisioningTargetType.Candidate, candidate.CandidateId), ct);
+
         var created = await _candidates.GetWithSkillsAsync(candidate.CandidateId, ct);
         var risk = await _candidates.GetRiskAsync(candidate.CandidateId, ct);
-        return CreatedAtAction(nameof(GetMe), null, _mapper.ToDto(created!, risk, User));
+        // Candidate-only endpoint — the mapper's role gate means suggestedHireOutcome could
+        // never be shown here regardless, so skip the extra query and pass null directly.
+        return CreatedAtAction(nameof(GetMe), null, _mapper.ToDto(created!, risk, null, User));
     }
 
     /// <summary>The signed-in Candidate's own profile — resolved server-side from their EntraObjectId.</summary>
@@ -220,7 +249,8 @@ public class CandidatesController : ControllerBase
         if (candidate is null) return NotFound();
 
         var risk = await _candidates.GetRiskAsync(candidate.CandidateId, ct);
-        return Ok(_mapper.ToDto(candidate, risk, User));
+        // Candidate-only endpoint — see CreateMe's identical reasoning above.
+        return Ok(_mapper.ToDto(candidate, risk, null, User));
     }
 
     [HttpPut("me")]
@@ -258,6 +288,38 @@ public class CandidatesController : ControllerBase
         await _candidates.SaveChangesAsync(ct);
 
         var risk = await _candidates.GetRiskAsync(candidate.CandidateId, ct);
-        return Ok(_mapper.ToDto(candidate, risk, User));
+        // Candidate-only endpoint — see CreateMe's identical reasoning above.
+        return Ok(_mapper.ToDto(candidate, risk, null, User));
+    }
+
+    /// <summary>Ops applies or overrides a candidate's hire outcome — see HireOutcomeRule for
+    /// the suggestion this is meant to act on. Sets CandidateStatus directly; this is the only
+    /// write path for it outside profile creation (which always starts at InProgress).</summary>
+    [HttpPatch("{id:int}/status")]
+    [Authorize(Roles = Roles.ProgramOps)]
+    public async Task<ActionResult<CandidateDto>> UpdateStatus(int id, UpdateCandidateStatusRequest request, CancellationToken ct)
+    {
+        var validation = await _updateStatusValidator.ValidateAsync(request, ct);
+        if (!validation.IsValid)
+        {
+            foreach (var error in validation.Errors)
+            {
+                ModelState.AddModelError(error.PropertyName, error.ErrorMessage);
+            }
+            return ValidationProblem(ModelState);
+        }
+
+        var candidate = await _candidates.GetWithSkillsAsync(id, ct);
+        if (candidate is null) return NotFound();
+
+        candidate.Status = request.Status;
+        await _candidates.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(
+            _currentUser.EntraObjectId, "Candidate", id.ToString(), "StatusChange",
+            reason: request.Reason, data: new { request.Status }, ct: ct);
+
+        var risk = await _candidates.GetRiskAsync(id, ct);
+        var suggestion = await ComputeSuggestedHireOutcomeAsync(id, risk, ct);
+        return Ok(_mapper.ToDto(candidate, risk, suggestion, User));
     }
 }

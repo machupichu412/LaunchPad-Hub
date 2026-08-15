@@ -11,6 +11,8 @@ public class CohortConfiguration : IEntityTypeConfiguration<Cohort>
         builder.ToTable("Cohort");
         builder.HasKey(c => c.CohortId);
         builder.Property(c => c.Name).HasMaxLength(100).IsRequired();
+        builder.Property(c => c.SharePointFolderId).HasMaxLength(300);
+        builder.Property(c => c.SharePointFolderWebUrl).HasMaxLength(1000);
 
         builder.HasOne(c => c.Program)
             .WithMany(p => p.Cohorts)

@@ -29,7 +29,23 @@
       "applicationUrl": "http://localhost:5254",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "Database__UseInMemoryForLocalDemo": "true"
+        "Database__UseInMemoryForLocalDemo": "true",
+        "Matching__RunInlineForLocalDemo": "true",
+        "SharePoint__ProvisionInlineForLocalDemo": "true"
+      }
+    },
+    "LocalFull": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "http://localhost:5254",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Database__UseInMemoryForLocalDemo": "false",
+        "Database__SeedOnStartup": "true",
+        "Matching__RunInlineForLocalDemo": "true",
+        "SharePoint__ProvisionInlineForLocalDemo": "true"
       }
     }
   }

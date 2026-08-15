@@ -24,10 +24,11 @@ const useStyles = makeStyles({
   },
 });
 
-// Program Ops's admin fast path: approve/deny directly from Proposed (no separate
-// Sponsor-recommend stage in this pass — see the build-out plan). "Run matching"
-// calls the existing MatchingEngine synchronously since there's no async
-// Service Bus/Functions pipeline wired up for local demo.
+// Reviews SponsorApproved assignments — the item Ops actually acts on, whether it
+// arrived via the matching engine + a sponsor's recommend, or a sponsor's direct
+// request from a project's candidate gallery. "Run matching" queues an async job
+// (Service Bus + CohortMatchingFunction in Azure; an inline local-dev fallback here)
+// rather than running inline — see MatchingController.Run.
 export function ApprovalQueue() {
   const styles = useStyles();
   const queryClient = useQueryClient();
@@ -62,7 +63,7 @@ export function ApprovalQueue() {
           </Button>
         }
       />
-      {runMutation.isSuccess && <Body1>Proposed {runMutation.data.proposedCount} new match(es).</Body1>}
+      {runMutation.isSuccess && <Body1>Matching job queued — new proposals will appear here shortly.</Body1>}
       {runMutation.isError && <Body1>Failed to run matching: {(runMutation.error as Error).message}</Body1>}
 
       {isLoading && <Spinner label="Loading the queue..." />}

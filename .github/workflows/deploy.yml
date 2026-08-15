@@ -50,6 +50,46 @@ jobs:
         with:
           inlineScript: az bicep build --file infra/main.bicep
 
+  # Runs SqlServerOnlyBehaviorTests.cs against a real SQL Server service container —
+  # the one tier of coverage build-api's in-memory-DbContext tests structurally can't
+  # provide (the filtered unique index on Assignment, and the vCandidateRisk view).
+  # Same idea as the local Tier-1 homelab setup (docker-compose.homelab.yml /
+  # scripts/run-local-full.sh), but using the amd64 mssql/server image to match this
+  # runner's architecture instead of arm64 azure-sql-edge. Independent of build-api —
+  # not currently in deploy-dev/deploy-prod's `needs`, so it can't block a deploy
+  # while it's still new; promote it once it's proven stable.
+  integration-real-sql:
+    runs-on: ubuntu-latest
+    services:
+      sql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: LaunchPad_Ci_2026! # throwaway — container is ephemeral per run, never reachable outside this job
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P $MSSQL_SA_PASSWORD -C -Q 'SELECT 1' || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '9.0.x' }
+      - run: dotnet restore LaunchPad.sln
+      - run: dotnet tool restore
+      - run: dotnet build LaunchPad.sln -c Release --no-restore
+      - name: Apply migrations to the SQL Server service container
+        env:
+          ConnectionStrings__Sql: Server=localhost,1433;Database=launchpad;User Id=sa;Password=LaunchPad_Ci_2026!;TrustServerCertificate=True;Encrypt=True;
+        run: dotnet ef database update --project src/LaunchPad.Infrastructure --startup-project src/LaunchPad.Api
+      - name: Run SQL-Server-only behavior tests
+        env:
+          SQLSERVER_TEST_CONNECTION: Server=localhost,1433;Database=launchpad;User Id=sa;Password=LaunchPad_Ci_2026!;TrustServerCertificate=True;Encrypt=True;
+        run: dotnet test tests/LaunchPad.Api.IntegrationTests -c Release --no-build --filter "FullyQualifiedName~SqlServerOnlyBehaviorTests"
+
   deploy-dev:
     needs: [build-api, build-web, validate-infra]
     if: github.ref == 'refs/heads/main'

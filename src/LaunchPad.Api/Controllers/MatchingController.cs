@@ -1,7 +1,6 @@
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
-using LaunchPad.Application.Projects;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
@@ -10,99 +9,43 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LaunchPad.Api.Controllers;
 
-// Real two-stage flow: Run proposes up to 3 ranked candidates per open project
-// (Proposed); the sponsor recommends one on their own project (ProjectsController's
-// matches actions, Proposed -> SponsorApproved); Ops approves here from
-// SponsorApproved only (-> OpsApproved). "Run matching" calls the existing, pure
-// MatchingEngine synchronously instead of going through the (unimplemented)
-// CohortMatchingFunction/Service Bus path, mirroring how local demo already
-// bypasses that async plumbing.
+// Real two-stage flow: a cohort-wide run proposes candidates for each open project's
+// remaining spots (Proposed); the sponsor recommends one per spot on their own project
+// (ProjectsController's matches actions, Proposed -> SponsorApproved) or requests a
+// candidate directly from the eligible-candidates gallery (also -> SponsorApproved); Ops
+// approves here from SponsorApproved only (-> OpsApproved). "Run matching" publishes a
+// CohortMatchingJob for async execution (CohortMatchingFunction, or the local-dev inline
+// fallback — see Program.cs's Matching:RunInlineForLocalDemo) rather than running inline.
 [ApiController]
 [Route("api/matching")]
 [Authorize(Policy = Policies.ApproveMatch)]
 public class MatchingController : ControllerBase
 {
     private readonly IAssignmentRepository _assignments;
-    private readonly IProjectRepository _projects;
-    private readonly IProjectInterestRepository _projectInterests;
-    private readonly IMatchingEngine _matchingEngine;
     private readonly IAppUserRepository _appUsers;
     private readonly ICurrentUser _currentUser;
     private readonly IAuditLog _auditLog;
+    private readonly IMatchingJobPublisher _matchingJobPublisher;
 
     public MatchingController(
         IAssignmentRepository assignments,
-        IProjectRepository projects,
-        IProjectInterestRepository projectInterests,
-        IMatchingEngine matchingEngine,
         IAppUserRepository appUsers,
         ICurrentUser currentUser,
-        IAuditLog auditLog)
+        IAuditLog auditLog,
+        IMatchingJobPublisher matchingJobPublisher)
     {
         _assignments = assignments;
-        _projects = projects;
-        _projectInterests = projectInterests;
-        _matchingEngine = matchingEngine;
         _appUsers = appUsers;
         _currentUser = currentUser;
         _auditLog = auditLog;
+        _matchingJobPublisher = matchingJobPublisher;
     }
 
     [HttpPost("run")]
     public async Task<ActionResult<RunMatchingResult>> Run([FromQuery] int cohortId, CancellationToken ct)
     {
-        var openProjects = await _projects.GetOpenByCohortAsync(cohortId, ct);
-        var eligibleCandidates = await _assignments.GetEligibleCandidatesForMatchingAsync(cohortId, ct);
-        var projectIdsAlreadyInReview = (await _assignments.GetProjectIdsWithPendingMatchesAsync(cohortId, ct)).ToHashSet();
-        var performanceScores = await _assignments.GetAveragePerformanceScoresByCohortAsync(cohortId, ct);
-        var interestsByCandidate = (await _projectInterests.GetByCohortAsync(cohortId, ct))
-            .GroupBy(i => i.CandidateId)
-            .ToDictionary(g => g.Key, g => (IReadOnlyDictionary<int, byte>)g.ToDictionary(i => i.ProjectId, i => i.Rating));
-
-        var matchCandidates = eligibleCandidates
-            .Select(c => new MatchCandidate(
-                c.CandidateId,
-                c.Availability,
-                c.Skills.Select(cs => cs.SkillId).ToArray(),
-                c.GraduationDate,
-                performanceScores.TryGetValue(c.CandidateId, out var performance) ? performance : null,
-                interestsByCandidate.TryGetValue(c.CandidateId, out var interests) ? interests : null))
-            .ToArray();
-
-        var proposedCount = 0;
-        foreach (var project in openProjects)
-        {
-            // Already has proposals awaiting sponsor/ops review — don't pile on more.
-            if (projectIdsAlreadyInReview.Contains(project.ProjectId)) continue;
-
-            var matchProject = new MatchProject(
-                project.ProjectId,
-                project.AvailabilityNeeded,
-                project.Skills.Select(s => (s.SkillId, s.IsRequired)).ToArray(),
-                project.EndDate);
-
-            // Top 3 ranked candidates per project — the sponsor picks one from the
-            // shortlist rather than being handed a single take-it-or-leave-it match.
-            // A candidate merely Proposed elsewhere can still appear here; nothing is
-            // decided until a sponsor recommends and Ops approves (see
-            // GetEligibleCandidatesForMatchingAsync).
-            foreach (var result in _matchingEngine.RankTopMatches(matchProject, matchCandidates, topN: 3))
-            {
-                var assignment = new Assignment
-                {
-                    ProjectId = project.ProjectId,
-                    CandidateId = result.CandidateId,
-                    MatchScore = result.Score,
-                    MatchRationale = result.Rationale,
-                    Status = AssignmentStatus.Proposed,
-                };
-                await _assignments.AddAsync(assignment, ct);
-                proposedCount++;
-            }
-        }
-
-        await _assignments.SaveChangesAsync(ct);
-        return Ok(new RunMatchingResult { ProposedCount = proposedCount });
+        await _matchingJobPublisher.PublishAsync(new CohortMatchingJob(cohortId, _currentUser.EntraObjectId), ct);
+        return Accepted(new RunMatchingResult { Queued = true });
     }
 
     [HttpGet("queue")]
@@ -115,39 +58,24 @@ public class MatchingController : ControllerBase
     [HttpPost("{assignmentId:int}/approve")]
     public async Task<ActionResult<PendingAssignmentDto>> Approve(int assignmentId, CancellationToken ct)
     {
-        var assignment = await _assignments.GetAsync(assignmentId, ct);
-        if (assignment is null) return NotFound();
-
-        if (assignment.Status != AssignmentStatus.SponsorApproved)
-        {
-            return BadRequest("This assignment must be recommended by the sponsor before Ops can approve it.");
-        }
-
-        var existingLive = await _assignments.GetLiveAssignmentAsync(assignment.CandidateId, ct);
-        if (existingLive is not null && existingLive.AssignmentId != assignment.AssignmentId)
-        {
-            return Conflict("This candidate already has another active or approved assignment.");
-        }
-
         var opsAppUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        if (opsAppUserId is null) return Forbid();
 
-        assignment.Status = AssignmentStatus.OpsApproved;
-        assignment.OpsApprovedUtc = DateTime.UtcNow;
-        assignment.OpsApprovedBy = opsAppUserId;
-        assignment.StartDate = DateOnly.FromDateTime(DateTime.UtcNow);
-
-        // The candidate is committed now — withdraw any other pending offer they
-        // hold on other projects (they were still Proposed/SponsorApproved there
-        // because "eligible for matching" only excludes a live commitment).
-        var otherPending = await _assignments.GetPendingAssignmentsForCandidateAsync(assignment.CandidateId, ct);
-        foreach (var other in otherPending.Where(a => a.AssignmentId != assignment.AssignmentId))
+        var result = await _assignments.TryOpsApproveAsync(assignmentId, opsAppUserId.Value, ct);
+        switch (result.Outcome)
         {
-            other.Status = AssignmentStatus.Withdrawn;
+            case OpsApproveOutcome.NotFound:
+                return NotFound();
+            case OpsApproveOutcome.WrongStatus:
+                return BadRequest("This assignment must be recommended by the sponsor before Ops can approve it.");
+            case OpsApproveOutcome.CandidateConflict:
+                return Conflict("This candidate already has another active or approved assignment.");
+            case OpsApproveOutcome.ProjectFull:
+                return Conflict("This project's candidate spots are already full.");
         }
 
-        await _assignments.SaveChangesAsync(ct);
-        await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "OpsApprove", ct: ct);
-        return Ok(ToDto(assignment));
+        await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignmentId.ToString(), "OpsApprove", ct: ct);
+        return Ok(ToDto(result.Assignment!));
     }
 
     [HttpPost("{assignmentId:int}/deny")]

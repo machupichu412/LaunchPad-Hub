@@ -18,6 +18,7 @@ import {
 import { createProject, getMyProjects, submitProject } from '../../api/projects';
 import { PageHeader } from '../../components/PageHeader';
 import { ProjectForm, type ProjectFormValues } from '../../components/ProjectForm';
+import { availabilityLabel, projectApprovalStatusLabel, projectStatusLabel } from '../../utils/statusLabels';
 
 // Demo-only: the local seed data creates exactly one cohort, which is always
 // CohortId 1. Once cohort selection exists (Phase 2), this becomes a dropdown.
@@ -33,13 +34,15 @@ export function MyProjects() {
     queryFn: getMyProjects,
   });
 
-  const [formValues, setFormValues] = useState<ProjectFormValues>({
+  const emptyFormValues: ProjectFormValues = {
     name: '',
     description: '',
     availabilityNeeded: 'PartTime',
+    maxCandidates: 1,
     requiredSkillNames: [],
     preferredSkillNames: [],
-  });
+  };
+  const [formValues, setFormValues] = useState<ProjectFormValues>(emptyFormValues);
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -50,11 +53,12 @@ export function MyProjects() {
         availabilityNeeded: formValues.availabilityNeeded,
         startDate: null,
         endDate: null,
+        maxCandidates: formValues.maxCandidates,
         requiredSkillNames: formValues.requiredSkillNames,
         preferredSkillNames: formValues.preferredSkillNames,
       }),
     onSuccess: () => {
-      setFormValues({ name: '', description: '', availabilityNeeded: 'PartTime', requiredSkillNames: [], preferredSkillNames: [] });
+      setFormValues(emptyFormValues);
       queryClient.invalidateQueries({ queryKey: ['projects', 'mine'] });
     },
   });
@@ -98,10 +102,10 @@ export function MyProjects() {
             {projects.map((project) => (
               <TableRow key={project.projectId}>
                 <TableCell>{project.name}</TableCell>
-                <TableCell>{project.availabilityNeeded}</TableCell>
+                <TableCell>{availabilityLabel(project.availabilityNeeded)}</TableCell>
                 <TableCell>
                   <Badge appearance="tint" color={project.approvalStatus === 'Rejected' ? 'danger' : 'informative'}>
-                    {project.approvalStatus}
+                    {projectApprovalStatusLabel(project.approvalStatus)}
                   </Badge>
                   {project.approvalStatus === 'Rejected' && project.rejectionReason && (
                     <Caption1 style={{ display: 'block', marginTop: tokens.spacingVerticalXXS }}>
@@ -109,7 +113,7 @@ export function MyProjects() {
                     </Caption1>
                   )}
                 </TableCell>
-                <TableCell>{project.status}</TableCell>
+                <TableCell>{projectStatusLabel(project.status)}</TableCell>
                 <TableCell>
                   {(project.approvalStatus === 'Draft' || project.approvalStatus === 'Rejected') && (
                     <Button

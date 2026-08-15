@@ -30,6 +30,7 @@ import { MyProjects } from './features/sponsor/MyProjects';
 import { ProjectMatches } from './features/sponsor/ProjectMatches';
 import { MyCandidates } from './features/sponsor/MyCandidates';
 import { SubmitReview } from './features/sponsor/SubmitReview';
+import { ManageTodos } from './features/sponsor/ManageTodos';
 import { ProjectMarketplace } from './features/candidate/ProjectMarketplace';
 import { ProjectDetail } from './features/candidate/ProjectDetail';
 import { Onboarding } from './features/candidate/Onboarding';
@@ -58,6 +59,16 @@ function AppContent() {
                 <Route path="/unauthorized" element={<Unauthorized />} />
                 <Route
                   path="/pipeline"
+                  element={
+                    <RequireRole
+                      allow={[AppRoles.Executive, AppRoles.ProgramOps, AppRoles.Sponsor, AppRoles.HiringManager]}
+                    >
+                      <TalentPipeline />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/pipeline/:cohortId"
                   element={
                     <RequireRole
                       allow={[AppRoles.Executive, AppRoles.ProgramOps, AppRoles.Sponsor, AppRoles.HiringManager]}
@@ -280,6 +291,16 @@ function AppContent() {
                     <RequireRole allow={[AppRoles.Sponsor]}>
                       <RequireSponsorProfile>
                         <SubmitReview />
+                      </RequireSponsorProfile>
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/candidates/:assignmentId/todos"
+                  element={
+                    <RequireRole allow={[AppRoles.Sponsor]}>
+                      <RequireSponsorProfile>
+                        <ManageTodos />
                       </RequireSponsorProfile>
                     </RequireRole>
                   }

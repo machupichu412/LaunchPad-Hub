@@ -51,5 +51,17 @@ resource notificationsQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-p
   }
 }
 
+// Cohort/candidate/project folder provisioning, fired on Cohort/Candidate create and Project
+// approve. Consumed by LaunchPad.Functions' SharePointProvisioningFunction. Same "no per-queue
+// role assignment needed" reasoning as notificationsQueue above.
+resource sharePointProvisioningQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-preview' = {
+  parent: serviceBusNamespace
+  name: 'sharepoint-provisioning'
+  properties: {
+    deadLetteringOnMessageExpiration: true
+    maxDeliveryCount: 5
+  }
+}
+
 output namespaceName string = serviceBusNamespace.name
 output namespaceId string = serviceBusNamespace.id

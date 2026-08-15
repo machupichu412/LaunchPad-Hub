@@ -1,12 +1,13 @@
 using System.Security.Claims;
 using LaunchPad.Application.Common;
+using LaunchPad.Application.Risk;
 using LaunchPad.Domain.Entities;
 
 namespace LaunchPad.Application.Candidates;
 
 public sealed class CandidateDtoMapper : ICandidateDtoMapper
 {
-    public CandidateDto ToDto(Candidate candidate, CandidateRisk? risk, ClaimsPrincipal user)
+    public CandidateDto ToDto(Candidate candidate, CandidateRisk? risk, SuggestedHireOutcome? suggestedHireOutcome, ClaimsPrincipal user)
     {
         var dto = new CandidateDto
         {
@@ -23,7 +24,9 @@ public sealed class CandidateDtoMapper : ICandidateDtoMapper
             Degree = candidate.Degree,
             Gpa = candidate.Gpa,
             Skills = candidate.Skills.Select(s => s.Skill.Name).ToArray(),
-            Outcome = candidate.Status.ToOutcomeLabel()
+            Status = candidate.Status,
+            Outcome = candidate.Status.ToOutcomeLabel(),
+            SharePointFolderWebUrl = candidate.SharePointFolderWebUrl,
         };
 
         if (user.IsInRole(Roles.Executive) || user.IsInRole(Roles.ProgramOps))
@@ -31,6 +34,7 @@ public sealed class CandidateDtoMapper : ICandidateDtoMapper
             dto.AverageScore = risk?.AvgScore;
             dto.HasPerformanceRisk = risk?.HasPerformanceRisk;
             dto.HasEngagementRisk = risk?.HasEngagementRisk;
+            dto.SuggestedHireOutcome = suggestedHireOutcome;
         }
 
         return dto;
