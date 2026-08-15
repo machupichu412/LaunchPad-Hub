@@ -107,14 +107,14 @@ jobs:
           resourceGroupName: rg-launchpad-dev
           template: infra/main.bicep
           parameters: infra/params.dev.json
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: api, path: ./publish/api }
       - run: dotnet ef database update --project src/LaunchPad.Infrastructure --startup-project src/LaunchPad.Api
       - uses: azure/webapps-deploy@v3
         with:
           app-name: app-launchpad-dev
           package: ./publish/api
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: web, path: ./dist }
       - uses: azure/static-web-apps-deploy@v1
         with:
@@ -139,7 +139,7 @@ jobs:
           resourceGroupName: rg-launchpad-prod
           template: infra/main.bicep
           parameters: infra/params.prod.json
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: api, path: ./publish/api }
       - run: dotnet ef database update --project src/LaunchPad.Infrastructure --startup-project src/LaunchPad.Api
       - uses: azure/webapps-deploy@v3
@@ -149,7 +149,7 @@ jobs:
           package: ./publish/api
       - run: ./scripts/smoke-test.sh https://app-launchpad-prod-staging.azurewebsites.net
       - run: az webapp deployment slot swap -g rg-launchpad-prod -n app-launchpad-prod --slot staging
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: web, path: ./dist }
       - uses: azure/static-web-apps-deploy@v1
         with:
