@@ -21,5 +21,10 @@ public interface IAppUserRepository
     /// endpoints, which read and write AvatarBlobPath.</summary>
     Task<AppUser?> GetByEntraObjectIdAsync(Guid entraObjectId, CancellationToken ct = default);
 
+    /// <summary>Looked up by numeric AppUserId rather than EntraObjectId — needed by
+    /// AppUsersController.GetAvatar, which resolves an arbitrary post/comment author's
+    /// avatar (Community posts span every role, not just the caller's own).</summary>
+    Task<AppUser?> GetByIdAsync(int appUserId, CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }
