@@ -3,8 +3,8 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "env": { "value": "prod" },
-    "location": { "value": "eastus2" },
-    "sqlAadAdminObjectId": { "value": "00000000-0000-0000-0000-000000000000" },
+    "location": { "value": "centralus" },
+    "sqlAadAdminObjectId": { "value": "023774fd-7a38-4b22-a62a-fecf5e7d3a6a" },
     "sqlAadAdminLogin": { "value": "SG-LaunchPad-ProgramOps" }
   }
 }

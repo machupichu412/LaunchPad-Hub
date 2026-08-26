@@ -24,5 +24,8 @@ public sealed class AppUserRepository : IAppUserRepository
     public Task<AppUser?> GetByEntraObjectIdAsync(Guid entraObjectId, CancellationToken ct = default) =>
         _db.AppUsers.FirstOrDefaultAsync(u => u.EntraObjectId == entraObjectId, ct);
 
+    public Task<AppUser?> GetByIdAsync(int appUserId, CancellationToken ct = default) =>
+        _db.AppUsers.FirstOrDefaultAsync(u => u.AppUserId == appUserId, ct);
+
     public Task SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 }

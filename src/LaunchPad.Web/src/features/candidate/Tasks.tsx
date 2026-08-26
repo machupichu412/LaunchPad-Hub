@@ -1,7 +1,9 @@
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Badge, Body1, Button, Card, Spinner, Title3, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Button, Card, Spinner, Title3, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { getAssignmentTodos, getMyAssignment, updateTodoStatus } from '../../api/assignments';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 import type { ProjectTodoDto, TodoStatus } from '../../api/types';
 
 const useStyles = makeStyles({
@@ -41,7 +43,9 @@ const priorityColor: Record<ProjectTodoDto['priority'], 'danger' | 'warning' | '
 
 export function Tasks() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: assignment, isLoading: assignmentLoading } = useQuery({
     queryKey: ['assignments', 'mine'],
@@ -75,7 +79,7 @@ export function Tasks() {
               {todos
                 .filter((t) => t.status === column.status)
                 .map((todo) => (
-                  <Card key={todo.projectTodoId} className={styles.card}>
+                  <Card key={todo.projectTodoId} className={mergeClasses(styles.card, surfaces.card)}>
                     <Body1>{todo.title}</Body1>
                     <div style={{ marginTop: tokens.spacingVerticalXS }}>
                       <Badge appearance="tint" color={priorityColor[todo.priority]}>
@@ -87,15 +91,29 @@ export function Tasks() {
                         </Badge>
                       )}
                     </div>
-                    {nextStatus[todo.status] && (
-                      <Button
-                        size="small"
-                        style={{ marginTop: tokens.spacingVerticalS }}
-                        disabled={advanceMutation.isPending}
-                        onClick={() => advanceMutation.mutate(todo)}
-                      >
-                        Advance to {nextStatus[todo.status]}
-                      </Button>
+                    {todo.linkedReviewType != null ? (
+                      todo.status !== 'Completed' && (
+                        <Button
+                          size="small"
+                          style={{ marginTop: tokens.spacingVerticalS }}
+                          onClick={() =>
+                            navigate(`/reviews/submit/${assignment.assignmentId}/${todo.linkedReviewType}/${todo.linkedReviewCheckpoint}`)
+                          }
+                        >
+                          Submit review
+                        </Button>
+                      )
+                    ) : (
+                      nextStatus[todo.status] && (
+                        <Button
+                          size="small"
+                          style={{ marginTop: tokens.spacingVerticalS }}
+                          disabled={advanceMutation.isPending}
+                          onClick={() => advanceMutation.mutate(todo)}
+                        >
+                          Advance to {nextStatus[todo.status]}
+                        </Button>
+                      )
                     )}
                   </Card>
                 ))}

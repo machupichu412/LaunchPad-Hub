@@ -412,7 +412,10 @@ public class ProjectsController : ControllerBase
     /// <summary>Sponsor's eligible-candidate browsing gallery for one project — every candidate
     /// in the cohort without a live assignment elsewhere, ranked with the same engine cohort-wide
     /// matching uses. Only available once the project is Approved — sponsors can't browse (let
-    /// alone request) before Program Ops signs off.</summary>
+    /// alone request) before Program Ops signs off. Candidates Program Ops's batch matching
+    /// already proposed for this project carry a non-null ProposedAssignmentId so the frontend
+    /// can surface them as a distinct, pre-highlighted group instead of treating them like any
+    /// other browsable candidate.</summary>
     [HttpGet("{id:int}/eligible-candidates")]
     [Authorize(Policy = Policies.ViewTalentPipeline)]
     public async Task<ActionResult<IReadOnlyList<SponsorCandidateMatchDto>>> GetEligibleCandidates(int id, CancellationToken ct)
@@ -434,6 +437,8 @@ public class ProjectsController : ControllerBase
             .Where(i => i.ProjectId == id)
             .ToDictionary(i => i.CandidateId, i => i.Rating);
         var pendingElsewhere = await _assignments.GetCandidateIdsWithPendingAssignmentsElsewhereAsync(project.CohortId, id, ct);
+        var proposedForThisProject = (await _assignments.GetProposedByProjectAsync(id, ct))
+            .ToDictionary(a => a.CandidateId, a => a.AssignmentId);
 
         var corpus = eligibleCandidates
             .Select(c => c.Bio)
@@ -486,6 +491,7 @@ public class ProjectsController : ControllerBase
                 Rationale = r.Rationale,
                 InterestRating = interestsForThisProject.TryGetValue(c.CandidateId, out var rating) ? rating : null,
                 HasPendingAssignmentElsewhere = pendingElsewhere.Contains(c.CandidateId),
+                ProposedAssignmentId = proposedForThisProject.TryGetValue(c.CandidateId, out var assignmentId) ? assignmentId : null,
             };
         }).ToArray();
 

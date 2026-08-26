@@ -158,6 +158,7 @@ export type TodoStatus = 'NotStarted' | 'InProgress' | 'Completed';
 export type TodoPriority = 'Low' | 'Medium' | 'High';
 export type DeliverableStatus = 'Draft' | 'Submitted';
 export type Checkpoint = 'Midpoint' | 'Final';
+export type ReviewType = 'SponsorOnCandidate' | 'CandidateOnSponsor' | 'ProjectEval';
 export type CommunityPostType = 'Win' | 'Question' | 'Announcement' | 'Kudos' | 'Reminder';
 
 export interface MyAssignmentDto {
@@ -183,6 +184,10 @@ export interface ProjectTodoDto {
   status: TodoStatus;
   priority: TodoPriority;
   dueDate: string | null;
+  /** Set together (or both null) — an Ops-scheduled review obligation rather than an
+   * ordinary to-do. See Tasks.tsx/ManageTodos.tsx's "Submit review" links. */
+  linkedReviewType: ReviewType | null;
+  linkedReviewCheckpoint: Checkpoint | null;
 }
 
 export interface UpdateTodoStatusRequest {
@@ -227,30 +232,40 @@ export interface CandidateDashboardDto {
 
 export interface CommunityCommentDto {
   communityCommentId: number;
+  authorAppUserId: number;
   authorName: string;
+  authorRoleLabel: string | null;
+  authorTeamsLink: string;
   body: string;
   createdUtc: string;
 }
 
 export interface CommunityPostDto {
   communityPostId: number;
+  authorAppUserId: number;
   authorName: string;
   authorRoleLabel: string | null;
+  authorTeamsLink: string;
   body: string;
   postType: CommunityPostType;
   createdUtc: string;
+  hasImage: boolean;
   likeCount: number;
   hasLikedByMe: boolean;
-  comments: CommunityCommentDto[];
+  commentCount: number;
 }
 
-export interface CreateCommunityPostRequest {
-  body: string;
-  postType: CommunityPostType;
+/** One cursor-paginated page of the feed — see api/community.ts's getCommunityFeedPage. */
+export interface CommunityFeedPageDto {
+  items: CommunityPostDto[];
+  nextCursor: string | null;
 }
 
 export interface CreateCommunityCommentRequest {
   body: string;
+  /** The role the caller is currently viewing as (see useActiveRole) — the server only
+   * trusts this if it's actually one of the caller's own held roles. */
+  activeRole?: string;
 }
 
 export type CohortStatus = 'Planned' | 'Active' | 'Completed';
@@ -277,6 +292,16 @@ export interface CreateCohortRequest {
 
 export interface UpdateCohortStatusRequest {
   status: CohortStatus;
+}
+
+export interface ScheduleReviewsRequest {
+  checkpoint: Checkpoint;
+  dueDate: string;
+}
+
+export interface ScheduleReviewsResult {
+  assignmentsScheduled: number;
+  todosCreated: number;
 }
 
 export interface PendingAssignmentDto {
@@ -314,6 +339,17 @@ export interface RiskCandidateDto {
   staleTodoCount: number;
 }
 
+/** Funnel: recommended (SponsorApproved) -> approved (OpsApproved) -> hired, plus
+ * risk counts, scoped to one cohort — see api/ops.ts's getExecutiveDashboard. */
+export interface ExecutiveDashboardDto {
+  cohortId: number;
+  recommendedCount: number;
+  approvedCount: number;
+  hiredCount: number;
+  performanceRiskCount: number;
+  engagementRiskCount: number;
+}
+
 export interface OpsDashboardDto {
   activeCandidateCount: number;
   activeProjectCount: number;
@@ -335,7 +371,7 @@ export interface ProjectMatchDto {
 
 export interface SubmitReviewRequest {
   assignmentId: number;
-  reviewType: 'SponsorOnCandidate' | 'CandidateOnSponsor' | 'ProjectEval';
+  reviewType: ReviewType;
   checkpoint: Checkpoint;
   commitment: number | null;
   availability: number | null;
@@ -390,6 +426,7 @@ export interface SponsorCandidateMatchDto {
   rationale: string;
   interestRating: number | null;
   hasPendingAssignmentElsewhere: boolean;
+  proposedAssignmentId: number | null;
 }
 
 export interface NotificationDto {

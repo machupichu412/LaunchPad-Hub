@@ -1,20 +1,44 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Badge, Body1, Card, Caption1, Field, Input, Select, Spinner, Title3, makeStyles, tokens } from '@fluentui/react-components';
+import {
+  Badge,
+  Body1,
+  Card,
+  Caption1,
+  Dropdown,
+  Field,
+  Input,
+  Option,
+  Select,
+  Spinner,
+  Title3,
+  makeStyles,
+  mergeClasses,
+  tokens,
+} from '@fluentui/react-components';
 import { SearchRegular } from '@fluentui/react-icons';
-import { getCandidatesByCohort, updateCandidateStatus } from '../../api/candidates';
+import type { OptionOnSelectData } from '@fluentui/react-components';
+import { getCandidatesByCohorts, updateCandidateStatus } from '../../api/candidates';
+import { getCohorts } from '../../api/cohorts';
 import { CandidateAvatar } from '../../components/CandidateAvatar';
+import { CandidateProfileDialog } from '../../components/CandidateProfileDialog';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 import { candidateStatusLabel, suggestedHireOutcomeLabel } from '../../utils/statusLabels';
-import type { CandidateStatus } from '../../api/types';
+import type { CandidateDto, CandidateStatus } from '../../api/types';
 
-// Falls back to cohort 1 (the local seed data's only cohort) when reached via the
-// plain "/pipeline" nav link rather than a specific cohort's "View candidates" — see
-// Cohorts.tsx, which links here with a real :cohortId.
-const DEMO_COHORT_ID = 1;
+const ALL_COHORTS_VALUE = 'all';
 
 const useStyles = makeStyles({
+  filters: {
+    display: 'flex',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'wrap',
+  },
+  cohortFilter: {
+    minWidth: '220px',
+  },
   search: {
     width: '280px',
   },
@@ -47,30 +71,51 @@ const useStyles = makeStyles({
 // server-side for unauthorized roles — no client-side filtering needed.
 export function TalentPipeline() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const [search, setSearch] = useState('');
+  const [selectedCandidate, setSelectedCandidate] = useState<CandidateDto | null>(null);
   const { cohortId: cohortIdParam } = useParams<{ cohortId?: string }>();
-  const cohortId = cohortIdParam ? Number(cohortIdParam) : DEMO_COHORT_ID;
   const queryClient = useQueryClient();
 
+  const { data: cohorts } = useQuery({ queryKey: ['cohorts'], queryFn: getCohorts });
+
+  // Additive cohort filter: specific cohort ids, or the ALL_COHORTS_VALUE sentinel for
+  // every cohort. Defaults to the active cohort(s) once cohorts load, or to a specific
+  // cohort when reached via Cohorts.tsx's "View candidates" link — whichever comes first
+  // wins, so re-running this effect on every cohorts refetch doesn't clobber a user pick.
+  const [selectedValues, setSelectedValues] = useState<string[] | null>(cohortIdParam ? [cohortIdParam] : null);
+  useEffect(() => {
+    if (selectedValues !== null || !cohorts) return;
+    const active = cohorts.filter((c) => c.status === 'Active').map((c) => String(c.cohortId));
+    setSelectedValues(active.length > 0 ? active : [ALL_COHORTS_VALUE]);
+  }, [cohorts, selectedValues]);
+
+  const resolvedValues = selectedValues ?? [];
+  const isAllCohorts = resolvedValues.includes(ALL_COHORTS_VALUE);
+  const selectedCohortIds = isAllCohorts ? [] : resolvedValues.map(Number);
+  const queryKey = ['candidates', 'cohorts', isAllCohorts ? 'all' : [...selectedCohortIds].sort()];
+
   const { data: candidates, isLoading, isError, error } = useQuery({
-    queryKey: ['candidates', 'cohort', cohortId],
-    queryFn: () => getCandidatesByCohort(cohortId),
-    enabled: !Number.isNaN(cohortId),
+    queryKey,
+    queryFn: () => getCandidatesByCohorts(selectedCohortIds),
+    enabled: selectedValues !== null,
   });
 
   const statusMutation = useMutation({
     mutationFn: ({ candidateId, status }: { candidateId: number; status: CandidateStatus }) =>
       updateCandidateStatus(candidateId, { status, reason: null }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['candidates', 'cohort', cohortId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
 
-  if (isLoading) return <Spinner label="Loading candidates..." />;
-  if (isError) return <Body1>Failed to load candidates: {(error as Error).message}</Body1>;
-  if (!candidates || candidates.length === 0) return <Body1>No candidates in this cohort yet.</Body1>;
+  const handleCohortSelect = (_: unknown, data: OptionOnSelectData) => {
+    const newlySelected = data.selectedOptions;
+    const clickedAll = newlySelected.includes(ALL_COHORTS_VALUE) && !resolvedValues.includes(ALL_COHORTS_VALUE);
+    setSelectedValues(clickedAll ? [ALL_COHORTS_VALUE] : newlySelected.filter((v) => v !== ALL_COHORTS_VALUE));
+  };
 
-  const showScores = candidates.some((c) => c.averageScore != null || c.hasPerformanceRisk != null);
+  const showScores = (candidates ?? []).some((c) => c.averageScore != null || c.hasPerformanceRisk != null);
 
-  const filtered = candidates.filter((c) => {
+  const filtered = (candidates ?? []).filter((c) => {
     const term = search.trim().toLowerCase();
     if (term.length === 0) return true;
     return (
@@ -84,23 +129,55 @@ export function TalentPipeline() {
     <>
       <PageHeader
         title="Candidates"
-        subtitle="Browse the current cohort of participating candidates."
+        subtitle="Browse the participating candidates, filtered by cohort."
         actions={
-          <Input
-            className={styles.search}
-            contentBefore={<SearchRegular />}
-            placeholder="Search candidates..."
-            value={search}
-            onChange={(_, data) => setSearch(data.value)}
-          />
+          <div className={styles.filters}>
+            <Dropdown
+              className={styles.cohortFilter}
+              multiselect
+              placeholder="Filter by cohort"
+              selectedOptions={resolvedValues}
+              value={
+                isAllCohorts
+                  ? 'All cohorts'
+                  : (cohorts ?? [])
+                      .filter((c) => resolvedValues.includes(String(c.cohortId)))
+                      .map((c) => c.name)
+                      .join(', ')
+              }
+              onOptionSelect={handleCohortSelect}
+            >
+              <Option value={ALL_COHORTS_VALUE}>All cohorts</Option>
+              {cohorts?.map((cohort) => (
+                <Option key={cohort.cohortId} value={String(cohort.cohortId)}>
+                  {cohort.name}
+                </Option>
+              ))}
+            </Dropdown>
+            <Input
+              className={styles.search}
+              contentBefore={<SearchRegular />}
+              placeholder="Search candidates..."
+              value={search}
+              onChange={(_, data) => setSearch(data.value)}
+            />
+          </div>
         }
       />
 
-      {filtered.length === 0 && <Body1>No candidates match.</Body1>}
+      {isLoading && <Spinner label="Loading candidates..." />}
+      {isError && <Body1>Failed to load candidates: {(error as Error).message}</Body1>}
+      {candidates && candidates.length === 0 && <Body1>No candidates match this cohort filter.</Body1>}
+      {candidates && candidates.length > 0 && filtered.length === 0 && <Body1>No candidates match.</Body1>}
 
       <div className={styles.grid}>
         {filtered.map((candidate) => (
-          <Card key={candidate.candidateId} className={styles.card}>
+          <Card
+            key={candidate.candidateId}
+            className={mergeClasses(styles.card, surfaces.interactive)}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setSelectedCandidate(candidate)}
+          >
             <div className={styles.cardHeader}>
               <CandidateAvatar candidateId={candidate.candidateId} name={candidate.displayName} />
               <Title3>{candidate.displayName}</Title3>
@@ -134,7 +211,11 @@ export function TalentPipeline() {
               </Badge>
             )}
             {candidate.hasPerformanceRisk !== undefined && (
-              <Field label="Outcome" style={{ marginTop: tokens.spacingVerticalXS }}>
+              <Field
+                label="Outcome"
+                style={{ marginTop: tokens.spacingVerticalXS }}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <Select
                   value={candidate.status}
                   disabled={statusMutation.isPending}
@@ -153,6 +234,8 @@ export function TalentPipeline() {
         ))}
       </div>
       {statusMutation.isError && <Body1>Failed to update outcome: {(statusMutation.error as Error).message}</Body1>}
+
+      <CandidateProfileDialog candidate={selectedCandidate} onClose={() => setSelectedCandidate(null)} />
     </>
   );
 }

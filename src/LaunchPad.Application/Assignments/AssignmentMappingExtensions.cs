@@ -30,6 +30,8 @@ public static class AssignmentMappingExtensions
         Status = todo.Status,
         Priority = todo.Priority,
         DueDate = todo.DueDate,
+        LinkedReviewType = todo.LinkedReviewType,
+        LinkedReviewCheckpoint = todo.LinkedReviewCheckpoint,
     };
 
     public static DeliverableDto ToDto(this Deliverable deliverable) => new()

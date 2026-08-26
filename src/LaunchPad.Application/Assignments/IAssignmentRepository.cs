@@ -1,4 +1,5 @@
 using LaunchPad.Domain.Entities;
+using LaunchPad.Domain.Enums;
 
 namespace LaunchPad.Application.Assignments;
 
@@ -43,6 +44,23 @@ public interface IAssignmentRepository
     Task<IReadOnlyList<ProjectTodo>> GetTodosAsync(int assignmentId, CancellationToken ct = default);
     Task<ProjectTodo?> GetTodoAsync(int assignmentId, int todoId, CancellationToken ct = default);
     Task<ProjectTodo> AddTodoAsync(ProjectTodo todo, CancellationToken ct = default);
+
+    /// <summary>The to-do a submitted review auto-completes — see ReviewsController.Submit
+    /// and ProjectTodo.LinkedReviewType's doc comment.</summary>
+    Task<ProjectTodo?> GetLinkedReviewTodoAsync(
+        int assignmentId, ReviewType reviewType, Checkpoint checkpoint, CancellationToken ct = default);
+
+    /// <summary>Status == Active, scoped to a cohort via Project.CohortId — the pool
+    /// CohortsController.ScheduleReviews schedules review to-dos against. Includes
+    /// Candidate.AppUser and Project.Sponsor.AppUser for building readable to-do titles.</summary>
+    Task<IReadOnlyList<Assignment>> GetActiveByCohortAsync(int cohortId, CancellationToken ct = default);
+
+    /// <summary>Existing linked-review-todo keys for this checkpoint across the given
+    /// assignments — the idempotency pre-check ScheduleReviews uses to avoid re-creating
+    /// to-dos it already scheduled (the filtered unique index is the defense-in-depth
+    /// backstop, not the primary guard).</summary>
+    Task<IReadOnlySet<(int AssignmentId, ReviewType ReviewType)>> GetLinkedReviewTodoKeysAsync(
+        IReadOnlyList<int> assignmentIds, Checkpoint checkpoint, CancellationToken ct = default);
 
     Task<IReadOnlyList<Deliverable>> GetDeliverablesAsync(int assignmentId, CancellationToken ct = default);
     Task<Deliverable> AddDeliverableAsync(Deliverable deliverable, CancellationToken ct = default);

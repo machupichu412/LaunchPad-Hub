@@ -16,7 +16,17 @@ param serviceBusNamespace string
 @description('Deploy the Prod staging slot used for the swap-on-deploy pattern (§9.3)')
 param deployStagingSlot bool = false
 
-var appName = 'app-launchpad-${env}'
+@description('Delegated subnet (Microsoft.Web/serverfarms) for regional VNet integration — required to reach SQL/Key Vault/Storage now that they\'re private-endpoint-only')
+param vnetIntegrationSubnetId string
+
+// App Service default hostnames are globally unique across all of Azure, not just this
+// subscription — 'app-launchpad-dev' (no suffix) collided with an unrelated site outside
+// this tenant on first deploy. Same fix as keyVault.bicep/serviceBus.bicep/sql.bicep's
+// uniqueSuffix. CI/CD (deploy.yml) reads the concrete name back from this module's
+// appServiceName output rather than hardcoding it, so this doesn't need to stay in sync
+// with anything outside this file.
+var uniqueSuffix = substring(uniqueString(subscription().id, resourceGroup().id), 0, 4)
+var appName = 'app-launchpad-${env}-${uniqueSuffix}'
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: 'plan-launchpad-${env}'
@@ -40,10 +50,14 @@ resource appService 'Microsoft.Web/sites@2023-12-01' = {
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
+    virtualNetworkSubnetId: vnetIntegrationSubnetId
     siteConfig: {
       linuxFxVersion: 'DOTNETCORE|9.0'
       alwaysOn: true
       healthCheckPath: '/healthz'
+      // All outbound traffic routes through the VNet, not just RFC1918 ranges — SQL/Key
+      // Vault/Storage are reachable only via their private endpoints now.
+      vnetRouteAllEnabled: true
       appSettings: [
         { name: 'ASPNETCORE_ENVIRONMENT', value: env == 'prod' ? 'Production' : (env == 'test' ? 'Staging' : 'Development') }
         { name: 'ConnectionStrings__Sql', value: 'Server=tcp:${sqlServerFqdn},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;' }

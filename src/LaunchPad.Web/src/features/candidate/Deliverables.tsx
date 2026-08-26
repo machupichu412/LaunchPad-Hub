@@ -11,8 +11,10 @@ import {
   Spinner,
   Title3,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
+import { DocumentArrowUpRegular } from '@fluentui/react-icons';
 import {
   downloadDeliverableFile,
   getAssignmentDeliverables,
@@ -21,6 +23,7 @@ import {
   submitDeliverable,
 } from '../../api/assignments';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 
 const useStyles = makeStyles({
   form: {
@@ -45,6 +48,14 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: tokens.spacingHorizontalS,
   },
+  filePicker: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+  },
+  hiddenFileInput: {
+    display: 'none',
+  },
 });
 
 // Files stream straight to the candidate's SharePoint folder via Graph — see
@@ -52,6 +63,7 @@ const useStyles = makeStyles({
 // whatever the browser reports for the picked file.
 export function Deliverables() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const queryClient = useQueryClient();
 
   const { data: assignment, isLoading: assignmentLoading } = useQuery({
@@ -116,7 +128,7 @@ export function Deliverables() {
     <>
       <PageHeader title="Deliverables" />
 
-      <Card className={styles.form}>
+      <Card className={mergeClasses(styles.form, surfaces.card)}>
         <Title3>Submit a deliverable</Title3>
         <Field label="Title" style={{ marginTop: tokens.spacingVerticalS }}>
           <input
@@ -127,11 +139,22 @@ export function Deliverables() {
           />
         </Field>
         <Field label="File">
-          <input
-            ref={fileInputRef}
-            type="file"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
+          <div className={styles.filePicker}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className={styles.hiddenFileInput}
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+            <Button
+              appearance="secondary"
+              icon={<DocumentArrowUpRegular />}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Choose file
+            </Button>
+            <Caption1>{file ? file.name : 'No file selected'}</Caption1>
+          </div>
         </Field>
         {todos && todos.length > 0 && (
           <Field label="Attach to a to-do (optional)">
@@ -163,7 +186,7 @@ export function Deliverables() {
       {deliverables && deliverables.length > 0 && (
         <div className={styles.list}>
           {deliverables.map((d) => (
-            <Card key={d.deliverableId} className={styles.item}>
+            <Card key={d.deliverableId} className={mergeClasses(styles.item, surfaces.card)}>
               <div>
                 <Body1>{d.title}</Body1>
                 <br />

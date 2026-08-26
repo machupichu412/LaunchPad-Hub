@@ -30,4 +30,10 @@ public class SponsorCandidateMatchDto
     /// design note: the engine already lets sponsors compete for the same proposed
     /// candidate, arbitrated at Ops-approval time).</summary>
     public bool HasPendingAssignmentElsewhere { get; set; }
+
+    /// <summary>Non-null if Program Ops's cohort-wide batch matching already proposed this
+    /// candidate for THIS project (Assignment.Status == Proposed) — the id of that Assignment,
+    /// for the gallery to act on directly via the existing recommend/reject endpoints instead
+    /// of issuing a fresh request that would create a duplicate Assignment row.</summary>
+    public int? ProposedAssignmentId { get; set; }
 }

@@ -33,6 +33,13 @@ public sealed class CandidateRepository : ICandidateRepository
             .Where(c => c.CohortId == cohortId)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<Candidate>> GetByCohortsAsync(IReadOnlyList<int> cohortIds, CancellationToken ct = default) =>
+        await _db.Candidates
+            .Include(c => c.AppUser)
+            .Include(c => c.Skills).ThenInclude(cs => cs.Skill)
+            .Where(c => cohortIds.Count == 0 || cohortIds.Contains(c.CohortId))
+            .ToListAsync(ct);
+
     public async Task<Candidate> AddAsync(Candidate candidate, CancellationToken ct = default)
     {
         await _db.Candidates.AddAsync(candidate, ct);

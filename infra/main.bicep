@@ -13,6 +13,19 @@ param sqlAadAdminLogin string
 
 var isProd = env == 'prod'
 
+// --- Networking ---
+// Required in every environment, not just Prod (see network.bicep) — Microsoft's
+// internal CloudGov policy set denies public network access on Key Vault/Storage/SQL
+// tenant-wide, so private endpoints + VNet integration aren't a Prod-only hardening
+// step here, they're the only way any of this deploys at all.
+module network 'modules/network.bicep' = {
+  name: 'network'
+  params: {
+    env: env
+    location: location
+  }
+}
+
 // --- Observability ---
 module logAnalytics 'modules/logAnalytics.bicep' = {
   name: 'logAnalytics'
@@ -38,7 +51,8 @@ module keyVault 'modules/keyVault.bicep' = {
     env: env
     location: location
     tenantId: subscription().tenantId
-    publicNetworkAccess: !isProd
+    privateEndpointSubnetId: network.outputs.peSubnetId
+    privateDnsZoneId: network.outputs.keyVaultDnsZoneId
   }
 }
 
@@ -53,6 +67,8 @@ module sql 'modules/sql.bicep' = {
     autoPauseDelayMinutes: isProd ? -1 : 60
     maxVCore: isProd ? 8 : 2
     zoneRedundant: isProd
+    privateEndpointSubnetId: network.outputs.peSubnetId
+    privateDnsZoneId: network.outputs.sqlDnsZoneId
   }
 }
 
@@ -61,7 +77,10 @@ module storage 'modules/storage.bicep' = {
   params: {
     env: env
     location: location
-    publicNetworkAccess: !isProd
+    privateEndpointSubnetId: network.outputs.peSubnetId
+    blobPrivateDnsZoneId: network.outputs.blobDnsZoneId
+    queuePrivateDnsZoneId: network.outputs.queueDnsZoneId
+    tablePrivateDnsZoneId: network.outputs.tableDnsZoneId
   }
 }
 
@@ -87,6 +106,7 @@ module appService 'modules/appService.bicep' = {
     appInsightsConnectionString: appInsights.outputs.connectionString
     serviceBusNamespace: serviceBus.outputs.namespaceName
     deployStagingSlot: isProd
+    vnetIntegrationSubnetId: network.outputs.appSubnetId
   }
 }
 
@@ -100,6 +120,7 @@ module functionApp 'modules/functions.bicep' = {
     appInsightsConnectionString: appInsights.outputs.connectionString
     serviceBusNamespace: serviceBus.outputs.namespaceName
     storageAccountName: storage.outputs.storageAccountName
+    vnetIntegrationSubnetId: network.outputs.funcSubnetId
   }
 }
 
@@ -113,78 +134,50 @@ module staticWebApp 'modules/staticWebApp.bicep' = {
 }
 
 // --- Managed identity → data-plane RBAC (no connection-string secrets anywhere) ---
+// Each grant lives in its own tiny module (keyVaultAccess/storageAccess/serviceBusAccess)
+// rather than as a top-level `existing` resource + roleAssignment here. A roleAssignment's
+// `name` (a guid()) must be resolvable "at the start of the deployment" (BCP120), and a
+// SystemAssigned identity's principalId — read via another module's .outputs — isn't
+// resolvable at that point when referenced directly in this scope. Passing it as a plain
+// string *parameter* into a dedicated module sidesteps the restriction; that module then
+// declares its own `existing` reference to the target resource and does the assignment
+// entirely within its own deployment scope, where the incoming principalId is just an
+// opaque parameter rather than a cross-module output chain.
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var serviceBusDataSenderRoleId = '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39'
 var serviceBusDataReceiverRoleId = '4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0'
 
-resource kvVaultRef 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
-  name: keyVault.outputs.keyVaultName
-}
-resource storageAccountRef 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
-  name: storage.outputs.storageAccountName
-}
-resource serviceBusNamespaceRef 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' existing = {
-  name: serviceBus.outputs.namespaceName
-}
-
-resource apiKeyVaultAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(kvVaultRef.id, appService.outputs.appServicePrincipalId, keyVaultSecretsUserRoleId)
-  scope: kvVaultRef
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
-    principalId: appService.outputs.appServicePrincipalId
-    principalType: 'ServicePrincipal'
+module keyVaultAccess 'modules/keyVaultAccess.bicep' = {
+  name: 'keyVaultAccess'
+  params: {
+    keyVaultName: keyVault.outputs.keyVaultName
+    roleAssignments: [
+      { principalId: appService.outputs.appServicePrincipalId, roleDefinitionId: keyVaultSecretsUserRoleId }
+      { principalId: functionApp.outputs.functionAppPrincipalId, roleDefinitionId: keyVaultSecretsUserRoleId }
+    ]
   }
 }
 
-resource apiStorageAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccountRef.id, appService.outputs.appServicePrincipalId, storageBlobDataContributorRoleId)
-  scope: storageAccountRef
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
-    principalId: appService.outputs.appServicePrincipalId
-    principalType: 'ServicePrincipal'
+module storageAccess 'modules/storageAccess.bicep' = {
+  name: 'storageAccess'
+  params: {
+    storageAccountName: storage.outputs.storageAccountName
+    roleAssignments: [
+      { principalId: appService.outputs.appServicePrincipalId, roleDefinitionId: storageBlobDataContributorRoleId }
+      { principalId: functionApp.outputs.functionAppPrincipalId, roleDefinitionId: storageBlobDataContributorRoleId }
+    ]
   }
 }
 
-resource apiServiceBusSendAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(serviceBusNamespaceRef.id, appService.outputs.appServicePrincipalId, serviceBusDataSenderRoleId)
-  scope: serviceBusNamespaceRef
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', serviceBusDataSenderRoleId)
-    principalId: appService.outputs.appServicePrincipalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource functionsStorageAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccountRef.id, functionApp.outputs.functionAppPrincipalId, storageBlobDataContributorRoleId)
-  scope: storageAccountRef
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
-    principalId: functionApp.outputs.functionAppPrincipalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource functionsServiceBusReceiveAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(serviceBusNamespaceRef.id, functionApp.outputs.functionAppPrincipalId, serviceBusDataReceiverRoleId)
-  scope: serviceBusNamespaceRef
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', serviceBusDataReceiverRoleId)
-    principalId: functionApp.outputs.functionAppPrincipalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource functionsKeyVaultAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(kvVaultRef.id, functionApp.outputs.functionAppPrincipalId, keyVaultSecretsUserRoleId)
-  scope: kvVaultRef
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
-    principalId: functionApp.outputs.functionAppPrincipalId
-    principalType: 'ServicePrincipal'
+module serviceBusAccess 'modules/serviceBusAccess.bicep' = {
+  name: 'serviceBusAccess'
+  params: {
+    serviceBusNamespaceName: serviceBus.outputs.namespaceName
+    roleAssignments: [
+      { principalId: appService.outputs.appServicePrincipalId, roleDefinitionId: serviceBusDataSenderRoleId }
+      { principalId: functionApp.outputs.functionAppPrincipalId, roleDefinitionId: serviceBusDataReceiverRoleId }
+    ]
   }
 }
 

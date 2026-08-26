@@ -10,9 +10,16 @@ param appInsightsConnectionString string
 param serviceBusNamespace string
 param storageAccountName string
 
+@description('Delegated subnet (Microsoft.Web/serverfarms) for regional VNet integration — required to reach SQL/Storage now that they\'re private-endpoint-only')
+param vnetIntegrationSubnetId string
+
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
   name: storageAccountName
 }
+
+// Function App default hostnames are globally unique across all of Azure, not just this
+// subscription — same fix as appService.bicep's uniqueSuffix.
+var uniqueSuffix = substring(uniqueString(subscription().id, resourceGroup().id), 0, 4)
 
 resource functionsPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: 'plan-launchpad-fn-${env}'
@@ -28,7 +35,7 @@ resource functionsPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
 }
 
 resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
-  name: 'func-launchpad-${env}'
+  name: 'func-launchpad-${env}-${uniqueSuffix}'
   location: location
   kind: 'functionapp,linux'
   identity: {
@@ -37,8 +44,12 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   properties: {
     serverFarmId: functionsPlan.id
     httpsOnly: true
+    virtualNetworkSubnetId: vnetIntegrationSubnetId
     siteConfig: {
       linuxFxVersion: 'DOTNET-ISOLATED|9.0'
+      // All outbound traffic routes through the VNet, not just RFC1918 ranges — SQL/Storage
+      // are reachable only via their private endpoints now.
+      vnetRouteAllEnabled: true
       appSettings: [
         { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'dotnet-isolated' }
         { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }

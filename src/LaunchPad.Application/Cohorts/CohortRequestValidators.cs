@@ -11,3 +11,11 @@ public sealed class CreateCohortRequestValidator : AbstractValidator<CreateCohor
             .WithMessage("EndDate must not be before StartDate.");
     }
 }
+
+public sealed class ScheduleReviewsRequestValidator : AbstractValidator<ScheduleReviewsRequest>
+{
+    public ScheduleReviewsRequestValidator()
+    {
+        RuleFor(r => r.DueDate).NotEqual(default(DateOnly)).WithMessage("A due date is required.");
+    }
+}

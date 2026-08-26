@@ -11,14 +11,17 @@ using LaunchPad.Infrastructure.Matching;
 using LaunchPad.Infrastructure.Persistence;
 using LaunchPad.Infrastructure.SharePoint;
 using LaunchPad.Infrastructure.Storage;
+using LaunchPad.Api;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Identity.Web;
 using Serilog;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -69,6 +72,25 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<IAuthorizationHandler, OwnsProjectHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, OwnsCandidateProfileHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, OwnsAssignmentHandler>();
+
+// A lightweight per-user guard against spam/runaway-script posting — not a defense against
+// a determined abuser, just a cheap backstop appropriate for a ~2,000-user internal app. Only
+// applied to Community's post/comment creation (see [EnableRateLimiting] there), never to
+// reads or reactions.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy(RateLimitPolicies.CommunityWrite, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.User.GetObjectId() ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 10,
+                QueueLimit = 0,
+            }));
+});
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
@@ -141,10 +163,12 @@ else
 if (string.IsNullOrWhiteSpace(builder.Configuration["Storage:AccountUrl"]))
 {
     builder.Services.AddSingleton<IProfilePictureStorage, LocalDiskProfilePictureStorage>();
+    builder.Services.AddSingleton<ICommunityImageStorage, LocalDiskCommunityImageStorage>();
 }
 else
 {
     builder.Services.AddSingleton<IProfilePictureStorage, BlobProfilePictureStorage>();
+    builder.Services.AddSingleton<ICommunityImageStorage, BlobCommunityImageStorage>();
 }
 
 builder.Services.AddControllers()
@@ -198,6 +222,7 @@ app.UseCors("Spa");
 app.UseAuthentication();
 app.UseMiddleware<AppUserProvisioningMiddleware>();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 

@@ -15,6 +15,7 @@ import {
   Title1,
   Title3,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import {
@@ -35,6 +36,7 @@ import {
   TaskListSquareLtrRegular,
   WarningRegular,
 } from '@fluentui/react-icons';
+import { useSurfaceStyles } from '../../theme/surfaces';
 import { useApiTokenDiagnostics } from '../../auth/useApiTokenDiagnostics';
 import { useActiveRole } from '../../auth/ActiveRoleContext';
 import { AppRoles, roleLabel, type AppRole } from '../../auth/roles';
@@ -97,7 +99,6 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalXS,
-    cursor: 'pointer',
     textAlign: 'left',
     border: 'none',
     ':hover': {
@@ -137,12 +138,17 @@ interface QuickLink {
 
 function QuickLinkGrid({ links }: { links: QuickLink[] }) {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const navigate = useNavigate();
 
   return (
     <div className={styles.grid}>
       {links.map((link) => (
-        <Card key={link.to} className={styles.linkCard} onClick={() => navigate(link.to)}>
+        <Card
+          key={link.to}
+          className={mergeClasses(styles.linkCard, surfaces.interactive, surfaces.fadeInUp)}
+          onClick={() => navigate(link.to)}
+        >
           <div className={styles.linkCardHeader}>
             <span className={styles.linkIcon} aria-hidden="true">{link.icon}</span>
             {!!link.badge && link.badge > 0 && (
@@ -296,6 +302,7 @@ const roleHomes: Record<AppRole, () => ReactNode> = {
 // rather than one generic banner identical for every role.
 export function RoleAwareHome() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const { accounts } = useMsal();
   const { activeRole } = useActiveRole();
   const { roles, spaIdTokenClaims, apiAccessTokenClaims } = useApiTokenDiagnostics();
@@ -305,13 +312,15 @@ export function RoleAwareHome() {
 
   return (
     <>
-      <div className={styles.banner}>
+      <div className={mergeClasses(styles.banner, surfaces.fadeInUp)}>
         <span className={styles.bannerIcon} aria-hidden="true">
           <RocketRegular />
         </span>
         <div>
-          <Title1 className={styles.bannerTitle}>Welcome to LaunchPad, {firstName}</Title1>
-          <Body1>Use the role switcher in the header to change perspective if you hold more than one role.</Body1>
+          <Title1 block className={styles.bannerTitle}>Welcome to LaunchPad, {firstName}</Title1>
+          <Body1 block style={{ marginTop: tokens.spacingVerticalXS }}>
+            Use the role switcher in the header to change perspective if you hold more than one role.
+          </Body1>
           <div className={styles.roleRow}>
             {roles.length > 0 ? (
               roles.map((role) => (

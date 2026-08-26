@@ -12,11 +12,13 @@ import {
   Switch,
   Title3,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import { SearchRegular, StarFilled, StarRegular } from '@fluentui/react-icons';
 import { getOpenProjects, rateProjectInterest } from '../../api/projects';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 import type { ProjectDto } from '../../api/types';
 
 const useStyles = makeStyles({
@@ -94,6 +96,7 @@ function StarRating({
 // gate. "View details" goes to the full description + Teams contact link.
 export function ProjectMarketplace() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -168,7 +171,7 @@ export function ProjectMarketplace() {
 
       <div className={styles.grid}>
         {filtered.map((project: ProjectDto) => (
-          <Card key={project.projectId} className={styles.card}>
+          <Card key={project.projectId} className={mergeClasses(styles.card, surfaces.card)}>
             <Title3>{project.name}</Title3>
             <Caption1>
               {project.sponsorName} &middot; {project.availabilityNeeded === 'FullTime' ? 'Full-time' : 'Part-time'}

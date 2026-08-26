@@ -1,8 +1,9 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Badge, Body1, Button, Card, Caption1, Spinner, Title2, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Button, Card, Caption1, Spinner, Title2, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { ArrowLeftRegular, ChatRegular, StarFilled, StarRegular } from '@fluentui/react-icons';
 import { getOpenProjectDetail, rateProjectInterest } from '../../api/projects';
+import { useSurfaceStyles } from '../../theme/surfaces';
 
 const useStyles = makeStyles({
   backRow: {
@@ -42,6 +43,7 @@ const useStyles = makeStyles({
 // see ProjectsController.ToDto). No email/phone number is exposed, just the deep link.
 export function ProjectDetail() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const projectId = Number(id);
@@ -70,7 +72,7 @@ export function ProjectDetail() {
       {isError && <Body1>Failed to load project: {(error as Error).message}</Body1>}
 
       {project && (
-        <Card className={styles.card}>
+        <Card className={mergeClasses(styles.card, surfaces.card)}>
           <div>
             <Title2 block>{project.name}</Title2>
             <Caption1 block style={{ marginTop: tokens.spacingVerticalXXS }}>

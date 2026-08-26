@@ -16,5 +16,15 @@ public class ProjectTodo
     public DateOnly? DueDate { get; set; }
     public DateTime? CompletedUtc { get; set; }
 
+    /// <summary>Set together (or both null). When set, this to-do represents an
+    /// Ops-scheduled review obligation rather than an ordinary sponsor-created task —
+    /// see CohortsController.ScheduleReviews. Completion happens automatically when the
+    /// matching Review is submitted (ReviewsController.Submit), never a manual status
+    /// click. Who acts on it is derived, not stored: SponsorOnCandidate is the Sponsor's
+    /// to act on, CandidateOnSponsor/ProjectEval (or null, the ordinary case) are the
+    /// Candidate's.</summary>
+    public ReviewType? LinkedReviewType { get; set; }
+    public Checkpoint? LinkedReviewCheckpoint { get; set; }
+
     public Assignment Assignment { get; set; } = null!;
 }

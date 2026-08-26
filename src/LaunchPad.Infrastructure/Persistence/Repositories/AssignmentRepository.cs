@@ -65,6 +65,29 @@ public sealed class AssignmentRepository : IAssignmentRepository
         return todo;
     }
 
+    public Task<ProjectTodo?> GetLinkedReviewTodoAsync(
+        int assignmentId, ReviewType reviewType, Checkpoint checkpoint, CancellationToken ct = default) =>
+        _db.ProjectTodos.FirstOrDefaultAsync(t =>
+            t.AssignmentId == assignmentId && t.LinkedReviewType == reviewType && t.LinkedReviewCheckpoint == checkpoint, ct);
+
+    public async Task<IReadOnlyList<Assignment>> GetActiveByCohortAsync(int cohortId, CancellationToken ct = default) =>
+        await _db.Assignments
+            .Include(a => a.Candidate).ThenInclude(c => c.AppUser)
+            .Include(a => a.Project).ThenInclude(p => p.Sponsor).ThenInclude(s => s.AppUser)
+            .Where(a => a.Status == AssignmentStatus.Active && a.Project.CohortId == cohortId)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlySet<(int AssignmentId, ReviewType ReviewType)>> GetLinkedReviewTodoKeysAsync(
+        IReadOnlyList<int> assignmentIds, Checkpoint checkpoint, CancellationToken ct = default)
+    {
+        var rows = await _db.ProjectTodos
+            .Where(t => assignmentIds.Contains(t.AssignmentId) && t.LinkedReviewType != null && t.LinkedReviewCheckpoint == checkpoint)
+            .Select(t => new { t.AssignmentId, ReviewType = t.LinkedReviewType!.Value })
+            .ToListAsync(ct);
+
+        return rows.Select(r => (r.AssignmentId, r.ReviewType)).ToHashSet();
+    }
+
     public async Task<IReadOnlyList<Deliverable>> GetDeliverablesAsync(int assignmentId, CancellationToken ct = default) =>
         await _db.Deliverables
             .Include(d => d.ProjectTodo)

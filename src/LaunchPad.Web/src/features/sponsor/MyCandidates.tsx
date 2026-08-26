@@ -1,10 +1,11 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Body1, Button, Card, Caption1, Spinner, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Button, Card, Caption1, Spinner, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { FolderRegular } from '@fluentui/react-icons';
 import { getMyCandidates } from '../../api/sponsors';
 import { CandidateAvatar } from '../../components/CandidateAvatar';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 
 const useStyles = makeStyles({
   grid: {
@@ -30,6 +31,7 @@ const useStyles = makeStyles({
 // the jumping-off point for submitting midpoint/final reviews.
 export function MyCandidates() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const navigate = useNavigate();
 
   const { data: candidates, isLoading, isError, error } = useQuery({
@@ -47,7 +49,7 @@ export function MyCandidates() {
 
       <div className={styles.grid}>
         {candidates?.map((candidate) => (
-          <Card key={candidate.assignmentId} className={styles.card}>
+          <Card key={candidate.assignmentId} className={mergeClasses(styles.card, surfaces.card)}>
             <div className={styles.cardHeader}>
               <CandidateAvatar candidateId={candidate.candidateId} name={candidate.candidateName} />
               <Body1>

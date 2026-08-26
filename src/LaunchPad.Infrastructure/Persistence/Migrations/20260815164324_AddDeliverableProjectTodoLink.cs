@@ -27,7 +27,7 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                 column: "ProjectTodoId",
                 principalTable: "ProjectTodo",
                 principalColumn: "ProjectTodoId",
-                onDelete: ReferentialAction.SetNull);
+                onDelete: ReferentialAction.NoAction);
         }
 
         /// <inheritdoc />

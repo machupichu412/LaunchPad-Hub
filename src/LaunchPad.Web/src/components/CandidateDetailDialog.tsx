@@ -13,6 +13,7 @@ import {
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
+import { CheckmarkRegular, DismissRegular } from '@fluentui/react-icons';
 import { CandidateAvatar } from './CandidateAvatar';
 import { availabilityLabel } from '../utils/statusLabels';
 import type { SponsorCandidateMatchDto } from '../api/types';
@@ -39,6 +40,11 @@ const useStyles = makeStyles({
  * The "baseball card" detail view — bio/school/degree/GPA/skills/availability/interest.
  * Never a hidden performance score or risk flag: SponsorCandidateMatchDto structurally
  * can't carry those fields, so there's nothing to filter out here (see CLAUDE.md).
+ *
+ * A candidate with a non-null proposedAssignmentId already has a Program-Ops-batch-matched
+ * Assignment (Status = Proposed) on this project, so the footer offers Recommend/Reject
+ * against that existing Assignment instead of "Request assignment" — issuing a fresh request
+ * would create a second, duplicate Assignment row for the same candidate+project pair.
  */
 export function CandidateDetailDialog({
   candidate,
@@ -46,14 +52,23 @@ export function CandidateDetailDialog({
   onClose,
   onRequest,
   isRequesting,
+  onRecommend,
+  onReject,
+  isRecommending,
+  isRejecting,
 }: {
   candidate: SponsorCandidateMatchDto | null;
   spotsRemaining: number;
   onClose: () => void;
   onRequest: (candidate: SponsorCandidateMatchDto) => void;
   isRequesting: boolean;
+  onRecommend: (candidate: SponsorCandidateMatchDto) => void;
+  onReject: (candidate: SponsorCandidateMatchDto) => void;
+  isRecommending: boolean;
+  isRejecting: boolean;
 }) {
   const styles = useStyles();
+  const isMatched = candidate?.proposedAssignmentId != null;
 
   return (
     <Dialog open={candidate !== null} onOpenChange={(_, data) => !data.open && onClose()}>
@@ -79,8 +94,17 @@ export function CandidateDetailDialog({
                 </Badge>
               </div>
 
+              {isMatched && (
+                <Badge appearance="tint" color="success" style={{ marginTop: tokens.spacingVerticalS }}>
+                  Matched by Program Ops
+                </Badge>
+              )}
               {candidate.hasPendingAssignmentElsewhere && (
-                <Badge appearance="tint" color="warning" style={{ marginTop: tokens.spacingVerticalS }}>
+                <Badge
+                  appearance="tint"
+                  color="warning"
+                  style={{ marginTop: tokens.spacingVerticalS, marginLeft: tokens.spacingHorizontalXS }}
+                >
                   Pending on another project
                 </Badge>
               )}
@@ -113,13 +137,33 @@ export function CandidateDetailDialog({
               <Button appearance="secondary" onClick={onClose}>
                 Close
               </Button>
-              <Button
-                appearance="primary"
-                disabled={spotsRemaining <= 0 || isRequesting}
-                onClick={() => onRequest(candidate)}
-              >
-                {spotsRemaining <= 0 ? 'No spots remaining' : 'Request assignment'}
-              </Button>
+              {isMatched ? (
+                <>
+                  <Button
+                    icon={<DismissRegular />}
+                    disabled={isRecommending || isRejecting}
+                    onClick={() => onReject(candidate)}
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    appearance="primary"
+                    icon={<CheckmarkRegular />}
+                    disabled={isRecommending || isRejecting}
+                    onClick={() => onRecommend(candidate)}
+                  >
+                    Recommend
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  appearance="primary"
+                  disabled={spotsRemaining <= 0 || isRequesting}
+                  onClick={() => onRequest(candidate)}
+                >
+                  {spotsRemaining <= 0 ? 'No spots remaining' : 'Request assignment'}
+                </Button>
+              )}
             </DialogActions>
           </DialogBody>
         )}

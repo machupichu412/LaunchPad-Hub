@@ -1,5 +1,5 @@
 import { authedFetch } from './authedFetch';
-import type { CohortDto, CohortStatus, CreateCohortRequest } from './types';
+import type { CohortDto, CohortStatus, CreateCohortRequest, ScheduleReviewsRequest, ScheduleReviewsResult } from './types';
 
 export async function getCohorts(): Promise<CohortDto[]> {
   const response = await authedFetch('/api/cohorts');
@@ -17,4 +17,13 @@ export async function updateCohortStatus(cohortId: number, status: CohortStatus)
   const response = await authedFetch(`/api/cohorts/${cohortId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
   if (!response.ok) throw new Error(`Failed to update cohort status: ${response.status}`);
   return response.json() as Promise<CohortDto>;
+}
+
+export async function scheduleReviews(cohortId: number, request: ScheduleReviewsRequest): Promise<ScheduleReviewsResult> {
+  const response = await authedFetch(`/api/cohorts/${cohortId}/schedule-reviews`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) throw new Error(`Failed to schedule reviews: ${response.status}`);
+  return response.json() as Promise<ScheduleReviewsResult>;
 }

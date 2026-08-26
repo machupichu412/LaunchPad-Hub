@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { apiRequest } from './msalConfig';
+import { isMockMode } from '../dev/mockMode';
+import { AppRoles } from './roles';
 
 export type ApiTokenClaims = {
   roles?: string[];
@@ -42,12 +44,18 @@ export type ApiAccessTokenState = {
  * The SPA's ID token does NOT carry a reliable roles claim for group-based
  * assignments at scale — see the group-membership overage note in CLAUDE.md.
  */
+// Mock mode (see dev/mockMode.ts): every role at once, so the header's role
+// switcher and every RequireRole-gated route can be reviewed in one session
+// without a real Entra token. Stripped from production builds.
+const MOCK_CLAIMS: ApiTokenClaims = { roles: Object.values(AppRoles) };
+
 export function useApiAccessTokenClaims(): ApiAccessTokenState {
   const { instance, accounts } = useMsal();
-  const [claims, setClaims] = useState<ApiTokenClaims | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [claims, setClaims] = useState<ApiTokenClaims | null>(isMockMode ? MOCK_CLAIMS : null);
+  const [isLoading, setIsLoading] = useState(!isMockMode);
 
   useEffect(() => {
+    if (isMockMode) return;
     const account = accounts[0];
     if (!account) {
       setClaims(null);

@@ -1,9 +1,10 @@
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Badge, Body1, Button, Card, Caption1, Spinner, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Button, Card, Caption1, Spinner, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { CheckmarkRegular, DismissRegular } from '@fluentui/react-icons';
 import { getProjectMatches, recommendMatch, rejectMatch } from '../../api/matches';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 
 const useStyles = makeStyles({
   card: {
@@ -27,6 +28,7 @@ const useStyles = makeStyles({
 // approves from there.
 export function ProjectMatches() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const { id } = useParams<{ id: string }>();
   const projectId = Number(id);
   const queryClient = useQueryClient();
@@ -62,7 +64,7 @@ export function ProjectMatches() {
 
       <div style={{ marginTop: tokens.spacingVerticalM }}>
         {matches?.map((match) => (
-          <Card key={match.assignmentId} className={styles.card}>
+          <Card key={match.assignmentId} className={mergeClasses(styles.card, surfaces.card)}>
             <div>
               <Body1>
                 <strong>{match.candidateName}</strong>

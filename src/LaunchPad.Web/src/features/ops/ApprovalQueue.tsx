@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Badge, Body1, Button, Card, Caption1, Spinner, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Button, Card, Caption1, Spinner, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { ArrowSyncRegular, CheckmarkRegular, DismissRegular } from '@fluentui/react-icons';
 import { approveMatch, denyMatch, getMatchingQueue, runMatching } from '../../api/matching';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 
 // Demo-only: same single-cohort simplification used elsewhere until real cohort
 // selection exists.
@@ -31,6 +32,7 @@ const useStyles = makeStyles({
 // rather than running inline — see MatchingController.Run.
 export function ApprovalQueue() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const queryClient = useQueryClient();
 
   const { data: queue, isLoading, isError, error } = useQuery({
@@ -71,7 +73,7 @@ export function ApprovalQueue() {
       {queue && queue.length === 0 && <Body1>Nothing pending — try "Run matching" to generate new proposals.</Body1>}
 
       {queue?.map((pending) => (
-        <Card key={pending.assignmentId} className={styles.card}>
+        <Card key={pending.assignmentId} className={mergeClasses(styles.card, surfaces.card)}>
           <div>
             <Body1>
               <strong>{pending.candidateName}</strong> → {pending.projectName}

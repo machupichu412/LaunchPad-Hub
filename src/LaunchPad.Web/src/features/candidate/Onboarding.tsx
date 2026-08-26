@@ -14,12 +14,14 @@ import {
   Textarea,
   Title3,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import { createMyCandidateProfile, getMyCandidateProfile } from '../../api/candidates';
 import { AvatarEditorDialog } from '../../components/AvatarEditorDialog';
 import { PageHeader } from '../../components/PageHeader';
 import { useMyAvatarUrl } from '../../auth/useMyAvatarUrl';
+import { useSurfaceStyles } from '../../theme/surfaces';
 import { SkillPicker } from './SkillPicker';
 import type { Availability } from '../../api/types';
 
@@ -47,6 +49,7 @@ const useStyles = makeStyles({
 // sections rather than a multi-step wizard, per the goal of keeping this simple.
 export function Onboarding() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -98,7 +101,7 @@ export function Onboarding() {
         subtitle="Let's set up your profile so sponsors and Program Ops can start matching you to projects."
       />
 
-      <Card className={styles.section}>
+      <Card className={mergeClasses(styles.section, surfaces.card)}>
         <Title3>About you</Title3>
         <div className={styles.photoRow} style={{ marginTop: tokens.spacingVerticalS }}>
           <AvatarEditorDialog
@@ -148,7 +151,7 @@ export function Onboarding() {
         </div>
       </Card>
 
-      <Card className={styles.section}>
+      <Card className={mergeClasses(styles.section, surfaces.card)}>
         <Title3>Your skills</Title3>
         <Body1>Pick the skills you have — sponsors and the matching engine use these to find you good-fit projects.</Body1>
         <div style={{ marginTop: tokens.spacingVerticalM }}>

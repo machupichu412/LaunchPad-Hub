@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Body1, Title2, makeStyles, tokens } from '@fluentui/react-components';
+import { Body1, Title1, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
+import { useSurfaceStyles } from '../theme/surfaces';
 
 const useStyles = makeStyles({
   root: {
@@ -7,19 +8,25 @@ const useStyles = makeStyles({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: tokens.spacingHorizontalL,
-    marginBottom: tokens.spacingVerticalL,
+    // Section rhythm: deliberately larger than the intra-card gaps used inside
+    // page content below it — see theme/surfaces.ts's doc comment on the two
+    // spacing registers this app uses.
+    marginBottom: tokens.spacingVerticalXXL,
   },
   text: {
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalXS,
   },
+  title: {
+    letterSpacing: '-0.01em',
+  },
   actions: {
     display: 'flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalS,
     flexShrink: 0,
-    paddingTop: tokens.spacingVerticalXXS,
+    paddingTop: tokens.spacingVerticalXS,
   },
 });
 
@@ -41,10 +48,13 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   return (
-    <div className={styles.root}>
+    <div className={mergeClasses(styles.root, surfaces.fadeInUp)}>
       <div className={styles.text}>
-        <Title2 block>{title}</Title2>
+        <Title1 block className={styles.title}>
+          {title}
+        </Title1>
         {subtitle && <Body1 block>{subtitle}</Body1>}
       </div>
       {actions && <div className={styles.actions}>{actions}</div>}

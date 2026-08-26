@@ -9,10 +9,29 @@ set -euo pipefail
 # database is (see scripts/setup-entra.sh). For a real local SQL Server
 # instead of in-memory, see scripts/run-local-full.sh.
 #
-# Usage: ./scripts/run-local-demo.sh
+# If src/LaunchPad.Web/.env.local has VITE_MOCK_MODE=true (the design-review
+# auth bypass — see src/LaunchPad.Web/src/dev/mockMode.ts), it applies to
+# every `vite` invocation in that directory, including this script's, and the
+# frontend will boot straight into mock/fixture data instead of the real
+# Entra sign-in this script otherwise expects. Pass --real-auth to force the
+# real Entra ID frontend for this run regardless of that file.
+#
+# Usage: ./scripts/run-local-demo.sh [--real-auth]
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+
+real_auth=false
+for arg in "$@"; do
+  case "$arg" in
+    --real-auth) real_auth=true ;;
+    *)
+      echo "Unknown option: $arg" >&2
+      echo "Usage: $0 [--real-auth]" >&2
+      exit 1
+      ;;
+  esac
+done
 
 api_port=5254
 web_port=5173
@@ -61,6 +80,18 @@ if [[ ! -d "src/LaunchPad.Web/node_modules" ]]; then
   npm --prefix src/LaunchPad.Web install
 fi
 
+if [[ "$real_auth" == true ]]; then
+  # Vite gives process.env-provided VITE_-prefixed vars precedence over any
+  # .env* file, so this wins over VITE_MOCK_MODE=true in .env.local without
+  # needing to touch that file.
+  export VITE_MOCK_MODE=false
+elif grep -qs '^VITE_MOCK_MODE=true' src/LaunchPad.Web/.env.local 2>/dev/null; then
+  echo "Note: src/LaunchPad.Web/.env.local has VITE_MOCK_MODE=true — the frontend" >&2
+  echo "will start in mock/design-review mode, not real Entra ID sign-in." >&2
+  echo "Rerun with --real-auth to sign in for real against this API." >&2
+  echo >&2
+fi
+
 cleanup() {
   echo
   echo "Stopping local demo..."
@@ -97,9 +128,26 @@ LaunchPad local demo is running:
   API:      http://localhost:${api_port}/swagger
 
 This runs against an in-memory, pre-seeded database — no SQL Server needed.
-Signing in still requires a real Entra ID tenant with your account in a
-SG-LaunchPad-* group (see scripts/setup-entra.sh). Press Ctrl+C to stop both
-processes.
 EOF
+
+if [[ "$real_auth" == true ]]; then
+  cat <<EOF
+Frontend forced to real Entra ID sign-in (--real-auth) — requires a real
+Entra ID tenant with your account in a SG-LaunchPad-* group (see
+scripts/setup-entra.sh).
+EOF
+elif grep -qs '^VITE_MOCK_MODE=true' src/LaunchPad.Web/.env.local 2>/dev/null; then
+  cat <<EOF
+Frontend is in MOCK MODE (src/LaunchPad.Web/.env.local) — no real sign-in,
+synthetic fixture data only. Rerun with --real-auth for real Entra ID sign-in.
+EOF
+else
+  cat <<EOF
+Signing in still requires a real Entra ID tenant with your account in a
+SG-LaunchPad-* group (see scripts/setup-entra.sh).
+EOF
+fi
+
+echo "Press Ctrl+C to stop both processes."
 
 wait

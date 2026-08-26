@@ -12,10 +12,13 @@ import {
   Textarea,
   Title3,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import { getMyCandidateProfile, updateMyCandidateProfile } from '../../api/candidates';
 import { PageHeader } from '../../components/PageHeader';
+import { SkillTagPicker } from '../../components/SkillTagPicker';
+import { useSurfaceStyles } from '../../theme/surfaces';
 import type { Availability } from '../../api/types';
 
 const useStyles = makeStyles({
@@ -48,6 +51,7 @@ const useStyles = makeStyles({
 // out of scope, same as before this rewrite.
 export function MyProfile() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const queryClient = useQueryClient();
   const { data: profile, isLoading, isError, error } = useQuery({
     queryKey: ['candidates', 'me'],
@@ -56,7 +60,7 @@ export function MyProfile() {
 
   const [location, setLocation] = useState('');
   const [availability, setAvailability] = useState<Availability>('PartTime');
-  const [skillsInput, setSkillsInput] = useState('');
+  const [skillNames, setSkillNames] = useState<string[]>([]);
   const [linkedInUrl, setLinkedInUrl] = useState('');
   const [portfolioUrl, setPortfolioUrl] = useState('');
   const [bio, setBio] = useState('');
@@ -68,7 +72,7 @@ export function MyProfile() {
     if (!profile) return;
     setLocation(profile.location ?? '');
     setAvailability(profile.availability);
-    setSkillsInput(profile.skills.join(', '));
+    setSkillNames(profile.skills);
     setLinkedInUrl(profile.linkedInUrl ?? '');
     setPortfolioUrl(profile.portfolioUrl ?? '');
     setBio(profile.bio ?? '');
@@ -89,10 +93,7 @@ export function MyProfile() {
         school: school.trim().length > 0 ? school.trim() : null,
         degree: degree.trim().length > 0 ? degree.trim() : null,
         gpa: gpa.trim().length > 0 ? Number(gpa) : null,
-        skillNames: skillsInput
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0),
+        skillNames,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['candidates', 'me'] }),
   });
@@ -106,7 +107,7 @@ export function MyProfile() {
       <PageHeader title="My Profile" />
 
       <div className={styles.layout}>
-        <Card className={styles.summaryCard}>
+        <Card className={mergeClasses(styles.summaryCard, surfaces.card)}>
           <Avatar name={profile.displayName} size={72} />
           <Title3>{profile.displayName}</Title3>
           {profile.email && <Body1>{profile.email}</Body1>}
@@ -114,7 +115,7 @@ export function MyProfile() {
         </Card>
 
         <div>
-          <Card className={styles.section}>
+          <Card className={mergeClasses(styles.section, surfaces.card)}>
             <Title3>Basic Info</Title3>
             <Field label="Bio" style={{ marginTop: tokens.spacingVerticalS }}>
               <Textarea value={bio} onChange={(_, data) => setBio(data.value)} resize="vertical" />
@@ -138,7 +139,7 @@ export function MyProfile() {
             </div>
           </Card>
 
-          <Card className={styles.section}>
+          <Card className={mergeClasses(styles.section, surfaces.card)}>
             <Title3>Education</Title3>
             <div className={styles.fieldGrid} style={{ marginTop: tokens.spacingVerticalS }}>
               <Field label="School">
@@ -153,10 +154,10 @@ export function MyProfile() {
             </div>
           </Card>
 
-          <Card className={styles.section}>
+          <Card className={mergeClasses(styles.section, surfaces.card)}>
             <Title3>Skills</Title3>
-            <Field label="Skills (comma-separated)" style={{ marginTop: tokens.spacingVerticalS }}>
-              <Input value={skillsInput} onChange={(_, data) => setSkillsInput(data.value)} />
+            <Field label="Skills" style={{ marginTop: tokens.spacingVerticalS }}>
+              <SkillTagPicker selectedNames={skillNames} onChange={setSkillNames} allowCreate />
             </Field>
           </Card>
 

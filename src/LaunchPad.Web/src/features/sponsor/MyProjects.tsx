@@ -115,27 +115,30 @@ export function MyProjects() {
                 </TableCell>
                 <TableCell>{projectStatusLabel(project.status)}</TableCell>
                 <TableCell>
-                  {(project.approvalStatus === 'Draft' || project.approvalStatus === 'Rejected') && (
-                    <Button
-                      size="small"
-                      appearance="primary"
-                      disabled={submitMutation.isPending}
-                      onClick={() => submitMutation.mutate(project.projectId)}
-                      style={{ marginRight: tokens.spacingHorizontalXS }}
-                    >
-                      Submit for approval
-                    </Button>
-                  )}
-                  <Button
-                    size="small"
-                    onClick={() => navigate(`/projects/${project.projectId}/edit`)}
-                    style={{ marginRight: tokens.spacingHorizontalXS }}
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: tokens.spacingHorizontalXS,
+                    }}
                   >
-                    Edit
-                  </Button>
-                  <Button size="small" onClick={() => navigate(`/projects/${project.projectId}/matches`)}>
-                    Review matches
-                  </Button>
+                    {(project.approvalStatus === 'Draft' || project.approvalStatus === 'Rejected') && (
+                      <Button
+                        size="small"
+                        appearance="primary"
+                        disabled={submitMutation.isPending}
+                        onClick={() => submitMutation.mutate(project.projectId)}
+                      >
+                        Submit for approval
+                      </Button>
+                    )}
+                    <Button size="small" onClick={() => navigate(`/projects/${project.projectId}/edit`)}>
+                      Edit
+                    </Button>
+                    <Button size="small" onClick={() => navigate(`/projects/${project.projectId}/matches`)}>
+                      Review matches
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

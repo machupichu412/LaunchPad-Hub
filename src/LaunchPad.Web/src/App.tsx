@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { FluentProvider } from '@fluentui/react-components';
 import { AuthenticatedTemplate, UnauthenticatedTemplate } from '@azure/msal-react';
 import { AppShell } from './components/AppShell';
 import { SignInPrompt } from './components/SignInPrompt';
+import { isMockMode } from './dev/mockMode';
 import { RequireRole } from './auth/RequireRole';
 import { RequireCandidateProfile } from './auth/RequireCandidateProfile';
 import { RequireSponsorProfile } from './auth/RequireSponsorProfile';
@@ -18,6 +20,7 @@ import { OpsProjects } from './features/ops/OpsProjects';
 import { ProjectApprovals } from './features/ops/ProjectApprovals';
 import { Cohorts } from './features/ops/Cohorts';
 import { Risks } from './features/ops/Risks';
+import { SkillsManagement } from './features/ops/SkillsManagement';
 import { ExecutiveDashboard } from './features/exec/ExecutiveDashboard';
 import { CandidateDashboard } from './features/candidate/CandidateDashboard';
 import { MyProfile } from './features/candidate/MyProfile';
@@ -50,7 +53,7 @@ function AppContent() {
 
   return (
     <FluentProvider theme={theme}>
-      <AuthenticatedTemplate>
+      <AuthGate>
         <ActiveRoleProvider>
           <BrowserRouter>
             <AppShell>
@@ -122,6 +125,14 @@ function AppContent() {
                   element={
                     <RequireRole allow={[AppRoles.ProgramOps]}>
                       <Risks />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/ops/skills"
+                  element={
+                    <RequireRole allow={[AppRoles.ProgramOps]}>
+                      <SkillsManagement />
                     </RequireRole>
                   }
                 />
@@ -212,7 +223,7 @@ function AppContent() {
                 <Route
                   path="/community"
                   element={
-                    <RequireRole allow={[AppRoles.Candidate, AppRoles.ProgramOps]}>
+                    <RequireRole allow={[AppRoles.Candidate, AppRoles.ProgramOps, AppRoles.Sponsor]}>
                       <Community />
                     </RequireRole>
                   }
@@ -305,14 +316,42 @@ function AppContent() {
                     </RequireRole>
                   }
                 />
+                {/* Generalized review submission — reached from an Ops-scheduled review
+                    to-do's "Submit review" link on either Tasks.tsx (Candidate) or
+                    ManageTodos.tsx (Sponsor). No profile-gate wrapper here, unlike the
+                    role-specific routes above — RequireSponsorProfile/RequireCandidateProfile
+                    would incorrectly block whichever role they don't target. */}
+                <Route
+                  path="/reviews/submit/:assignmentId/:reviewType/:checkpoint"
+                  element={
+                    <RequireRole allow={[AppRoles.Sponsor, AppRoles.Candidate]}>
+                      <SubmitReview />
+                    </RequireRole>
+                  }
+                />
               </Routes>
             </AppShell>
           </BrowserRouter>
         </ActiveRoleProvider>
-      </AuthenticatedTemplate>
+      </AuthGate>
+    </FluentProvider>
+  );
+}
+
+/**
+ * Skips MSAL's real sign-in check in mock mode (see dev/mockMode.ts) — nothing
+ * downstream needs a real account: useApiAccessTokenClaims already returns every
+ * role synthetically, and authedFetch never leaves the browser. This branch is
+ * stripped from production builds. The real (non-mock) path is unchanged.
+ */
+function AuthGate({ children }: { children: ReactNode }) {
+  if (isMockMode) return <>{children}</>;
+  return (
+    <>
+      <AuthenticatedTemplate>{children}</AuthenticatedTemplate>
       <UnauthenticatedTemplate>
         <SignInPrompt />
       </UnauthenticatedTemplate>
-    </FluentProvider>
+    </>
   );
 }

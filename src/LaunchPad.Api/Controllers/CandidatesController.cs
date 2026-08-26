@@ -116,6 +116,28 @@ public class CandidatesController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<CandidateDto>>> GetByCohort(int cohortId, CancellationToken ct)
     {
         var candidates = await _candidates.GetByCohortAsync(cohortId, ct);
+        return Ok(await ToDtosAsync(candidates, ct));
+    }
+
+    /// <summary>Additive multi-cohort filter for the Talent Pipeline — an empty/missing
+    /// cohortIds query param means every cohort ("All cohorts" in the UI).</summary>
+    [HttpGet]
+    [Authorize(Policy = Policies.ViewTalentPipeline)]
+    public async Task<ActionResult<IReadOnlyList<CandidateDto>>> Get([FromQuery] string? cohortIds, CancellationToken ct)
+    {
+        var ids = (cohortIds ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var id) ? id : (int?)null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToList();
+
+        var candidates = await _candidates.GetByCohortsAsync(ids, ct);
+        return Ok(await ToDtosAsync(candidates, ct));
+    }
+
+    private async Task<List<CandidateDto>> ToDtosAsync(IReadOnlyList<Candidate> candidates, CancellationToken ct)
+    {
         var dtos = new List<CandidateDto>(candidates.Count);
         foreach (var candidate in candidates)
         {
@@ -124,7 +146,7 @@ public class CandidatesController : ControllerBase
             dtos.Add(_mapper.ToDto(candidate, risk, suggestion, User));
         }
 
-        return Ok(dtos);
+        return dtos;
     }
 
     /// <summary>

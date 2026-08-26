@@ -1,12 +1,27 @@
 import { InteractionRequiredAuthError } from '@azure/msal-browser';
 import { apiRequest } from '../auth/msalConfig';
 import { msalInstance } from '../auth/msalInstance';
+import { isMockMode } from '../dev/mockMode';
+import { resolveMock } from '../dev/mockApi';
 
 /**
  * The single place a bearer token is acquired — no call site should acquire tokens
  * itself. See launchpad-build-guide.md §7.2.
  */
 export async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  // Mock mode (see dev/mockMode.ts): resolved entirely in-memory, before token
+  // acquisition or the real fetch() call are ever reached — no request leaves the
+  // browser. This branch does not exist in a production build.
+  if (isMockMode) {
+    const method = init.method ?? 'GET';
+    const bodyForMock = typeof init.body === 'string' ? safeJsonParse(init.body) : undefined;
+    const { status, body } = await resolveMock(method, input, bodyForMock);
+    return new Response(body === null || body === undefined ? null : JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   // Falls back to the first cached account if none is explicitly "active" yet —
   // see the race explained in msalInstance.ts's initializeMsal.
   const account = msalInstance.getActiveAccount() ?? msalInstance.getAllAccounts()[0];
@@ -60,4 +75,12 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   }
 
   return response;
+}
+
+function safeJsonParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }

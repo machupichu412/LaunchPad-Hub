@@ -29,6 +29,8 @@ public class LaunchPadDbContext : DbContext
     public DbSet<CommunityPost> CommunityPosts => Set<CommunityPost>();
     public DbSet<CommunityComment> CommunityComments => Set<CommunityComment>();
     public DbSet<CommunityPostReaction> CommunityPostReactions => Set<CommunityPostReaction>();
+    public DbSet<Hashtag> Hashtags => Set<Hashtag>();
+    public DbSet<CommunityPostHashtag> CommunityPostHashtags => Set<CommunityPostHashtag>();
 
     // Keyless read model backed by the dbo.vCandidateRisk view — never write through this.
     public DbSet<CandidateRisk> CandidateRisks => Set<CandidateRisk>();

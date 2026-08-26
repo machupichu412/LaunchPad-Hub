@@ -340,6 +340,10 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.Property<int>("AuthorAppUserId")
                         .HasColumnType("int");
 
+                    b.Property<string>("AuthorRoleLabel")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("Body")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -380,8 +384,26 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<int>("CommentCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<DateTime>("CreatedUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("ImageBlobPath")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("ImageContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("LikeCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("PostType")
                         .HasColumnType("int");
@@ -390,9 +412,25 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AuthorAppUserId");
 
-                    b.HasIndex("CreatedUtc");
+                    b.HasIndex("CreatedUtc", "CommunityPostId")
+                        .IsDescending();
 
                     b.ToTable("CommunityPost", (string)null);
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.CommunityPostHashtag", b =>
+                {
+                    b.Property<int>("CommunityPostId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("HashtagId")
+                        .HasColumnType("int");
+
+                    b.HasKey("CommunityPostId", "HashtagId");
+
+                    b.HasIndex("HashtagId", "CommunityPostId");
+
+                    b.ToTable("CommunityPostHashtag", (string)null);
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.CommunityPostReaction", b =>
@@ -454,6 +492,27 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.HasIndex("ProjectTodoId");
 
                     b.ToTable("Deliverable", (string)null);
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.Hashtag", b =>
+                {
+                    b.Property<int>("HashtagId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("HashtagId"));
+
+                    b.Property<string>("Tag")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("HashtagId");
+
+                    b.HasIndex("Tag")
+                        .IsUnique();
+
+                    b.ToTable("Hashtag", (string)null);
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.Notification", b =>
@@ -653,6 +712,12 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
 
+                    b.Property<int?>("LinkedReviewCheckpoint")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LinkedReviewType")
+                        .HasColumnType("int");
+
                     b.Property<int>("Priority")
                         .HasColumnType("int");
 
@@ -666,7 +731,10 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
 
                     b.HasKey("ProjectTodoId");
 
-                    b.HasIndex("AssignmentId");
+                    b.HasIndex("AssignmentId", "LinkedReviewType", "LinkedReviewCheckpoint")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ProjectTodo_LinkedReview_Once")
+                        .HasFilter("[LinkedReviewType] IS NOT NULL");
 
                     b.ToTable("ProjectTodo", (string)null);
                 });
@@ -910,6 +978,25 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.Navigation("Author");
                 });
 
+            modelBuilder.Entity("LaunchPad.Domain.Entities.CommunityPostHashtag", b =>
+                {
+                    b.HasOne("LaunchPad.Domain.Entities.CommunityPost", "Post")
+                        .WithMany("PostHashtags")
+                        .HasForeignKey("CommunityPostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LaunchPad.Domain.Entities.Hashtag", "Hashtag")
+                        .WithMany("PostHashtags")
+                        .HasForeignKey("HashtagId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Hashtag");
+
+                    b.Navigation("Post");
+                });
+
             modelBuilder.Entity("LaunchPad.Domain.Entities.CommunityPostReaction", b =>
                 {
                     b.HasOne("LaunchPad.Domain.Entities.AppUser", "AppUser")
@@ -940,7 +1027,7 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.HasOne("LaunchPad.Domain.Entities.ProjectTodo", "ProjectTodo")
                         .WithMany()
                         .HasForeignKey("ProjectTodoId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.ClientSetNull);
 
                     b.Navigation("Assignment");
 
@@ -1086,7 +1173,14 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("Comments");
 
+                    b.Navigation("PostHashtags");
+
                     b.Navigation("Reactions");
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.Hashtag", b =>
+                {
+                    b.Navigation("PostHashtags");
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.Program", b =>

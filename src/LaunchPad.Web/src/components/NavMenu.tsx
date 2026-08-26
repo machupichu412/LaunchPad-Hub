@@ -17,6 +17,7 @@ import {
   PeopleTeamRegular,
   PersonRegular,
   ShoppingBagRegular,
+  TagRegular,
   TaskListSquareLtrRegular,
   WarningRegular,
 } from '@fluentui/react-icons';
@@ -49,6 +50,12 @@ const useStyles = makeStyles({
     ':hover': {
       backgroundColor: tokens.colorSubtleBackgroundHover,
       color: tokens.colorNeutralForeground2Hover,
+    },
+    ':focus-visible': {
+      outlineStyle: 'solid',
+      outlineWidth: '2px',
+      outlineColor: tokens.colorBrandStroke1,
+      outlineOffset: '2px',
     },
   },
   itemSelected: {
@@ -146,6 +153,7 @@ export function NavMenu() {
           <NavLink to="/projects" icon={<FolderRegular />}>My Projects</NavLink>
           <NavLink to="/candidates" icon={<PeopleRegular />}>My Candidates</NavLink>
           <NavLink to="/pipeline" icon={<PeopleTeamRegular />}>Talent Pipeline</NavLink>
+          <NavLink to="/community" icon={<PeopleCommunityRegular />}>Community</NavLink>
         </>
       )}
 
@@ -154,9 +162,10 @@ export function NavMenu() {
           <NavLink to="/ops/dashboard" icon={<GridRegular />}>Dashboard</NavLink>
           <NavLink to="/ops/projects" icon={<FolderRegular />}>Projects</NavLink>
           <NavLink to="/ops/project-approvals" icon={<ClipboardTaskRegular />}>Project Approvals</NavLink>
-          <NavLink to="/ops/approvals" icon={<CheckmarkCircleRegular />}>Approvals</NavLink>
+          <NavLink to="/ops/approvals" icon={<CheckmarkCircleRegular />}>Assignment Approvals</NavLink>
           <NavLink to="/ops/cohorts" icon={<PeopleTeamRegular />}>Cohorts</NavLink>
           <NavLink to="/ops/risks" icon={<WarningRegular />}>Risks</NavLink>
+          <NavLink to="/ops/skills" icon={<TagRegular />}>Skills</NavLink>
           <NavLink to="/pipeline" icon={<PeopleRegular />}>Candidates</NavLink>
           <NavLink to="/community" icon={<PeopleCommunityRegular />}>Community</NavLink>
         </>

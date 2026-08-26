@@ -78,6 +78,20 @@ public sealed class SkillRepository : ISkillRepository
         return skill;
     }
 
+    public async Task<bool> IsInUseAsync(int skillId, CancellationToken ct = default) =>
+        await _db.CandidateSkills.AnyAsync(cs => cs.SkillId == skillId, ct) ||
+        await _db.ProjectSkills.AnyAsync(ps => ps.SkillId == skillId, ct);
+
+    public async Task<bool> DeleteAsync(int skillId, CancellationToken ct = default)
+    {
+        var skill = await _db.Skills.FirstOrDefaultAsync(s => s.SkillId == skillId, ct);
+        if (skill is null) return false;
+
+        _db.Skills.Remove(skill);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
     private async Task<int> GetOrCreateUncategorizedCategoryIdAsync(CancellationToken ct)
     {
         var category = await _db.SkillCategories.FirstOrDefaultAsync(sc => sc.Name == UncategorizedCategoryName, ct);

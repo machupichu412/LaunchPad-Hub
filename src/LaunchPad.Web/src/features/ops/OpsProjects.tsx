@@ -11,11 +11,13 @@ import {
   Spinner,
   Title3,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import { SearchRegular, FolderRegular } from '@fluentui/react-icons';
 import { getProjectsByCohort } from '../../api/projects';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 import { projectStatusLabel } from '../../utils/statusLabels';
 
 // Demo-only: same single-cohort simplification used by TalentPipeline/MyProjects
@@ -54,6 +56,7 @@ const useStyles = makeStyles({
 // from the Sponsor's MyProjects (own only) and the Candidate's open-projects browse.
 export function OpsProjects() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string | null>(null);
@@ -118,10 +121,16 @@ export function OpsProjects() {
 
       <div className={styles.grid}>
         {filtered.map((project) => (
-          <Card key={project.projectId} className={styles.card}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <Title3>{project.name}</Title3>
-              <Badge appearance="tint" color={project.status === 'Open' ? 'success' : 'informative'}>{projectStatusLabel(project.status)}</Badge>
+          <Card key={project.projectId} className={mergeClasses(styles.card, surfaces.card)}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: tokens.spacingHorizontalXS }}>
+              <Title3 style={{ minWidth: 0, overflowWrap: 'break-word' }}>{project.name}</Title3>
+              <Badge
+                appearance="tint"
+                color={project.status === 'Open' ? 'success' : 'informative'}
+                style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+              >
+                {projectStatusLabel(project.status)}
+              </Badge>
             </div>
             <Caption1>{project.sponsorName}</Caption1>
             {project.description && <Body1>{project.description}</Body1>}

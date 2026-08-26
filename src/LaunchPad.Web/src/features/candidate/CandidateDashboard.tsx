@@ -10,12 +10,14 @@ import {
   Title2,
   Title3,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import { useMsal } from '@azure/msal-react';
 import { RocketRegular } from '@fluentui/react-icons';
 import { getMyCandidateDashboard } from '../../api/candidates';
 import { getAssignmentTodos } from '../../api/assignments';
+import { useSurfaceStyles } from '../../theme/surfaces';
 
 const useStyles = makeStyles({
   banner: {
@@ -60,6 +62,12 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeHero800,
     fontWeight: tokens.fontWeightSemibold,
   },
+  tileValueText: {
+    fontSize: tokens.fontSizeBase600,
+    fontWeight: tokens.fontWeightSemibold,
+    lineHeight: tokens.lineHeightBase400,
+    wordBreak: 'break-word',
+  },
   projectCard: {
     padding: tokens.spacingVerticalL,
     marginBottom: tokens.spacingVerticalXL,
@@ -74,18 +82,20 @@ const useStyles = makeStyles({
   },
 });
 
-function StatTile({ label, value }: { label: string; value: string }) {
+function StatTile({ label, value, textValue }: { label: string; value: string; textValue?: boolean }) {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   return (
-    <Card className={styles.tile}>
+    <Card className={mergeClasses(styles.tile, surfaces.card, surfaces.fadeInUp)}>
       <Caption1>{label}</Caption1>
-      <div className={styles.tileValue}>{value}</div>
+      <div className={textValue ? styles.tileValueText : styles.tileValue}>{value}</div>
     </Card>
   );
 }
 
 export function CandidateDashboard() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const { accounts } = useMsal();
   const firstName = (accounts[0]?.name ?? 'there').split(' ')[0];
 
@@ -114,7 +124,7 @@ export function CandidateDashboard() {
 
   return (
     <>
-      <div className={styles.banner}>
+      <div className={mergeClasses(styles.banner, surfaces.fadeInUp)}>
         <span className={styles.bannerIcon} aria-hidden="true">
           <RocketRegular />
         </span>
@@ -127,14 +137,14 @@ export function CandidateDashboard() {
       </div>
 
       <div className={styles.tileGrid}>
-        <StatTile label="Active Project" value={project ? project.projectName : 'None'} />
+        <StatTile label="Active Project" value={project ? project.projectName : 'None'} textValue />
         <StatTile label="Tasks Complete" value={`${dashboard.tasksComplete} / ${dashboard.tasksTotal}`} />
         <StatTile label="Match Score" value={dashboard.matchScore != null ? `${dashboard.matchScore}%` : '—'} />
         <StatTile label="Community Posts" value={`${dashboard.communityPostsThisWeek} this week`} />
       </div>
 
       {project && (
-        <Card className={styles.projectCard}>
+        <Card className={mergeClasses(styles.projectCard, surfaces.card)}>
           <CardHeader
             header={<Title3>{project.projectName}</Title3>}
             description={<Caption1>{project.sponsorName}{project.sponsorOrganization ? ` · ${project.sponsorOrganization}` : ''}</Caption1>}
@@ -161,7 +171,7 @@ export function CandidateDashboard() {
         <ul className={styles.taskList}>
           {upcomingTasks.map((task) => (
             <li key={task.projectTodoId}>
-              <Card className={styles.tile}>
+              <Card className={mergeClasses(styles.tile, surfaces.card)}>
                 <Body1>{task.title}</Body1>
                 <Caption1>
                   {task.priority} priority{task.dueDate ? ` · due ${task.dueDate}` : ''}
