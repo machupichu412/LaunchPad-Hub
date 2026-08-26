@@ -20,8 +20,19 @@ param maxVCore int = 2
 
 param zoneRedundant bool = false
 
+@description('Subnet to attach the private endpoint\'s NIC to')
+param privateEndpointSubnetId string
+
+@description('Private DNS zone (privatelink.database.windows.net) to register the private endpoint in')
+param privateDnsZoneId string
+
+// SQL server names are globally unique across all of Azure, not just this subscription —
+// 'sql-launchpad-dev' (no suffix) collided with an unrelated server outside this tenant on
+// first deploy. Same fix as keyVault.bicep/serviceBus.bicep's uniqueSuffix.
+var uniqueSuffix = substring(uniqueString(subscription().id, resourceGroup().id), 0, 4)
+
 resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
-  name: 'sql-launchpad-${env}'
+  name: 'sql-launchpad-${env}-${uniqueSuffix}'
   location: location
   identity: {
     type: 'SystemAssigned'
@@ -37,7 +48,36 @@ resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
       azureADOnlyAuthentication: true
     }
     minimalTlsVersion: '1.2'
-    publicNetworkAccess: 'Enabled'
+    // Public access is disabled in every environment, not just Prod — Microsoft's
+    // internal CloudGov policy set denies public network access tenant-wide.
+    publicNetworkAccess: 'Disabled'
+  }
+}
+
+resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = {
+  name: 'pe-sql-launchpad-${env}'
+  location: location
+  properties: {
+    subnet: { id: privateEndpointSubnetId }
+    privateLinkServiceConnections: [
+      {
+        name: 'pe-sql-launchpad-${env}-connection'
+        properties: {
+          privateLinkServiceId: sqlServer.id
+          groupIds: [ 'sqlServer' ]
+        }
+      }
+    ]
+  }
+}
+
+resource privateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-11-01' = {
+  parent: privateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      { name: 'privatelink-database-windows-net', properties: { privateDnsZoneId: privateDnsZoneId } }
+    ]
   }
 }
 

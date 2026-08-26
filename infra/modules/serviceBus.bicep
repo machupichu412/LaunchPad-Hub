@@ -6,8 +6,13 @@ param location string
 
 param publicNetworkAccess bool = true
 
+// Service Bus namespace names are globally unique across all of Azure, not just this
+// subscription — 'sb-launchpad-dev' (no suffix) collided with an unrelated namespace
+// outside this tenant on first deploy. Same fix as keyVault.bicep's uniqueSuffix.
+var uniqueSuffix = substring(uniqueString(subscription().id, resourceGroup().id), 0, 4)
+
 resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
-  name: 'sb-launchpad-${env}'
+  name: 'sb-launchpad-${env}-${uniqueSuffix}'
   location: location
   sku: {
     name: 'Standard'
