@@ -10,11 +10,13 @@ import {
   Title1,
   Title3,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import { CheckmarkCircleRegular } from '@fluentui/react-icons';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { getOpsDashboard } from '../../api/ops';
+import { useSurfaceStyles } from '../../theme/surfaces';
 
 const useStyles = makeStyles({
   header: {
@@ -57,8 +59,9 @@ const useStyles = makeStyles({
 
 function StatTile({ label, value, caption }: { label: string; value: string; caption?: string }) {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   return (
-    <Card className={styles.tile}>
+    <Card className={mergeClasses(styles.tile, surfaces.card)}>
       <Caption1>{label}</Caption1>
       <div className={styles.tileValue}>{value}</div>
       {caption && <Caption1>{caption}</Caption1>}
@@ -75,6 +78,7 @@ const funnelColors = [
 
 export function OpsDashboard() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const navigate = useNavigate();
 
   const { data: dashboard, isLoading, isError, error } = useQuery({
@@ -124,7 +128,7 @@ export function OpsDashboard() {
       </div>
 
       <div className={styles.bottomRow}>
-        <Card className={styles.panel}>
+        <Card className={mergeClasses(styles.panel, surfaces.card)}>
           <Title3>Match funnel</Title3>
           <div style={{ height: 280, marginTop: tokens.spacingVerticalM }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -133,7 +137,7 @@ export function OpsDashboard() {
                 <XAxis dataKey="name" />
                 <YAxis allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                   {funnelData.map((entry, index) => (
                     <Cell key={entry.name} fill={funnelColors[index]} />
                   ))}
@@ -143,13 +147,13 @@ export function OpsDashboard() {
           </div>
         </Card>
 
-        <Card className={styles.panel}>
+        <Card className={mergeClasses(styles.panel, surfaces.card)}>
           <Title3>Top risks</Title3>
           {dashboard.topRisks.length === 0 && <Body1>No flagged candidates right now.</Body1>}
           {dashboard.topRisks.map((risk) => {
             const severity = risk.hasPerformanceRisk && risk.hasEngagementRisk ? 'High' : 'Medium';
             return (
-              <Card key={risk.candidateId} className={styles.riskCard}>
+              <Card key={risk.candidateId} className={mergeClasses(styles.riskCard, surfaces.card)}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
                     <Body1><strong>{risk.displayName}</strong></Body1>

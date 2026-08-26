@@ -12,12 +12,14 @@ import {
   Spinner,
   Title3,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import { createMySponsorProfile, getMySponsorProfile } from '../../api/sponsors';
 import { AvatarEditorDialog } from '../../components/AvatarEditorDialog';
 import { PageHeader } from '../../components/PageHeader';
 import { useMyAvatarUrl } from '../../auth/useMyAvatarUrl';
+import { useSurfaceStyles } from '../../theme/surfaces';
 
 const useStyles = makeStyles({
   section: {
@@ -38,6 +40,7 @@ const useStyles = makeStyles({
 // candidate/Onboarding.tsx; simpler since Sponsor has no cohort/skills to set.
 export function SponsorOnboarding() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -73,7 +76,7 @@ export function SponsorOnboarding() {
         subtitle="Let's set up your sponsor profile so you can post projects and review candidates."
       />
 
-      <Card className={styles.section}>
+      <Card className={mergeClasses(styles.section, surfaces.card)}>
         <Title3>About you</Title3>
         <div className={styles.photoRow} style={{ marginTop: tokens.spacingVerticalS }}>
           <AvatarEditorDialog

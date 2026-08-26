@@ -8,12 +8,14 @@ import {
   Spinner,
   Title3,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import { getMyAssignment } from '../../api/assignments';
 import { getOpenProjects } from '../../api/projects';
 import { PageHeader } from '../../components/PageHeader';
 import { availabilityLabel } from '../../utils/statusLabels';
+import { useSurfaceStyles } from '../../theme/surfaces';
 
 const useStyles = makeStyles({
   activeCard: {
@@ -35,6 +37,7 @@ const useStyles = makeStyles({
 // projects in your own cohort — distinct from the Sponsor's MyProjects page.
 export function Assignments() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
 
   const { data: assignment, isLoading: assignmentLoading } = useQuery({
     queryKey: ['assignments', 'mine'],
@@ -54,7 +57,7 @@ export function Assignments() {
       {assignmentLoading && <Spinner label="Loading your match..." />}
       {!assignmentLoading && !assignment && <Body1>You don't have an active assignment yet.</Body1>}
       {assignment && (
-        <Card className={styles.activeCard}>
+        <Card className={mergeClasses(styles.activeCard, surfaces.card)}>
           <CardHeader
             header={<Title3>{assignment.projectName}</Title3>}
             description={
@@ -93,7 +96,7 @@ export function Assignments() {
       {openProjects && openProjects.length > 0 && (
         <div className={styles.grid} style={{ marginTop: tokens.spacingVerticalM }}>
           {openProjects.map((project) => (
-            <Card key={project.projectId} className={styles.projectCard}>
+            <Card key={project.projectId} className={mergeClasses(styles.projectCard, surfaces.card)}>
               <Title3>{project.name}</Title3>
               {project.description && <Body1>{project.description}</Body1>}
               <Caption1 style={{ display: 'block', marginTop: tokens.spacingVerticalXS }}>

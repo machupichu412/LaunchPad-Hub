@@ -50,6 +50,12 @@ const useStyles = makeStyles({
       backgroundColor: tokens.colorSubtleBackgroundHover,
       color: tokens.colorNeutralForeground2Hover,
     },
+    ':focus-visible': {
+      outlineStyle: 'solid',
+      outlineWidth: '2px',
+      outlineColor: tokens.colorBrandStroke1,
+      outlineOffset: '2px',
+    },
   },
   itemSelected: {
     backgroundColor: tokens.colorBrandBackground2,

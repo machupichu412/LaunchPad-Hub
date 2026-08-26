@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Body1, Card, CardHeader, Caption1, Spinner, Title3, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Card, CardHeader, Caption1, Spinner, Title3, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { getAssignmentEvaluations, getMyAssignment } from '../../api/assignments';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 
 const useStyles = makeStyles({
   card: {
@@ -22,6 +23,7 @@ const useStyles = makeStyles({
  */
 export function Evaluations() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
 
   const { data: assignment, isLoading: assignmentLoading } = useQuery({
     queryKey: ['assignments', 'mine'],
@@ -43,7 +45,7 @@ export function Evaluations() {
       {evaluationsLoading && <Spinner label="Loading your evaluations..." />}
       {evaluations && evaluations.length === 0 && <Body1>No evaluations submitted yet.</Body1>}
       {evaluations?.map((evaluation) => (
-        <Card key={evaluation.reviewId} className={styles.card}>
+        <Card key={evaluation.reviewId} className={mergeClasses(styles.card, surfaces.card)}>
           <CardHeader
             header={<Title3>{evaluation.checkpoint} review</Title3>}
             description={<Caption1>{new Date(evaluation.submittedUtc).toLocaleDateString()}</Caption1>}

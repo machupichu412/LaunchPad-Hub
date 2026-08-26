@@ -1,5 +1,6 @@
 import { Body1, Card, Field, Input, Select, Textarea, Title3, Button, tokens } from '@fluentui/react-components';
 import { SkillTagPicker } from './SkillTagPicker';
+import { useSurfaceStyles } from '../theme/surfaces';
 import type { Availability } from '../api/types';
 
 export interface ProjectFormValues {
@@ -37,8 +38,9 @@ export function ProjectForm({
   errorMessage?: string;
   successMessage?: string;
 }) {
+  const surfaces = useSurfaceStyles();
   return (
-    <Card style={{ padding: tokens.spacingVerticalM, maxWidth: '560px' }}>
+    <Card className={surfaces.card} style={{ padding: tokens.spacingVerticalM, maxWidth: '560px' }}>
       {heading && <Title3>{heading}</Title3>}
       <Field label="Name" style={heading ? { marginTop: tokens.spacingVerticalS } : undefined}>
         <Input value={values.name} onChange={(_, data) => onChange({ ...values, name: data.value })} />
