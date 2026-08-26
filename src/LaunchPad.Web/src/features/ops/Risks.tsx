@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Body1, Card, Caption1, Spinner, makeStyles, tokens } from '@fluentui/react-components';
+import { Badge, Body1, Card, Caption1, Spinner, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { WarningRegular } from '@fluentui/react-icons';
 import { getAtRiskCandidates } from '../../api/ops';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 import type { RiskCandidateDto } from '../../api/types';
 
 const useStyles = makeStyles({
@@ -42,6 +43,7 @@ function severityOf(risk: RiskCandidateDto): 'High' | 'Medium' {
 // a display-only derivation of those two real flags, not a new stored field.
 export function Risks() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
 
   const { data: risks, isLoading, isError, error } = useQuery({
     queryKey: ['ops', 'risks'],
@@ -63,7 +65,7 @@ export function Risks() {
       {risks?.map((risk) => {
         const severity = severityOf(risk);
         return (
-          <Card key={risk.candidateId} className={styles.card} style={{ marginTop: tokens.spacingVerticalM }}>
+          <Card key={risk.candidateId} className={mergeClasses(styles.card, surfaces.card)} style={{ marginTop: tokens.spacingVerticalM }}>
             <WarningRegular className={styles.iconWrap} />
             <div className={styles.content}>
               <div className={styles.topRow}>
