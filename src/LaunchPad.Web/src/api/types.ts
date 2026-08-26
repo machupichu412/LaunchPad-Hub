@@ -426,6 +426,7 @@ export interface SponsorCandidateMatchDto {
   rationale: string;
   interestRating: number | null;
   hasPendingAssignmentElsewhere: boolean;
+  proposedAssignmentId: number | null;
 }
 
 export interface NotificationDto {

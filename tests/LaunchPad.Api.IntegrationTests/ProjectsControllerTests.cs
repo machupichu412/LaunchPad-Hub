@@ -603,6 +603,59 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
         raw.Should().NotContain("averageScore").And.NotContain("hasPerformanceRisk");
     }
 
+    private async Task<(Guid SponsorOid, int ProjectId, int PlainCandidateId, int MatchedCandidateId, int ProposedAssignmentId)>
+        SeedApprovedProjectWithMatchedAndPlainCandidateAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+
+        var sponsorOid = Guid.NewGuid();
+        var unique = Guid.NewGuid();
+        var program = new Domain.Entities.Program { Name = "Matched Gallery Program" };
+        var cohort = new Cohort { Program = program, Name = "Matched Gallery Cohort", StartDate = new DateOnly(2026, 1, 1), EndDate = new DateOnly(2026, 6, 1), Status = CohortStatus.Active };
+        var sponsor = new Sponsor { AppUser = new AppUser { EntraObjectId = sponsorOid, Upn = $"matched-gallery-sponsor-{unique}@example.com", DisplayName = "Matched Gallery Sponsor" } };
+        var project = new Project
+        {
+            Cohort = cohort,
+            Sponsor = sponsor,
+            Name = "Matched Gallery Project",
+            AvailabilityNeeded = Availability.PartTime,
+            MaxCandidates = 2,
+            ApprovalStatus = ProjectApprovalStatus.Approved,
+            Status = ProjectStatus.Open,
+        };
+        var plainCandidate = new Candidate { Cohort = cohort, AppUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = $"plain-{unique}@example.com", DisplayName = "Plain Candidate" }, Availability = Availability.PartTime, Status = CandidateStatus.InProgress };
+        var matchedCandidate = new Candidate { Cohort = cohort, AppUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = $"matched-{unique}@example.com", DisplayName = "Matched Candidate" }, Availability = Availability.PartTime, Status = CandidateStatus.InProgress };
+
+        db.AddRange(program, cohort, sponsor, project, plainCandidate, matchedCandidate);
+        await db.SaveChangesAsync();
+
+        var proposed = new Assignment { ProjectId = project.ProjectId, CandidateId = matchedCandidate.CandidateId, Status = AssignmentStatus.Proposed, MatchScore = 88m, MatchRationale = "Batch match" };
+        db.Add(proposed);
+        await db.SaveChangesAsync();
+
+        return (sponsorOid, project.ProjectId, plainCandidate.CandidateId, matchedCandidate.CandidateId, proposed.AssignmentId);
+    }
+
+    [Fact]
+    public async Task GetEligibleCandidates_IncludesProposedAssignmentId_ForBatchMatchedCandidatesOnly()
+    {
+        var (sponsorOid, projectId, plainCandidateId, matchedCandidateId, proposedAssignmentId) =
+            await SeedApprovedProjectWithMatchedAndPlainCandidateAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
+
+        var response = await client.GetAsync($"/api/projects/{projectId}/eligible-candidates");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var candidates = await response.Content.ReadFromJsonAsync<List<SponsorCandidateMatchDto>>(TestJsonOptions.Default);
+
+        candidates.Should().Contain(c => c.CandidateId == matchedCandidateId && c.ProposedAssignmentId == proposedAssignmentId);
+        candidates.Should().Contain(c => c.CandidateId == plainCandidateId && c.ProposedAssignmentId == null);
+    }
+
     [Fact]
     public async Task RequestAssignment_AsOwningSponsor_CreatesSponsorApprovedAssignment_AndRecordsAnAuditEvent()
     {
