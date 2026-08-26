@@ -339,6 +339,17 @@ export interface RiskCandidateDto {
   staleTodoCount: number;
 }
 
+/** Funnel: recommended (SponsorApproved) -> approved (OpsApproved) -> hired, plus
+ * risk counts, scoped to one cohort — see api/ops.ts's getExecutiveDashboard. */
+export interface ExecutiveDashboardDto {
+  cohortId: number;
+  recommendedCount: number;
+  approvedCount: number;
+  hiredCount: number;
+  performanceRiskCount: number;
+  engagementRiskCount: number;
+}
+
 export interface OpsDashboardDto {
   activeCandidateCount: number;
   activeProjectCount: number;
