@@ -307,6 +307,19 @@ function AppContent() {
                     </RequireRole>
                   }
                 />
+                {/* Generalized review submission — reached from an Ops-scheduled review
+                    to-do's "Submit review" link on either Tasks.tsx (Candidate) or
+                    ManageTodos.tsx (Sponsor). No profile-gate wrapper here, unlike the
+                    role-specific routes above — RequireSponsorProfile/RequireCandidateProfile
+                    would incorrectly block whichever role they don't target. */}
+                <Route
+                  path="/reviews/submit/:assignmentId/:reviewType/:checkpoint"
+                  element={
+                    <RequireRole allow={[AppRoles.Sponsor, AppRoles.Candidate]}>
+                      <SubmitReview />
+                    </RequireRole>
+                  }
+                />
               </Routes>
             </AppShell>
           </BrowserRouter>

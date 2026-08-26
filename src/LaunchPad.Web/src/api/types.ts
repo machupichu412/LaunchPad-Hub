@@ -158,6 +158,7 @@ export type TodoStatus = 'NotStarted' | 'InProgress' | 'Completed';
 export type TodoPriority = 'Low' | 'Medium' | 'High';
 export type DeliverableStatus = 'Draft' | 'Submitted';
 export type Checkpoint = 'Midpoint' | 'Final';
+export type ReviewType = 'SponsorOnCandidate' | 'CandidateOnSponsor' | 'ProjectEval';
 export type CommunityPostType = 'Win' | 'Question' | 'Announcement' | 'Kudos' | 'Reminder';
 
 export interface MyAssignmentDto {
@@ -183,6 +184,10 @@ export interface ProjectTodoDto {
   status: TodoStatus;
   priority: TodoPriority;
   dueDate: string | null;
+  /** Set together (or both null) — an Ops-scheduled review obligation rather than an
+   * ordinary to-do. See Tasks.tsx/ManageTodos.tsx's "Submit review" links. */
+  linkedReviewType: ReviewType | null;
+  linkedReviewCheckpoint: Checkpoint | null;
 }
 
 export interface UpdateTodoStatusRequest {
@@ -289,6 +294,16 @@ export interface UpdateCohortStatusRequest {
   status: CohortStatus;
 }
 
+export interface ScheduleReviewsRequest {
+  checkpoint: Checkpoint;
+  dueDate: string;
+}
+
+export interface ScheduleReviewsResult {
+  assignmentsScheduled: number;
+  todosCreated: number;
+}
+
 export interface PendingAssignmentDto {
   assignmentId: number;
   candidateId: number;
@@ -345,7 +360,7 @@ export interface ProjectMatchDto {
 
 export interface SubmitReviewRequest {
   assignmentId: number;
-  reviewType: 'SponsorOnCandidate' | 'CandidateOnSponsor' | 'ProjectEval';
+  reviewType: ReviewType;
   checkpoint: Checkpoint;
   commitment: number | null;
   availability: number | null;

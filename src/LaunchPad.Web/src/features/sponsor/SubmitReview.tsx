@@ -13,7 +13,7 @@ import {
 } from '@fluentui/react-components';
 import { submitReview } from '../../api/reviews';
 import { PageHeader } from '../../components/PageHeader';
-import type { Checkpoint } from '../../api/types';
+import type { Checkpoint, ReviewType } from '../../api/types';
 
 const useStyles = makeStyles({
   form: {
@@ -31,6 +31,30 @@ const useStyles = makeStyles({
 
 const ratingOptions = [1, 2, 3, 4, 5];
 
+const pageCopy: Record<ReviewType, { title: string; subtitle: string }> = {
+  SponsorOnCandidate: { title: 'Submit review', subtitle: "Rate the candidate's engagement and share qualitative feedback." },
+  CandidateOnSponsor: { title: 'Review your sponsor', subtitle: "Rate your sponsor's support and share qualitative feedback." },
+  ProjectEval: { title: 'Review your project', subtitle: 'Rate your project experience and share qualitative feedback.' },
+};
+
+const dimensionLabels: Record<ReviewType, { commitment: string; availability: string; guidance: string; outputQuality: string }> = {
+  SponsorOnCandidate: {
+    commitment: 'Commitment', availability: 'Availability', guidance: 'Guidance received', outputQuality: 'Output quality',
+  },
+  CandidateOnSponsor: {
+    commitment: 'Engagement', availability: 'Availability', guidance: 'Guidance provided', outputQuality: 'Support quality',
+  },
+  ProjectEval: {
+    commitment: 'Clarity of scope', availability: 'Resources provided', guidance: 'Guidance provided', outputQuality: 'Overall experience',
+  },
+};
+
+const feedbackLabels: Record<ReviewType, { strengths: string; growthAreas: string }> = {
+  SponsorOnCandidate: { strengths: 'Strengths', growthAreas: 'Growth areas' },
+  CandidateOnSponsor: { strengths: "What's working well", growthAreas: 'What could be better' },
+  ProjectEval: { strengths: "What's working well", growthAreas: 'What could be better' },
+};
+
 function RatingField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
     <Field label={label}>
@@ -46,14 +70,24 @@ function RatingField({ label, value, onChange }: { label: string; value: string;
   );
 }
 
-// Midpoint/final review submission. The response never carries a score back — see
-// SponsorReviewDto — so there's nothing here that could accidentally render one.
+// Midpoint/final review submission for all three ReviewTypes — reached either via the
+// sponsor's original self-serve route (/candidates/:assignmentId/review, no reviewType/
+// checkpoint params — defaults below preserve that flow exactly) or the generalized
+// deep link from an Ops-scheduled review to-do (/reviews/submit/:assignmentId/:reviewType/
+// :checkpoint — see Tasks.tsx/ManageTodos.tsx). The response never carries a score back —
+// see SponsorReviewDto — so there's nothing here that could accidentally render one.
 export function SubmitReview() {
   const styles = useStyles();
-  const { assignmentId } = useParams<{ assignmentId: string }>();
+  const { assignmentId, reviewType: reviewTypeParam, checkpoint: checkpointParam } = useParams<{
+    assignmentId: string;
+    reviewType?: string;
+    checkpoint?: string;
+  }>();
   const parsedAssignmentId = Number(assignmentId);
+  const reviewType = (reviewTypeParam as ReviewType | undefined) ?? 'SponsorOnCandidate';
+  const checkpointLocked = checkpointParam != null;
 
-  const [checkpoint, setCheckpoint] = useState<Checkpoint>('Midpoint');
+  const [checkpoint, setCheckpoint] = useState<Checkpoint>((checkpointParam as Checkpoint | undefined) ?? 'Midpoint');
   const [commitment, setCommitment] = useState('');
   const [availability, setAvailability] = useState('');
   const [guidance, setGuidance] = useState('');
@@ -64,12 +98,14 @@ export function SubmitReview() {
   const [recommendConversion, setRecommendConversion] = useState(false);
 
   const hasAnyRating = [commitment, availability, guidance, outputQuality].some((v) => v.length > 0);
+  const dimensions = dimensionLabels[reviewType];
+  const feedback = feedbackLabels[reviewType];
 
   const submitMutation = useMutation({
     mutationFn: () =>
       submitReview({
         assignmentId: parsedAssignmentId,
-        reviewType: 'SponsorOnCandidate',
+        reviewType,
         checkpoint,
         commitment: commitment ? Number(commitment) : null,
         availability: availability ? Number(availability) : null,
@@ -78,7 +114,7 @@ export function SubmitReview() {
         comments: comments.trim().length > 0 ? comments.trim() : null,
         strengths: strengths.trim().length > 0 ? strengths.trim() : null,
         growthAreas: growthAreas.trim().length > 0 ? growthAreas.trim() : null,
-        recommendConversion,
+        recommendConversion: reviewType === 'SponsorOnCandidate' ? recommendConversion : null,
       }),
   });
 
@@ -93,37 +129,43 @@ export function SubmitReview() {
 
   return (
     <>
-      <PageHeader title="Submit review" subtitle="Rate the candidate's engagement and share qualitative feedback." />
+      <PageHeader title={pageCopy[reviewType].title} subtitle={pageCopy[reviewType].subtitle} />
 
       <div className={styles.form}>
         <Field label="Checkpoint">
-          <Select value={checkpoint} onChange={(_, data) => setCheckpoint(data.value as Checkpoint)}>
+          <Select
+            value={checkpoint}
+            disabled={checkpointLocked}
+            onChange={(_, data) => setCheckpoint(data.value as Checkpoint)}
+          >
             <option value="Midpoint">Midpoint</option>
             <option value="Final">Final</option>
           </Select>
         </Field>
 
         <div className={styles.ratingRow}>
-          <RatingField label="Commitment" value={commitment} onChange={setCommitment} />
-          <RatingField label="Availability" value={availability} onChange={setAvailability} />
-          <RatingField label="Guidance received" value={guidance} onChange={setGuidance} />
-          <RatingField label="Output quality" value={outputQuality} onChange={setOutputQuality} />
+          <RatingField label={dimensions.commitment} value={commitment} onChange={setCommitment} />
+          <RatingField label={dimensions.availability} value={availability} onChange={setAvailability} />
+          <RatingField label={dimensions.guidance} value={guidance} onChange={setGuidance} />
+          <RatingField label={dimensions.outputQuality} value={outputQuality} onChange={setOutputQuality} />
         </div>
 
         <Field label="Comments">
           <Textarea value={comments} onChange={(_, data) => setComments(data.value)} resize="vertical" />
         </Field>
-        <Field label="Strengths">
+        <Field label={feedback.strengths}>
           <Textarea value={strengths} onChange={(_, data) => setStrengths(data.value)} resize="vertical" />
         </Field>
-        <Field label="Growth areas">
+        <Field label={feedback.growthAreas}>
           <Textarea value={growthAreas} onChange={(_, data) => setGrowthAreas(data.value)} resize="vertical" />
         </Field>
-        <Checkbox
-          label="On track for conversion"
-          checked={recommendConversion}
-          onChange={(_, data) => setRecommendConversion(data.checked === true)}
-        />
+        {reviewType === 'SponsorOnCandidate' && (
+          <Checkbox
+            label="On track for conversion"
+            checked={recommendConversion}
+            onChange={(_, data) => setRecommendConversion(data.checked === true)}
+          />
+        )}
 
         <Button
           appearance="primary"

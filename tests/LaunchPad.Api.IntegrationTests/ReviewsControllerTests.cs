@@ -22,16 +22,17 @@ public class ReviewsControllerTests : IClassFixture<CustomWebApplicationFactory>
     private readonly CustomWebApplicationFactory _factory;
     public ReviewsControllerTests(CustomWebApplicationFactory factory) => _factory = factory;
 
-    private async Task<(Guid OwnerOid, int AssignmentId)> SeedActiveAssignmentAsync()
+    private async Task<(Guid OwnerOid, Guid CandidateOid, int AssignmentId)> SeedActiveAssignmentAsync()
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
 
         var ownerOid = Guid.NewGuid();
+        var candidateOid = Guid.NewGuid();
         var program = new Domain.Entities.Program { Name = "Review Test Program" };
         var cohort = new Cohort { Program = program, Name = "Review Test Cohort", StartDate = new DateOnly(2026, 1, 1), EndDate = new DateOnly(2026, 6, 1), Status = CohortStatus.Active };
         var owner = new Sponsor { AppUser = new AppUser { EntraObjectId = ownerOid, Upn = "review-owner@example.com", DisplayName = "Review Owner Sponsor" } };
-        var candidate = new Candidate { Cohort = cohort, AppUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "review-candidate@example.com", DisplayName = "Review Candidate" }, Availability = Availability.PartTime, Status = CandidateStatus.InProgress };
+        var candidate = new Candidate { Cohort = cohort, AppUser = new AppUser { EntraObjectId = candidateOid, Upn = "review-candidate@example.com", DisplayName = "Review Candidate" }, Availability = Availability.PartTime, Status = CandidateStatus.InProgress };
         var project = new Project { Cohort = cohort, Sponsor = owner, Name = "Reviewed Project", AvailabilityNeeded = Availability.PartTime, ApprovalStatus = ProjectApprovalStatus.Approved, Status = ProjectStatus.InProgress };
 
         db.AddRange(program, cohort, owner, candidate, project);
@@ -41,13 +42,13 @@ public class ReviewsControllerTests : IClassFixture<CustomWebApplicationFactory>
         db.Add(assignment);
         await db.SaveChangesAsync();
 
-        return (ownerOid, assignment.AssignmentId);
+        return (ownerOid, candidateOid, assignment.AssignmentId);
     }
 
-    private static SubmitReviewRequest MakeRequest(int assignmentId) => new()
+    private static SubmitReviewRequest MakeRequest(int assignmentId, ReviewType reviewType = ReviewType.SponsorOnCandidate) => new()
     {
         AssignmentId = assignmentId,
-        ReviewType = ReviewType.SponsorOnCandidate,
+        ReviewType = reviewType,
         Checkpoint = Checkpoint.Midpoint,
         Commitment = 4,
         Availability = 5,
@@ -62,7 +63,7 @@ public class ReviewsControllerTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task Submit_AsOwningSponsorOnActiveAssignment_Succeeds()
     {
-        var (ownerOid, assignmentId) = await SeedActiveAssignmentAsync();
+        var (ownerOid, _, assignmentId) = await SeedActiveAssignmentAsync();
 
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
@@ -84,7 +85,7 @@ public class ReviewsControllerTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task Submit_ResponseBody_NeverContainsOverallScoreOrNumericDimensions()
     {
-        var (ownerOid, assignmentId) = await SeedActiveAssignmentAsync();
+        var (ownerOid, _, assignmentId) = await SeedActiveAssignmentAsync();
 
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
@@ -133,7 +134,7 @@ public class ReviewsControllerTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task Submit_AsNonOwningSponsor_IsForbidden()
     {
-        var (_, assignmentId) = await SeedActiveAssignmentAsync();
+        var (_, _, assignmentId) = await SeedActiveAssignmentAsync();
 
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
@@ -147,7 +148,7 @@ public class ReviewsControllerTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task GetByAssignment_AsOwningSponsor_ReturnsSubmittedReview()
     {
-        var (ownerOid, assignmentId) = await SeedActiveAssignmentAsync();
+        var (ownerOid, _, assignmentId) = await SeedActiveAssignmentAsync();
 
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
@@ -159,5 +160,102 @@ public class ReviewsControllerTests : IClassFixture<CustomWebApplicationFactory>
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var reviews = await response.Content.ReadFromJsonAsync<List<SponsorReviewDto>>(TestJsonOptions.Default);
         reviews.Should().ContainSingle(r => r.AssignmentId == assignmentId);
+    }
+
+    [Theory]
+    [InlineData(ReviewType.CandidateOnSponsor)]
+    [InlineData(ReviewType.ProjectEval)]
+    public async Task Submit_AsOwningCandidate_Succeeds(ReviewType reviewType)
+    {
+        var (_, candidateOid, assignmentId) = await SeedActiveAssignmentAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Candidate);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, candidateOid.ToString());
+
+        var response = await client.PostAsJsonAsync("/api/reviews", MakeRequest(assignmentId, reviewType));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<SponsorReviewDto>(TestJsonOptions.Default);
+        dto!.Strengths.Should().Be("Fast learner, clear communicator.");
+    }
+
+    [Fact]
+    public async Task Submit_AsNonOwningCandidate_IsForbidden()
+    {
+        var (_, _, assignmentId) = await SeedActiveAssignmentAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Candidate);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, Guid.NewGuid().ToString());
+
+        var response = await client.PostAsJsonAsync("/api/reviews", MakeRequest(assignmentId, ReviewType.CandidateOnSponsor));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Submit_CandidateOnSponsor_AsSponsor_IsForbidden()
+    {
+        var (ownerOid, _, assignmentId) = await SeedActiveAssignmentAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, ownerOid.ToString());
+
+        var response = await client.PostAsJsonAsync("/api/reviews", MakeRequest(assignmentId, ReviewType.CandidateOnSponsor));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Submit_SponsorOnCandidate_AsCandidate_IsForbidden()
+    {
+        var (_, candidateOid, assignmentId) = await SeedActiveAssignmentAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Candidate);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, candidateOid.ToString());
+
+        var response = await client.PostAsJsonAsync("/api/reviews", MakeRequest(assignmentId, ReviewType.SponsorOnCandidate));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Theory]
+    [InlineData(ReviewType.SponsorOnCandidate)]
+    [InlineData(ReviewType.CandidateOnSponsor)]
+    [InlineData(ReviewType.ProjectEval)]
+    public async Task Submit_AutoCompletesLinkedTodo(ReviewType reviewType)
+    {
+        var (ownerOid, candidateOid, assignmentId) = await SeedActiveAssignmentAsync();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+            db.Add(new ProjectTodo
+            {
+                AssignmentId = assignmentId,
+                Title = "Submit your midpoint review",
+                Status = TodoStatus.NotStarted,
+                LinkedReviewType = reviewType,
+                LinkedReviewCheckpoint = Checkpoint.Midpoint,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var client = _factory.CreateClient();
+        var (role, oid) = reviewType == ReviewType.SponsorOnCandidate ? (Roles.Sponsor, ownerOid) : (Roles.Candidate, candidateOid);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, role);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, oid.ToString());
+
+        var response = await client.PostAsJsonAsync("/api/reviews", MakeRequest(assignmentId, reviewType));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        var todo = await verifyDb.ProjectTodos.SingleAsync(t => t.AssignmentId == assignmentId && t.LinkedReviewType == reviewType);
+        todo.Status.Should().Be(TodoStatus.Completed);
+        todo.CompletedUtc.Should().NotBeNull();
     }
 }

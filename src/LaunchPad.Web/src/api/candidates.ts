@@ -19,6 +19,14 @@ export async function getCandidatesByCohort(cohortId: number): Promise<Candidate
   return response.json() as Promise<CandidateDto[]>;
 }
 
+/** Additive multi-cohort filter — an empty array means every cohort ("All cohorts"). */
+export async function getCandidatesByCohorts(cohortIds: number[]): Promise<CandidateDto[]> {
+  const query = cohortIds.length > 0 ? `?cohortIds=${cohortIds.join(',')}` : '';
+  const response = await authedFetch(`/api/candidates${query}`);
+  if (!response.ok) throw new Error(`Failed to load candidates: ${response.status}`);
+  return response.json() as Promise<CandidateDto[]>;
+}
+
 export async function getMyCandidateProfile(): Promise<CandidateDto | null> {
   const response = await authedFetch('/api/candidates/me');
   if (response.status === 404) return null;

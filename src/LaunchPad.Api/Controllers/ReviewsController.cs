@@ -9,12 +9,15 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LaunchPad.Api.Controllers;
 
-// Sponsor-only in this pass — CandidateOnSponsor reviews aren't part of this build.
-// Every response is a SponsorReviewDto, never the raw ReviewDto (which still carries
-// unredacted OverallScore/numeric dimensions and must stay internal/Ops-only).
+// Submit handles all three ReviewType values (Sponsor reviewing Candidate, Candidate
+// reviewing Sponsor, Candidate reviewing the project) — see its role/ownership branch
+// below. No class-level role restriction because of that; GetByAssignment stays
+// Sponsor-only via its own attribute (unchanged scope — viewing the other two types
+// isn't needed yet). Every response is a SponsorReviewDto, never the raw ReviewDto
+// (which still carries unredacted OverallScore/numeric dimensions and must stay
+// internal/Ops-only) — CLAUDE.md's redaction rule applies the same regardless of who submitted.
 [ApiController]
 [Route("api/reviews")]
-[Authorize(Roles = Roles.Sponsor)]
 public class ReviewsController : ControllerBase
 {
     private readonly IAssignmentRepository _assignments;
@@ -56,25 +59,39 @@ public class ReviewsController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
-        var assignment = await _assignments.GetAsync(request.AssignmentId, ct);
+        var assignment = await _assignments.GetWithOwnershipDetailsAsync(request.AssignmentId, ct);
         if (assignment is null) return NotFound();
-
-        var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ManageOwnProject);
-        if (!auth.Succeeded) return Forbid();
 
         if (assignment.Status != AssignmentStatus.Active)
         {
             return BadRequest("Reviews can only be submitted for an active assignment.");
         }
 
-        var sponsorAppUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        // Who may submit which ReviewType, and how ownership is checked, differs by type —
+        // a Sponsor reviews a Candidate on a project they own; a Candidate reviews their
+        // own Sponsor or their own project's assignment. Anything else is forbidden.
+        int? submittedByAppUserId;
+        if (request.ReviewType == ReviewType.SponsorOnCandidate)
+        {
+            if (!User.IsInRole(Roles.Sponsor)) return Forbid();
+            var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ManageOwnProject);
+            if (!auth.Succeeded) return Forbid();
+            submittedByAppUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        }
+        else
+        {
+            if (!User.IsInRole(Roles.Candidate)) return Forbid();
+            var auth = await _authorization.AuthorizeAsync(User, assignment, Policies.ManageOwnAssignment);
+            if (!auth.Succeeded) return Forbid();
+            submittedByAppUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        }
 
         var review = new Review
         {
             AssignmentId = request.AssignmentId,
-            ReviewType = ReviewType.SponsorOnCandidate,
+            ReviewType = request.ReviewType,
             Checkpoint = request.Checkpoint,
-            SubmittedBy = sponsorAppUserId ?? 0,
+            SubmittedBy = submittedByAppUserId ?? 0,
             Commitment = request.Commitment,
             Availability = request.Availability,
             Guidance = request.Guidance,
@@ -86,15 +103,30 @@ public class ReviewsController : ControllerBase
         };
 
         await _reviews.AddAsync(review, ct);
+
+        // Auto-completes the matching Ops-scheduled review to-do, if one exists — see
+        // ProjectTodo.LinkedReviewType's doc comment. A self-serve review submitted without
+        // ever being scheduled (e.g. the sponsor's original ungated flow) simply has no
+        // linked to-do to find, which is fine.
+        var linkedTodo = await _assignments.GetLinkedReviewTodoAsync(request.AssignmentId, request.ReviewType, request.Checkpoint, ct);
+        if (linkedTodo is not null && linkedTodo.Status != TodoStatus.Completed)
+        {
+            linkedTodo.Status = TodoStatus.Completed;
+            linkedTodo.CompletedUtc = DateTime.UtcNow;
+        }
+
+        // Reviews and Assignments share the same scoped DbContext, so one SaveChangesAsync
+        // persists both the new review and the linked to-do's completion together.
         await _reviews.SaveChangesAsync(ct);
         await _auditLog.RecordAsync(
             _currentUser.EntraObjectId, "Review", review.ReviewId.ToString(), "Submit",
-            data: new { review.AssignmentId, review.Checkpoint }, ct: ct);
+            data: new { review.AssignmentId, review.ReviewType, review.Checkpoint }, ct: ct);
 
         return Ok(ToDto(review));
     }
 
     [HttpGet("assignment/{assignmentId:int}")]
+    [Authorize(Roles = Roles.Sponsor)]
     public async Task<ActionResult<IReadOnlyList<SponsorReviewDto>>> GetByAssignment(int assignmentId, CancellationToken ct)
     {
         var assignment = await _assignments.GetAsync(assignmentId, ct);

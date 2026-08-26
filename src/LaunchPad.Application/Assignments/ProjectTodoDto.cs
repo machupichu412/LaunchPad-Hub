@@ -9,6 +9,8 @@ public class ProjectTodoDto
     public TodoStatus Status { get; set; }
     public TodoPriority Priority { get; set; }
     public DateOnly? DueDate { get; set; }
+    public ReviewType? LinkedReviewType { get; set; }
+    public Checkpoint? LinkedReviewCheckpoint { get; set; }
 }
 
 public class UpdateTodoStatusRequest

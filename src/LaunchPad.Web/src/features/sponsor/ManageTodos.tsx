@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Badge,
@@ -13,10 +13,12 @@ import {
   Spinner,
   Title3,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import { createTodo, getAssignmentDeliverables, getAssignmentTodos } from '../../api/assignments';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 import type { ProjectTodoDto, TodoPriority } from '../../api/types';
 
 const useStyles = makeStyles({
@@ -60,9 +62,11 @@ const statusColor: Record<ProjectTodoDto['status'], 'informative' | 'warning' | 
  * (see Deliverables.tsx); this page shows those attachments read-only. */
 export function ManageTodos() {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const parsedAssignmentId = Number(assignmentId);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: todos, isLoading: todosLoading, isError: todosError } = useQuery({
     queryKey: ['assignments', parsedAssignmentId, 'todos'],
@@ -94,7 +98,7 @@ export function ManageTodos() {
     <>
       <PageHeader title="Manage to-dos" subtitle="Set up to-do items for the candidate on this project." />
 
-      <Card className={styles.form}>
+      <Card className={mergeClasses(styles.form, surfaces.card)}>
         <Title3>New to-do</Title3>
         <Field label="Title" style={{ marginTop: tokens.spacingVerticalS }}>
           <Input value={title} onChange={(_, data) => setTitle(data.value)} placeholder="Draft the wireframes" />
@@ -131,7 +135,7 @@ export function ManageTodos() {
           {todos.map((todo) => {
             const attached = deliverables?.filter((d) => d.projectTodoId === todo.projectTodoId) ?? [];
             return (
-              <Card key={todo.projectTodoId} className={styles.item}>
+              <Card key={todo.projectTodoId} className={mergeClasses(styles.item, surfaces.card)}>
                 <div>
                   <Body1>{todo.title}</Body1>
                   <div style={{ marginTop: tokens.spacingVerticalXXS }}>
@@ -148,6 +152,17 @@ export function ManageTodos() {
                     <Caption1 style={{ display: 'block', marginTop: tokens.spacingVerticalXXS }}>
                       {attached.length} deliverable{attached.length > 1 ? 's' : ''} attached: {attached.map((d) => d.title).join(', ')}
                     </Caption1>
+                  )}
+                  {todo.linkedReviewType === 'SponsorOnCandidate' && todo.status !== 'Completed' && (
+                    <Button
+                      size="small"
+                      style={{ marginTop: tokens.spacingVerticalXS }}
+                      onClick={() =>
+                        navigate(`/reviews/submit/${parsedAssignmentId}/${todo.linkedReviewType}/${todo.linkedReviewCheckpoint}`)
+                      }
+                    >
+                      Submit review
+                    </Button>
                   )}
                 </div>
                 <Badge appearance="tint" color={statusColor[todo.status]}>

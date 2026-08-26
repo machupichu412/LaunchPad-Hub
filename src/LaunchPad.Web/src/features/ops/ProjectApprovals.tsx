@@ -1,9 +1,29 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Badge, Body1, Button, Card, Caption1, Input, Spinner, Textarea, Title3, makeStyles, tokens } from '@fluentui/react-components';
+import {
+  Badge,
+  Body1,
+  Button,
+  Card,
+  Caption1,
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
+  Input,
+  Spinner,
+  Textarea,
+  Title3,
+  makeStyles,
+  mergeClasses,
+  tokens,
+} from '@fluentui/react-components';
 import { CheckmarkRegular, DismissRegular, SearchRegular } from '@fluentui/react-icons';
 import { approveProject, getPendingApprovalProjects, getProjectsByCohort, rejectProject } from '../../api/projects';
 import { PageHeader } from '../../components/PageHeader';
+import { useSurfaceStyles } from '../../theme/surfaces';
 import { projectApprovalStatusLabel } from '../../utils/statusLabels';
 import type { ProjectDto } from '../../api/types';
 
@@ -64,21 +84,34 @@ function matchesSearch(project: ProjectDto, term: string): boolean {
 
 // Shared by both the pending queue and the decision-history section — approve/reject
 // now work from any non-Draft status (see ProjectsController.Approve/Reject), so Ops
-// can revisit a past call the same way they made the first one.
-function ApprovalCard({ project, onDone }: { project: ProjectDto; onDone: () => void }) {
+// can revisit a past call the same way they made the first one. In the decision-history
+// section (historyMode) the actions stay behind a "Change approval status" click-through
+// plus a confirmation dialog, since that's a revisit of a past call rather than the
+// first, primary decision the top queue makes.
+function ApprovalCard({ project, onDone, historyMode }: { project: ProjectDto; onDone: () => void; historyMode?: boolean }) {
   const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const [reason, setReason] = useState(project.rejectionReason ?? '');
+  const [unlocked, setUnlocked] = useState(!historyMode);
+  const [pendingAction, setPendingAction] = useState<'Approve' | 'Reject' | null>(null);
 
-  const approveMutation = useMutation({ mutationFn: approveProject, onSuccess: onDone });
+  const collapse = () => {
+    if (historyMode) setUnlocked(false);
+    setPendingAction(null);
+  };
+
+  const approveMutation = useMutation({ mutationFn: approveProject, onSuccess: () => { collapse(); onDone(); } });
   const rejectMutation = useMutation({
     mutationFn: (r: string) => rejectProject(project.projectId, { reason: r }),
-    onSuccess: onDone,
+    onSuccess: () => { collapse(); onDone(); },
   });
 
   const busy = approveMutation.isPending || rejectMutation.isPending;
+  const alreadyApproved = project.approvalStatus === 'Approved';
+  const alreadyRejected = project.approvalStatus === 'Rejected';
 
   return (
-    <Card className={styles.card}>
+    <Card className={mergeClasses(styles.card, surfaces.card)}>
       <div>
         <Title3>{project.name}</Title3>
         <Caption1 style={{ display: 'block' }}>
@@ -96,34 +129,67 @@ function ApprovalCard({ project, onDone }: { project: ProjectDto; onDone: () => 
         {project.description && <Body1 style={{ display: 'block', marginTop: tokens.spacingVerticalXS }}>{project.description}</Body1>}
       </div>
       <div className={styles.actions}>
-        <Textarea
-          className={styles.reasonInput}
-          placeholder="Reason (required to reject)"
-          resize="vertical"
-          rows={3}
-          value={reason}
-          onChange={(_, data) => setReason(data.value)}
-        />
-        <div className={styles.buttonRow}>
-          <Button
-            icon={<DismissRegular />}
-            disabled={busy || !reason.trim()}
-            onClick={() => rejectMutation.mutate(reason)}
-          >
-            Reject
+        {historyMode && !unlocked ? (
+          <Button appearance="secondary" onClick={() => setUnlocked(true)}>
+            Change approval status
           </Button>
-          <Button
-            appearance="primary"
-            icon={<CheckmarkRegular />}
-            disabled={busy}
-            onClick={() => approveMutation.mutate(project.projectId)}
-          >
-            Approve
-          </Button>
-        </div>
+        ) : (
+          <>
+            <Textarea
+              className={styles.reasonInput}
+              placeholder="Reason (required to reject)"
+              resize="vertical"
+              rows={3}
+              value={reason}
+              onChange={(_, data) => setReason(data.value)}
+            />
+            <div className={styles.buttonRow}>
+              <Button
+                icon={<DismissRegular />}
+                disabled={busy || alreadyRejected || !reason.trim()}
+                onClick={() => setPendingAction('Reject')}
+              >
+                Reject
+              </Button>
+              <Button
+                appearance="primary"
+                icon={<CheckmarkRegular />}
+                disabled={busy || alreadyApproved}
+                onClick={() => setPendingAction('Approve')}
+              >
+                Approve
+              </Button>
+            </div>
+          </>
+        )}
         {approveMutation.isError && <Body1>Failed to approve: {(approveMutation.error as Error).message}</Body1>}
         {rejectMutation.isError && <Body1>Failed to reject: {(rejectMutation.error as Error).message}</Body1>}
       </div>
+
+      <Dialog open={pendingAction !== null} onOpenChange={(_, data) => !data.open && setPendingAction(null)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>{pendingAction === 'Reject' ? 'Reject' : 'Approve'} {project.name}?</DialogTitle>
+            <DialogContent>
+              {pendingAction === 'Reject'
+                ? <>This rejects the project with the reason: "{reason}". The sponsor can edit and resubmit it.</>
+                : <>This approves the project, making it visible to candidates on the marketplace.</>}
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setPendingAction(null)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button
+                appearance="primary"
+                disabled={busy}
+                onClick={() => (pendingAction === 'Reject' ? rejectMutation.mutate(reason) : approveMutation.mutate(project.projectId))}
+              >
+                {busy ? <Spinner size="tiny" /> : 'Confirm'}
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </Card>
   );
 }
@@ -193,7 +259,7 @@ export function ProjectApprovals() {
         {allProjects && decided.length === 0 && <Body1>No decided projects match.</Body1>}
 
         {decided.map((project) => (
-          <ApprovalCard key={project.projectId} project={project} onDone={onDecided} />
+          <ApprovalCard key={project.projectId} project={project} onDone={onDecided} historyMode />
         ))}
       </div>
     </>
