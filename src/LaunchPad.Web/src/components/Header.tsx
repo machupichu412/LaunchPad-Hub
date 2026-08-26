@@ -91,6 +91,8 @@ const useStyles = makeStyles({
     borderRightStyle: 'none',
     borderBottomStyle: 'none',
     backgroundColor: 'transparent',
+    color: tokens.colorNeutralForeground1,
+    font: 'inherit',
     cursor: 'pointer',
     ':hover': {
       backgroundColor: tokens.colorSubtleBackgroundHover,
