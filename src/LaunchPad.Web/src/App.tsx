@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { FluentProvider } from '@fluentui/react-components';
 import { AuthenticatedTemplate, UnauthenticatedTemplate } from '@azure/msal-react';
 import { AppShell } from './components/AppShell';
 import { SignInPrompt } from './components/SignInPrompt';
+import { isMockMode } from './dev/mockMode';
 import { RequireRole } from './auth/RequireRole';
 import { RequireCandidateProfile } from './auth/RequireCandidateProfile';
 import { RequireSponsorProfile } from './auth/RequireSponsorProfile';
@@ -50,7 +52,7 @@ function AppContent() {
 
   return (
     <FluentProvider theme={theme}>
-      <AuthenticatedTemplate>
+      <AuthGate>
         <ActiveRoleProvider>
           <BrowserRouter>
             <AppShell>
@@ -309,10 +311,25 @@ function AppContent() {
             </AppShell>
           </BrowserRouter>
         </ActiveRoleProvider>
-      </AuthenticatedTemplate>
+      </AuthGate>
+    </FluentProvider>
+  );
+}
+
+/**
+ * Skips MSAL's real sign-in check in mock mode (see dev/mockMode.ts) — nothing
+ * downstream needs a real account: useApiAccessTokenClaims already returns every
+ * role synthetically, and authedFetch never leaves the browser. This branch is
+ * stripped from production builds. The real (non-mock) path is unchanged.
+ */
+function AuthGate({ children }: { children: ReactNode }) {
+  if (isMockMode) return <>{children}</>;
+  return (
+    <>
+      <AuthenticatedTemplate>{children}</AuthenticatedTemplate>
       <UnauthenticatedTemplate>
         <SignInPrompt />
       </UnauthenticatedTemplate>
-    </FluentProvider>
+    </>
   );
 }
