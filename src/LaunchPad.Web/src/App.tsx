@@ -20,6 +20,7 @@ import { OpsProjects } from './features/ops/OpsProjects';
 import { ProjectApprovals } from './features/ops/ProjectApprovals';
 import { Cohorts } from './features/ops/Cohorts';
 import { Risks } from './features/ops/Risks';
+import { SkillsManagement } from './features/ops/SkillsManagement';
 import { ExecutiveDashboard } from './features/exec/ExecutiveDashboard';
 import { CandidateDashboard } from './features/candidate/CandidateDashboard';
 import { MyProfile } from './features/candidate/MyProfile';
@@ -124,6 +125,14 @@ function AppContent() {
                   element={
                     <RequireRole allow={[AppRoles.ProgramOps]}>
                       <Risks />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/ops/skills"
+                  element={
+                    <RequireRole allow={[AppRoles.ProgramOps]}>
+                      <SkillsManagement />
                     </RequireRole>
                   }
                 />

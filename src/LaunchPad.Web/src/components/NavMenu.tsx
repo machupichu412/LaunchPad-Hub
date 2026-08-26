@@ -17,6 +17,7 @@ import {
   PeopleTeamRegular,
   PersonRegular,
   ShoppingBagRegular,
+  TagRegular,
   TaskListSquareLtrRegular,
   WarningRegular,
 } from '@fluentui/react-icons';
@@ -161,9 +162,10 @@ export function NavMenu() {
           <NavLink to="/ops/dashboard" icon={<GridRegular />}>Dashboard</NavLink>
           <NavLink to="/ops/projects" icon={<FolderRegular />}>Projects</NavLink>
           <NavLink to="/ops/project-approvals" icon={<ClipboardTaskRegular />}>Project Approvals</NavLink>
-          <NavLink to="/ops/approvals" icon={<CheckmarkCircleRegular />}>Approvals</NavLink>
+          <NavLink to="/ops/approvals" icon={<CheckmarkCircleRegular />}>Assignment Approvals</NavLink>
           <NavLink to="/ops/cohorts" icon={<PeopleTeamRegular />}>Cohorts</NavLink>
           <NavLink to="/ops/risks" icon={<WarningRegular />}>Risks</NavLink>
+          <NavLink to="/ops/skills" icon={<TagRegular />}>Skills</NavLink>
           <NavLink to="/pipeline" icon={<PeopleRegular />}>Candidates</NavLink>
           <NavLink to="/community" icon={<PeopleCommunityRegular />}>Community</NavLink>
         </>
