@@ -1027,7 +1027,7 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.HasOne("LaunchPad.Domain.Entities.ProjectTodo", "ProjectTodo")
                         .WithMany()
                         .HasForeignKey("ProjectTodoId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.ClientSetNull);
 
                     b.Navigation("Assignment");
 
