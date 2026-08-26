@@ -152,6 +152,7 @@ export function NavMenu() {
           <NavLink to="/projects" icon={<FolderRegular />}>My Projects</NavLink>
           <NavLink to="/candidates" icon={<PeopleRegular />}>My Candidates</NavLink>
           <NavLink to="/pipeline" icon={<PeopleTeamRegular />}>Talent Pipeline</NavLink>
+          <NavLink to="/community" icon={<PeopleCommunityRegular />}>Community</NavLink>
         </>
       )}
 

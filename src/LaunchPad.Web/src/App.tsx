@@ -214,7 +214,7 @@ function AppContent() {
                 <Route
                   path="/community"
                   element={
-                    <RequireRole allow={[AppRoles.Candidate, AppRoles.ProgramOps]}>
+                    <RequireRole allow={[AppRoles.Candidate, AppRoles.ProgramOps, AppRoles.Sponsor]}>
                       <Community />
                     </RequireRole>
                   }

@@ -1,4 +1,5 @@
 using LaunchPad.Application.Candidates;
+using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
 using LaunchPad.Application.Notifications;
 using LaunchPad.Application.Reporting;
@@ -62,6 +63,11 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             services.AddSingleton<IDocumentStorage, FakeDocumentStorage>();
             services.RemoveAll<IFolderProvisioningJobPublisher>();
             services.AddScoped<IFolderProvisioningJobPublisher, FakeFolderProvisioningJobPublisher>();
+
+            // Same "in-memory dictionary, no real Blob Storage" shape as FakeDocumentStorage
+            // above — see FakeCommunityImageStorage.
+            services.RemoveAll<ICommunityImageStorage>();
+            services.AddSingleton<ICommunityImageStorage, FakeCommunityImageStorage>();
 
             services.AddAuthentication(TestAuthHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });

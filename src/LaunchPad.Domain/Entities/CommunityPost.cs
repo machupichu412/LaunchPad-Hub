@@ -20,7 +20,20 @@ public class CommunityPost
     // going stale and duplicating Entra as a second source of truth).
     public string? AuthorRoleLabel { get; set; }
 
+    /// <summary>Opaque storage key for the post's single optional image, resolved via
+    /// ICommunityImageStorage — never a public URL, always proxied through the API.</summary>
+    public string? ImageBlobPath { get; set; }
+    public string? ImageContentType { get; set; }
+
+    // Denormalized counters, maintained transactionally by CommunityRepository
+    // (ExecuteUpdateAsync) alongside the reaction/comment write itself — the feed's
+    // list query must never load the full Reactions/Comments collections just to
+    // count them, since that stops scaling once a post accumulates real engagement.
+    public int LikeCount { get; set; }
+    public int CommentCount { get; set; }
+
     public AppUser Author { get; set; } = null!;
     public ICollection<CommunityComment> Comments { get; set; } = new List<CommunityComment>();
     public ICollection<CommunityPostReaction> Reactions { get; set; } = new List<CommunityPostReaction>();
+    public ICollection<CommunityPostHashtag> PostHashtags { get; set; } = new List<CommunityPostHashtag>();
 }

@@ -1,3 +1,4 @@
+using LaunchPad.Application.Community;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
 using LaunchPad.Infrastructure.Persistence;
@@ -314,15 +315,21 @@ public static class LocalDemoSeeder
             Author = candidateUsers[1],
             AuthorRoleLabel = "Candidate",
             PostType = CommunityPostType.Win,
-            Body = "Just shipped the first version of the real-time metrics widget — really happy with how the chart animations turned out!",
+            Body = "Just shipped the first version of the real-time metrics widget — really happy with how the chart animations turned out! #shipit",
             CreatedUtc = DateTime.UtcNow.AddDays(-2),
+            // Matches what's actually seeded below (one comment, one reaction) — the
+            // seeder writes through plain property assignment like this, not the
+            // migration's raw-SQL backfill, which only ever needs to handle pre-existing
+            // data on a real SQL Server target.
+            CommentCount = 1,
+            LikeCount = 1,
         };
         var questionPost = new CommunityPost
         {
             Author = candidateUsers[0],
             AuthorRoleLabel = "Candidate",
             PostType = CommunityPostType.Question,
-            Body = "Has anyone worked with Power BI embedded tokens before? Trying to figure out the refresh flow.",
+            Body = "Has anyone worked with Power BI embedded tokens before? Trying to figure out the refresh flow. #help",
             CreatedUtc = DateTime.UtcNow.AddDays(-1),
         };
         var announcementPost = new CommunityPost
@@ -330,9 +337,24 @@ public static class LocalDemoSeeder
             Author = sponsorUser,
             AuthorRoleLabel = "Sponsor",
             PostType = CommunityPostType.Announcement,
-            Body = "Midpoint reviews open next week — please have your deliverables up to date before then. Thanks for all the hard work so far!",
+            Body = "Midpoint reviews open next week — please have your deliverables up to date before then. Thanks for all the hard work so far! #midpointreview",
             CreatedUtc = DateTime.UtcNow.AddHours(-6),
         };
+
+        // Wires up real Hashtag/CommunityPostHashtag rows for each #tag above, the same
+        // way CommunityController.CreatePost does — so the demo has real, clickable,
+        // filterable tags to click through rather than plain text that only looks tagged.
+        var hashtagsByTag = new Dictionary<string, Hashtag>();
+        Hashtag GetOrAddHashtag(string tag) =>
+            hashtagsByTag.TryGetValue(tag, out var existing) ? existing : hashtagsByTag[tag] = new Hashtag { Tag = tag };
+
+        foreach (var (post, body) in new[] { (kudosPost, kudosPost.Body), (questionPost, questionPost.Body), (announcementPost, announcementPost.Body) })
+        {
+            foreach (var tag in HashtagExtractor.Extract(body))
+            {
+                post.PostHashtags.Add(new CommunityPostHashtag { Post = post, Hashtag = GetOrAddHashtag(tag) });
+            }
+        }
 
         var kudosComment = new CommunityComment { Post = kudosPost, Author = sponsorUser, Body = "This looks great, nice work!", CreatedUtc = DateTime.UtcNow.AddHours(-20) };
         var kudosReaction = new CommunityPostReaction { Post = kudosPost, AppUser = sponsorUser };

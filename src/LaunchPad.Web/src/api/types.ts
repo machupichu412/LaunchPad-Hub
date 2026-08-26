@@ -227,30 +227,40 @@ export interface CandidateDashboardDto {
 
 export interface CommunityCommentDto {
   communityCommentId: number;
+  authorAppUserId: number;
   authorName: string;
+  authorRoleLabel: string | null;
+  authorTeamsLink: string;
   body: string;
   createdUtc: string;
 }
 
 export interface CommunityPostDto {
   communityPostId: number;
+  authorAppUserId: number;
   authorName: string;
   authorRoleLabel: string | null;
+  authorTeamsLink: string;
   body: string;
   postType: CommunityPostType;
   createdUtc: string;
+  hasImage: boolean;
   likeCount: number;
   hasLikedByMe: boolean;
-  comments: CommunityCommentDto[];
+  commentCount: number;
 }
 
-export interface CreateCommunityPostRequest {
-  body: string;
-  postType: CommunityPostType;
+/** One cursor-paginated page of the feed — see api/community.ts's getCommunityFeedPage. */
+export interface CommunityFeedPageDto {
+  items: CommunityPostDto[];
+  nextCursor: string | null;
 }
 
 export interface CreateCommunityCommentRequest {
   body: string;
+  /** The role the caller is currently viewing as (see useActiveRole) — the server only
+   * trusts this if it's actually one of the caller's own held roles. */
+  activeRole?: string;
 }
 
 export type CohortStatus = 'Planned' | 'Active' | 'Completed';
