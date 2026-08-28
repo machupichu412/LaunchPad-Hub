@@ -5,6 +5,7 @@ import {
   Badge,
   Body1,
   Button,
+  Card,
   Dialog,
   DialogActions,
   DialogBody,
@@ -12,16 +13,43 @@ import {
   DialogSurface,
   DialogTitle,
   Field,
+  Select,
   Spinner,
+  Subtitle2,
   Textarea,
+  makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
-import { cancelProject, getProject, updateProject } from '../api/projects';
+import { cancelProject, getProject, updateDeliveryStage, updateProject } from '../api/projects';
 import { AssignedCandidatesSection } from './AssignedCandidatesSection';
 import { CandidateGallery } from './CandidateGallery';
 import { PageHeader } from './PageHeader';
 import { ProjectForm, type ProjectFormValues } from './ProjectForm';
-import { projectApprovalStatusLabel, projectStatusLabel } from '../utils/statusLabels';
+import { useSurfaceStyles } from '../theme/surfaces';
+import {
+  deliveryStageLabel,
+  deliveryStageOrder,
+  projectApprovalStatusLabel,
+  projectStatusLabel,
+} from '../utils/statusLabels';
+import type { ProjectDeliveryStage } from '../api/types';
+
+const useStyles = makeStyles({
+  stageCard: {
+    padding: tokens.spacingVerticalL,
+    marginBottom: tokens.spacingVerticalXL,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalS,
+  },
+  stageRow: {
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: tokens.spacingHorizontalM,
+    flexWrap: 'wrap',
+  },
+});
 
 const emptyValues: ProjectFormValues = {
   name: '',
@@ -41,6 +69,8 @@ const emptyValues: ProjectFormValues = {
  * care which role rendered it.
  */
 export function ProjectEditor() {
+  const styles = useStyles();
+  const surfaces = useSurfaceStyles();
   const { id } = useParams<{ id: string }>();
   const projectId = Number(id);
   const queryClient = useQueryClient();
@@ -80,6 +110,21 @@ export function ProjectEditor() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects', projectId] }),
   });
 
+  const [stageValue, setStageValue] = useState<ProjectDeliveryStage>('NotStarted');
+  const [stageReason, setStageReason] = useState('');
+
+  useEffect(() => {
+    if (project) setStageValue(project.deliveryStage);
+  }, [project]);
+
+  const stageMutation = useMutation({
+    mutationFn: () => updateDeliveryStage(projectId, { stage: stageValue, reason: stageReason.trim() || null }),
+    onSuccess: () => {
+      setStageReason('');
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+    },
+  });
+
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const cancelMutation = useMutation({
@@ -114,6 +159,42 @@ export function ProjectEditor() {
           )
         }
       />
+
+      <Card className={mergeClasses(styles.stageCard, surfaces.card)}>
+        <Subtitle2>Delivery stage</Subtitle2>
+        <Body1>
+          Feeds the Executive dashboard's delivery KPIs. Current stage:{' '}
+          <Badge appearance="tint">{deliveryStageLabel(project.deliveryStage)}</Badge>
+        </Body1>
+        <div className={styles.stageRow}>
+          <Field label="Set stage to">
+            <Select value={stageValue} onChange={(_, data) => setStageValue(data.value as ProjectDeliveryStage)}>
+              {deliveryStageOrder.map((stage) => (
+                <option key={stage} value={stage}>
+                  {deliveryStageLabel(stage)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Reason (optional)">
+            <Textarea
+              value={stageReason}
+              onChange={(_, data) => setStageReason(data.value)}
+              resize="vertical"
+              placeholder="What changed?"
+            />
+          </Field>
+          <Button
+            appearance="primary"
+            disabled={stageValue === project.deliveryStage || stageMutation.isPending}
+            onClick={() => stageMutation.mutate()}
+          >
+            {stageMutation.isPending ? 'Updating...' : 'Update stage'}
+          </Button>
+        </div>
+        {stageMutation.isError && <Body1>Failed to update: {(stageMutation.error as Error).message}</Body1>}
+        {stageMutation.isSuccess && <Body1>Stage updated.</Body1>}
+      </Card>
 
       <ProjectForm
         values={values}

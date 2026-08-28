@@ -3,6 +3,7 @@ import type {
   AssignmentStatus,
   CandidateStatus,
   ProjectApprovalStatus,
+  ProjectDeliveryStage,
   ProjectStatus,
   SuggestedHireOutcome,
 } from '../api/types';
@@ -74,4 +75,26 @@ const suggestedHireOutcomeLabels: Record<SuggestedHireOutcome, string> = {
 
 export function suggestedHireOutcomeLabel(outcome: SuggestedHireOutcome): string {
   return suggestedHireOutcomeLabels[outcome];
+}
+
+// Order matters here — it's the forward progression a Sponsor is restricted to
+// (see ProjectsController.AdvanceDeliveryStage) and drives the stage picker's option order.
+export const deliveryStageOrder: ProjectDeliveryStage[] = [
+  'NotStarted',
+  'MvpBuilt',
+  'Showcased',
+  'PilotReady',
+  'BusinessValueDocumented',
+];
+
+const deliveryStageLabels: Record<ProjectDeliveryStage, string> = {
+  NotStarted: 'Not started',
+  MvpBuilt: 'MVP built',
+  Showcased: 'Showcased',
+  PilotReady: 'Pilot-ready',
+  BusinessValueDocumented: 'Business value documented & signed off',
+};
+
+export function deliveryStageLabel(stage: ProjectDeliveryStage): string {
+  return deliveryStageLabels[stage];
 }

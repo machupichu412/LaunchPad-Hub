@@ -7,6 +7,7 @@ import type {
   RejectProjectRequest,
   SponsorCandidateDto,
   SponsorCandidateMatchDto,
+  UpdateDeliveryStageRequest,
   UpdateProjectRequest,
 } from './types';
 
@@ -103,5 +104,17 @@ export async function getAssignedCandidates(projectId: number): Promise<SponsorC
 export async function cancelProject(projectId: number, request: RejectProjectRequest): Promise<ProjectDto> {
   const response = await authedFetch(`/api/projects/${projectId}/cancel`, { method: 'POST', body: JSON.stringify(request) });
   if (!response.ok) throw new Error(`Failed to cancel project ${projectId}: ${response.status}`);
+  return response.json() as Promise<ProjectDto>;
+}
+
+/** Advances (Sponsor, forward-only) or corrects (Program Ops, any value) this project's
+ * delivery-stage milestone — backs the Executive KPI dashboard. A 400 here means a Sponsor
+ * tried to move backward; surface response text as the error, not a generic status code. */
+export async function updateDeliveryStage(projectId: number, request: UpdateDeliveryStageRequest): Promise<ProjectDto> {
+  const response = await authedFetch(`/api/projects/${projectId}/delivery-stage`, { method: 'POST', body: JSON.stringify(request) });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(text || `Failed to update delivery stage for project ${projectId}: ${response.status}`);
+  }
   return response.json() as Promise<ProjectDto>;
 }

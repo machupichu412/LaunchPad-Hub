@@ -814,4 +814,90 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict, "2 candidates are already committed to this project's 2 spots");
     }
+
+    // --- AdvanceDeliveryStage: backs the Executive KPI dashboard. Sponsor is forward-only
+    // (can't undo a claimed milestone), Program Ops can set any value to correct a mistake —
+    // see ProjectsController.AdvanceDeliveryStage. ---
+
+    [Fact]
+    public async Task AdvanceDeliveryStage_AsOwningSponsor_MovingForward_Succeeds()
+    {
+        var (ownerOid, projectId, _) = await SeedProjectAsync(); // Seeded at DeliveryStage.NotStarted
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, ownerOid.ToString());
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/projects/{projectId}/delivery-stage", new UpdateDeliveryStageRequest { Stage = ProjectDeliveryStage.MvpBuilt });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<ProjectDto>(TestJsonOptions.Default);
+        dto!.DeliveryStage.Should().Be(ProjectDeliveryStage.MvpBuilt);
+    }
+
+    [Fact]
+    public async Task AdvanceDeliveryStage_AsOwningSponsor_MovingBackward_ReturnsBadRequest()
+    {
+        var (ownerOid, projectId, _) = await SeedProjectAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, ownerOid.ToString());
+
+        await client.PostAsJsonAsync(
+            $"/api/projects/{projectId}/delivery-stage", new UpdateDeliveryStageRequest { Stage = ProjectDeliveryStage.PilotReady });
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/projects/{projectId}/delivery-stage", new UpdateDeliveryStageRequest { Stage = ProjectDeliveryStage.Showcased });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task AdvanceDeliveryStage_AsNonOwningSponsor_IsForbidden()
+    {
+        var (_, projectId, _) = await SeedProjectAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, Guid.NewGuid().ToString()); // a different sponsor
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/projects/{projectId}/delivery-stage", new UpdateDeliveryStageRequest { Stage = ProjectDeliveryStage.MvpBuilt });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task AdvanceDeliveryStage_AsProgramOps_CanMoveBackward_BypassingOwnership()
+    {
+        var (_, projectId, _) = await SeedProjectAsync();
+
+        var opsClient = _factory.CreateClient();
+        opsClient.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+        await opsClient.PostAsJsonAsync(
+            $"/api/projects/{projectId}/delivery-stage", new UpdateDeliveryStageRequest { Stage = ProjectDeliveryStage.BusinessValueDocumented });
+
+        var response = await opsClient.PostAsJsonAsync(
+            $"/api/projects/{projectId}/delivery-stage", new UpdateDeliveryStageRequest { Stage = ProjectDeliveryStage.MvpBuilt, Reason = "Corrected a data-entry mistake" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await response.Content.ReadFromJsonAsync<ProjectDto>(TestJsonOptions.Default);
+        dto!.DeliveryStage.Should().Be(ProjectDeliveryStage.MvpBuilt);
+    }
+
+    [Fact]
+    public async Task AdvanceDeliveryStage_AsCandidate_IsForbidden()
+    {
+        var (_, projectId, _) = await SeedProjectAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Candidate);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/projects/{projectId}/delivery-stage", new UpdateDeliveryStageRequest { Stage = ProjectDeliveryStage.MvpBuilt });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
 }

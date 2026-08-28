@@ -95,3 +95,26 @@ public enum CommunityPostType
     Kudos = 3,
     Reminder = 4
 }
+
+/// <summary>
+/// A project's delivery-stage milestone — the single ordered progression backing the
+/// "AI solutions delivered / business value / prototype maturity / pilot & adoption
+/// readiness" Executive KPIs (see dbo.vProjectDeliveryKpi and ExecutiveDashboardDto).
+/// Values are ordered on purpose: KPI thresholds are ">= stage" comparisons. A Sponsor
+/// can only move their own project forward one story at a time; Program Ops can set
+/// any value, including backward, to correct a mistake — see
+/// ProjectsController.AdvanceDeliveryStage.
+/// </summary>
+public enum ProjectDeliveryStage
+{
+    NotStarted = 0,
+    MvpBuilt = 1,
+    Showcased = 2,
+    PilotReady = 3,
+
+    /// <summary>Terminal stage: business value documented AND the sponsor has signed off —
+    /// the slide's "100% documented with sponsor sign-off" is one combined target, not two,
+    /// so it's modeled as one stage rather than splitting documentation from sign-off.
+    /// A project at this stage counts toward "AI solutions delivered."</summary>
+    BusinessValueDocumented = 4
+}

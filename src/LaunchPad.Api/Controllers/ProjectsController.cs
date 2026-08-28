@@ -42,6 +42,7 @@ public class ProjectsController : ControllerBase
     private readonly IValidator<UpdateProjectRequest> _updateValidator;
     private readonly IValidator<RejectProjectRequest> _rejectValidator;
     private readonly IValidator<RateInterestRequest> _rateInterestValidator;
+    private readonly IValidator<UpdateDeliveryStageRequest> _deliveryStageValidator;
     private readonly IFolderProvisioningJobPublisher _folderProvisioning;
 
     public ProjectsController(
@@ -63,6 +64,7 @@ public class ProjectsController : ControllerBase
         IValidator<UpdateProjectRequest> updateValidator,
         IValidator<RejectProjectRequest> rejectValidator,
         IValidator<RateInterestRequest> rateInterestValidator,
+        IValidator<UpdateDeliveryStageRequest> deliveryStageValidator,
         IFolderProvisioningJobPublisher folderProvisioning)
     {
         _projects = projects;
@@ -83,6 +85,7 @@ public class ProjectsController : ControllerBase
         _updateValidator = updateValidator;
         _rejectValidator = rejectValidator;
         _rateInterestValidator = rateInterestValidator;
+        _deliveryStageValidator = deliveryStageValidator;
         _folderProvisioning = folderProvisioning;
     }
 
@@ -270,6 +273,45 @@ public class ProjectsController : ControllerBase
         project.Skills = await ResolveSkillsAsync(request.RequiredSkillNames, request.PreferredSkillNames, ct);
 
         await _projects.SaveChangesAsync(ct);
+
+        return Ok(ToDto(project));
+    }
+
+    /// <summary>Advances (or, for Program Ops, corrects) this project's delivery-stage
+    /// milestone — backs the "AI solutions delivered / business value / prototype maturity /
+    /// pilot &amp; adoption readiness" Executive KPIs (see dbo.vProjectDeliveryKpi). A Sponsor
+    /// can only move their own project strictly forward, one story at a time — they can't
+    /// undo a milestone once it's claimed. Program Ops can set any stage, including
+    /// backward, the same "revisit a past call" allowance Approve/Reject give it.</summary>
+    [HttpPost("{id:int}/delivery-stage")]
+    [Authorize(Policy = Policies.ViewTalentPipeline)]
+    public async Task<ActionResult<ProjectDto>> AdvanceDeliveryStage(int id, UpdateDeliveryStageRequest request, CancellationToken ct)
+    {
+        var validation = await _deliveryStageValidator.ValidateAsync(request, ct);
+        if (!validation.IsValid) return ValidationProblem(AddErrors(validation));
+
+        var project = await _projects.GetWithSponsorAsync(id, ct);
+        if (project is null) return NotFound();
+
+        var isProgramOps = User.IsInRole(Roles.ProgramOps);
+        if (!isProgramOps)
+        {
+            var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+            if (!auth.Succeeded) return Forbid();
+
+            if (request.Stage <= project.DeliveryStage)
+            {
+                return BadRequest("Delivery stage can only move forward.");
+            }
+        }
+
+        var previousStage = project.DeliveryStage;
+        project.DeliveryStage = request.Stage;
+
+        await _projects.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(
+            _currentUser.EntraObjectId, "Project", project.ProjectId.ToString(), "DeliveryStageChanged",
+            reason: request.Reason, data: new { From = previousStage, To = request.Stage }, ct: ct);
 
         return Ok(ToDto(project));
     }
@@ -760,6 +802,7 @@ public class ProjectsController : ControllerBase
             RejectionReason = project.RejectionReason,
             SponsorTeamsLink = $"https://teams.microsoft.com/l/chat/0/0?users={Uri.EscapeDataString(project.Sponsor.AppUser.Upn)}",
             MaxCandidates = project.MaxCandidates,
+            DeliveryStage = project.DeliveryStage,
             CommittedCandidateCount = committedCount,
             SpotsRemaining = Math.Max(0, project.MaxCandidates - reservedOrCommittedCount),
             RequiredSkills = project.Skills
