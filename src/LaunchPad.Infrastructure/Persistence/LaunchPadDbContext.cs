@@ -35,6 +35,9 @@ public class LaunchPadDbContext : DbContext
     // Keyless read model backed by the dbo.vCandidateRisk view — never write through this.
     public DbSet<CandidateRisk> CandidateRisks => Set<CandidateRisk>();
 
+    // Keyless read model backed by the dbo.vProjectDeliveryKpi view — never write through this.
+    public DbSet<ProjectDeliveryKpi> ProjectDeliveryKpis => Set<ProjectDeliveryKpi>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(LaunchPadDbContext).Assembly);

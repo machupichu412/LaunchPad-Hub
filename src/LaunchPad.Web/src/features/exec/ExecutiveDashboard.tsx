@@ -33,6 +33,12 @@ const useStyles = makeStyles({
     gap: tokens.spacingHorizontalM,
     marginBottom: tokens.spacingVerticalXL,
   },
+  kpiGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: tokens.spacingHorizontalM,
+    marginBottom: tokens.spacingVerticalL,
+  },
   tile: {
     padding: tokens.spacingVerticalL,
   },
@@ -42,8 +48,26 @@ const useStyles = makeStyles({
   },
   panel: {
     padding: tokens.spacingVerticalL,
+    marginBottom: tokens.spacingVerticalXL,
+  },
+  sectionTitle: {
+    marginBottom: tokens.spacingVerticalM,
+    display: 'block',
+  },
+  universityRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: `${tokens.spacingVerticalXS} 0`,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
   },
 });
+
+// denominator can legitimately be 0 (no projects/decided candidates yet) — show an
+// em dash rather than a misleading 0% or a NaN.
+function formatPercent(numerator: number, denominator: number): string {
+  if (denominator === 0) return '—';
+  return `${Math.round((numerator / denominator) * 100)}%`;
+}
 
 function StatTile({ label, value, caption }: { label: string; value: string; caption?: string }) {
   const styles = useStyles();
@@ -124,6 +148,54 @@ export function ExecutiveDashboard() {
 
       {dashboard && (
         <>
+          <Title3 className={styles.sectionTitle}>Core Objectives &amp; Exec KPIs</Title3>
+          <div className={styles.kpiGrid}>
+            <StatTile
+              label="AI Solutions Delivered"
+              value={String(dashboard.solutionsDeliveredCount)}
+              caption="Target: 20+ per cohort"
+            />
+            <StatTile
+              label="Advance Beyond Showcase"
+              value={formatPercent(dashboard.pilotReadyCount, dashboard.projectCount)}
+              caption={`Target: ≥50% · MVP complete ${formatPercent(dashboard.mvpCompleteCount, dashboard.projectCount)}`}
+            />
+            <StatTile
+              label="Hire-Ready Talent"
+              value={formatPercent(dashboard.hireReadyCandidateCount, dashboard.decidedCandidateCount)}
+              caption="Target: ≥80% deemed hire-ready"
+            />
+            <StatTile
+              label="Sponsor Rating"
+              value={dashboard.averageSponsorRating != null ? dashboard.averageSponsorRating.toFixed(1) : '—'}
+              caption={`Target: ≥4.0/5 · n=${dashboard.sponsorRatingCount}`}
+            />
+            <StatTile
+              label="Business Value Generated"
+              value={formatPercent(dashboard.businessValueDocumentedCount, dashboard.projectCount)}
+              caption="Target: 100% documented & signed off"
+            />
+            <StatTile
+              label="University Breakdown"
+              value={String(dashboard.universityBreakdown.length)}
+              caption="Universities represented"
+            />
+          </div>
+
+          {dashboard.universityBreakdown.length > 0 && (
+            <Card className={mergeClasses(styles.panel, surfaces.card)}>
+              <Title3>Future Workforce Diversity — by university</Title3>
+              <div style={{ marginTop: tokens.spacingVerticalM }}>
+                {dashboard.universityBreakdown.map((u) => (
+                  <div key={u.school} className={styles.universityRow}>
+                    <Body1>{u.school}</Body1>
+                    <Body1>{u.candidateCount}</Body1>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           <div className={styles.tileGrid}>
             <StatTile label="Performance Risk" value={String(dashboard.performanceRiskCount)} caption="Candidates flagged" />
             <StatTile label="Engagement Risk" value={String(dashboard.engagementRiskCount)} caption="Candidates flagged" />

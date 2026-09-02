@@ -172,6 +172,7 @@ const projects: ProjectDto[] = [
     description: 'A real-time dashboard for tracking volunteer hours and program outcomes across three counties.',
     availabilityNeeded: 'PartTime', startDate: '2026-01-20', endDate: '2026-05-15', approvalStatus: 'Approved', status: 'InProgress',
     rejectionReason: null, sponsorTeamsLink: '', maxCandidates: 2, committedCandidateCount: 1, spotsRemaining: 1, myInterestRating: 5,
+    deliveryStage: 'BusinessValueDocumented',
     requiredSkills: [
       { skillName: 'React', category: 'Frontend', isRequired: true },
       { skillName: 'Data Visualization', category: 'Frontend', isRequired: true },
@@ -184,6 +185,7 @@ const projects: ProjectDto[] = [
     description: 'A Teams-integrated bot that matches volunteers to open shifts based on skills and availability.',
     availabilityNeeded: 'FullTime', startDate: '2026-01-20', endDate: '2026-05-15', approvalStatus: 'Approved', status: 'Open',
     rejectionReason: null, sponsorTeamsLink: '', maxCandidates: 2, committedCandidateCount: 0, spotsRemaining: 2, myInterestRating: null,
+    deliveryStage: 'PilotReady',
     requiredSkills: [
       { skillName: 'C#', category: 'Backend', isRequired: true },
       { skillName: 'Bot Framework', category: 'Backend', isRequired: false },
@@ -195,6 +197,7 @@ const projects: ProjectDto[] = [
     description: 'A public-facing gallery of donor and volunteer stories, refreshed monthly.',
     availabilityNeeded: 'PartTime', startDate: '2026-01-20', endDate: '2026-05-15', approvalStatus: 'PendingOps', status: 'Open',
     rejectionReason: null, sponsorTeamsLink: '', maxCandidates: 1, committedCandidateCount: 0, spotsRemaining: 1, myInterestRating: null,
+    deliveryStage: 'MvpBuilt',
     requiredSkills: [{ skillName: 'React', category: 'Frontend', isRequired: true }],
     sharePointFolderWebUrl: null,
   },
@@ -203,7 +206,7 @@ const projects: ProjectDto[] = [
     description: 'Untangle a decade of intake-form spaghetti into one clean, accessible flow.',
     availabilityNeeded: 'PartTime', startDate: '2025-09-02', endDate: '2025-12-19', approvalStatus: 'Rejected', status: 'Cancelled',
     rejectionReason: 'Scope overlaps with an in-flight IT initiative — revisit next cohort.', sponsorTeamsLink: '', maxCandidates: 1,
-    committedCandidateCount: 0, spotsRemaining: 1, myInterestRating: null, requiredSkills: [], sharePointFolderWebUrl: null,
+    committedCandidateCount: 0, spotsRemaining: 1, myInterestRating: null, deliveryStage: 'NotStarted', requiredSkills: [], sharePointFolderWebUrl: null,
   },
 ];
 
@@ -306,8 +309,29 @@ const opsDashboard: OpsDashboardDto = {
 const risks: RiskCandidateDto[] = opsDashboard.topRisks;
 
 const executiveDashboardByCohort: Record<number, ExecutiveDashboardDto> = {
-  1: { cohortId: 1, recommendedCount: 4, approvedCount: 3, hiredCount: 1, performanceRiskCount: 1, engagementRiskCount: 1 },
-  2: { cohortId: 2, recommendedCount: 7, approvedCount: 7, hiredCount: 5, performanceRiskCount: 0, engagementRiskCount: 1 },
+  1: {
+    cohortId: 1, recommendedCount: 4, approvedCount: 3, hiredCount: 1, performanceRiskCount: 1, engagementRiskCount: 1,
+    // 3 non-cancelled projects: BusinessValueDocumented, PilotReady, MvpBuilt.
+    projectCount: 3, solutionsDeliveredCount: 1, mvpCompleteCount: 3, pilotReadyCount: 2, businessValueDocumentedCount: 1,
+    hireReadyCandidateCount: 2, decidedCandidateCount: 3,
+    averageSponsorRating: 4.3, sponsorRatingCount: 6,
+    universityBreakdown: [
+      { school: 'University of Michigan', candidateCount: 3 },
+      { school: 'Wayne State University', candidateCount: 1 },
+      { school: 'Michigan State University', candidateCount: 1 },
+      { school: 'Eastern Michigan University', candidateCount: 1 },
+    ],
+  },
+  2: {
+    cohortId: 2, recommendedCount: 7, approvedCount: 7, hiredCount: 5, performanceRiskCount: 0, engagementRiskCount: 1,
+    projectCount: 5, solutionsDeliveredCount: 4, mvpCompleteCount: 5, pilotReadyCount: 5, businessValueDocumentedCount: 4,
+    hireReadyCandidateCount: 6, decidedCandidateCount: 7,
+    averageSponsorRating: 4.6, sponsorRatingCount: 11,
+    universityBreakdown: [
+      { school: 'University of Michigan', candidateCount: 4 },
+      { school: 'Michigan State University', candidateCount: 3 },
+    ],
+  },
 };
 
 // --- Route table ---------------------------------------------------------------

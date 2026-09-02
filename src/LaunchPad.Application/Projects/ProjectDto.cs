@@ -19,6 +19,10 @@ public class ProjectDto
     public string SponsorTeamsLink { get; set; } = string.Empty;
     public int MaxCandidates { get; set; }
 
+    /// <summary>Delivery-stage milestone backing the Executive KPI dashboard — see
+    /// ProjectDeliveryStage.</summary>
+    public ProjectDeliveryStage DeliveryStage { get; set; }
+
     /// <summary>"Open in SharePoint" deep link — null until FolderProvisioningRunner sets it.</summary>
     public string? SharePointFolderWebUrl { get; set; }
 

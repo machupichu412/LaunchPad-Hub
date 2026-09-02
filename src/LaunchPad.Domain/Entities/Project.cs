@@ -18,6 +18,10 @@ public class Project : Entity
     public string? RejectionReason { get; set; }
     public int MaxCandidates { get; set; } = 1;
 
+    /// <summary>Delivery-stage milestone backing the Executive KPI dashboard — see
+    /// ProjectDeliveryStage and ProjectsController.AdvanceDeliveryStage.</summary>
+    public ProjectDeliveryStage DeliveryStage { get; set; } = ProjectDeliveryStage.NotStarted;
+
     /// <summary>Opaque Graph drive-item ID of this project's SharePoint folder
     /// ({parent}/{Cohort}/Projects/{Name}) — null until FolderProvisioningRunner sets it.</summary>
     public string? SharePointFolderId { get; set; }

@@ -88,6 +88,11 @@ export interface CreateSkillRequest {
 export type ProjectApprovalStatus = 'Draft' | 'PendingOps' | 'Approved' | 'Rejected';
 export type ProjectStatus = 'Open' | 'InProgress' | 'Completed' | 'Cancelled';
 
+/** Ordered delivery-stage milestone backing the Executive KPI dashboard — a Sponsor can
+ * only move their own project forward through this list; Program Ops can set any value.
+ * See ProjectsController.AdvanceDeliveryStage. */
+export type ProjectDeliveryStage = 'NotStarted' | 'MvpBuilt' | 'Showcased' | 'PilotReady' | 'BusinessValueDocumented';
+
 export interface ProjectSkillDto {
   skillName: string;
   category: string;
@@ -109,6 +114,7 @@ export interface ProjectDto {
   rejectionReason: string | null;
   sponsorTeamsLink: string;
   maxCandidates: number;
+  deliveryStage: ProjectDeliveryStage;
   /** Count of assignments in {SponsorApproved, OpsApproved, Active} — the floor when editing maxCandidates. */
   committedCandidateCount: number;
   /** maxCandidates minus assignments in {Proposed, SponsorApproved, OpsApproved, Active} — derived, never stored. */
@@ -125,6 +131,11 @@ export interface RateInterestRequest {
 
 export interface RejectProjectRequest {
   reason: string;
+}
+
+export interface UpdateDeliveryStageRequest {
+  stage: ProjectDeliveryStage;
+  reason?: string | null;
 }
 
 export interface CreateProjectRequest {
@@ -340,7 +351,8 @@ export interface RiskCandidateDto {
 }
 
 /** Funnel: recommended (SponsorApproved) -> approved (OpsApproved) -> hired, plus
- * risk counts, scoped to one cohort — see api/ops.ts's getExecutiveDashboard. */
+ * risk counts and the Core Objectives KPI fields, scoped to one cohort — see
+ * api/ops.ts's getExecutiveDashboard. */
 export interface ExecutiveDashboardDto {
   cohortId: number;
   recommendedCount: number;
@@ -348,6 +360,37 @@ export interface ExecutiveDashboardDto {
   hiredCount: number;
   performanceRiskCount: number;
   engagementRiskCount: number;
+
+  /** Non-cancelled projects in the cohort — denominator for the delivery-stage rates below. */
+  projectCount: number;
+  /** Projects at the terminal BusinessValueDocumented stage — "AI solutions delivered." */
+  solutionsDeliveredCount: number;
+  /** Projects with deliveryStage >= MvpBuilt — "Prototype maturity: 100% MVP." */
+  mvpCompleteCount: number;
+  /** Projects with deliveryStage >= PilotReady — "Prototype maturity: 80% pilot-ready" and
+   * "Pilot & adoption readiness: advance beyond showcase." */
+  pilotReadyCount: number;
+  /** Same value as solutionsDeliveredCount — "Business value generated: 100% documented
+   * with sponsor sign-off." */
+  businessValueDocumentedCount: number;
+
+  /** Candidates with a final status of Hire or TalentPlus. */
+  hireReadyCandidateCount: number;
+  /** Candidates with any decided status (excludes InProgress) — denominator for hire-ready rate. */
+  decidedCandidateCount: number;
+
+  /** Average SponsorOnCandidate review score across the cohort, or null if none submitted yet. */
+  averageSponsorRating: number | null;
+  /** How many ratings averageSponsorRating is computed from. */
+  sponsorRatingCount: number;
+
+  /** Candidate count grouped by school, descending — the "University Breakdown" tile. */
+  universityBreakdown: UniversityBreakdownDto[];
+}
+
+export interface UniversityBreakdownDto {
+  school: string;
+  candidateCount: number;
 }
 
 export interface OpsDashboardDto {
