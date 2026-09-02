@@ -119,7 +119,10 @@ module functionApp 'modules/functions.bicep' = {
     sqlDatabaseName: sql.outputs.sqlDatabaseName
     appInsightsConnectionString: appInsights.outputs.connectionString
     serviceBusNamespace: serviceBus.outputs.namespaceName
-    storageAccountName: storage.outputs.storageAccountName
+    privateEndpointSubnetId: network.outputs.peSubnetId
+    blobPrivateDnsZoneId: network.outputs.blobDnsZoneId
+    queuePrivateDnsZoneId: network.outputs.queueDnsZoneId
+    tablePrivateDnsZoneId: network.outputs.tableDnsZoneId
     vnetIntegrationSubnetId: network.outputs.funcSubnetId
   }
 }
@@ -145,6 +148,9 @@ module staticWebApp 'modules/staticWebApp.bicep' = {
 // opaque parameter rather than a cross-module output chain.
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+var storageBlobDataOwnerRoleId = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
+var storageQueueDataContributorRoleId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
+var storageTableDataContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 var serviceBusDataSenderRoleId = '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39'
 var serviceBusDataReceiverRoleId = '4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0'
 
@@ -166,6 +172,21 @@ module storageAccess 'modules/storageAccess.bicep' = {
     roleAssignments: [
       { principalId: appService.outputs.appServicePrincipalId, roleDefinitionId: storageBlobDataContributorRoleId }
       { principalId: functionApp.outputs.functionAppPrincipalId, roleDefinitionId: storageBlobDataContributorRoleId }
+    ]
+  }
+}
+
+// The Functions module's own dedicated storage account (deployment package + runtime
+// bookkeeping — see functions.bicep) — separate grant from the shared business-data
+// account above, scoped to just this one account.
+module functionsStorageAccess 'modules/storageAccess.bicep' = {
+  name: 'functionsStorageAccess'
+  params: {
+    storageAccountName: functionApp.outputs.functionsStorageAccountName
+    roleAssignments: [
+      { principalId: functionApp.outputs.functionAppPrincipalId, roleDefinitionId: storageBlobDataOwnerRoleId }
+      { principalId: functionApp.outputs.functionAppPrincipalId, roleDefinitionId: storageQueueDataContributorRoleId }
+      { principalId: functionApp.outputs.functionAppPrincipalId, roleDefinitionId: storageTableDataContributorRoleId }
     ]
   }
 }
