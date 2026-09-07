@@ -21,6 +21,7 @@ import { ProjectApprovals } from './features/ops/ProjectApprovals';
 import { Cohorts } from './features/ops/Cohorts';
 import { Risks } from './features/ops/Risks';
 import { SkillsManagement } from './features/ops/SkillsManagement';
+import { HelpCenter } from './features/ops/help/HelpCenter';
 import { ExecutiveDashboard } from './features/exec/ExecutiveDashboard';
 import { CandidateDashboard } from './features/candidate/CandidateDashboard';
 import { MyProfile } from './features/candidate/MyProfile';
@@ -141,6 +142,24 @@ function AppContent() {
                   element={
                     <RequireRole allow={[AppRoles.ProgramOps]}>
                       <ProjectApprovals />
+                    </RequireRole>
+                  }
+                />
+                {/* Static content — no API calls, so no profile gate. Both the index
+                    and a single guide render from the same component. */}
+                <Route
+                  path="/ops/help"
+                  element={
+                    <RequireRole allow={[AppRoles.ProgramOps]}>
+                      <HelpCenter />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/ops/help/:topicId"
+                  element={
+                    <RequireRole allow={[AppRoles.ProgramOps]}>
+                      <HelpCenter />
                     </RequireRole>
                   }
                 />
