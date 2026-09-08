@@ -9,7 +9,8 @@ import { makeStyles, mergeClasses } from '@fluentui/react-components';
  *
  * Sized in CSS rather than by picking a file per size: the assets are 96px and
  * 320px so they still resolve sharply on a 2–4x display at the sizes used here.
- * Source of truth for both is public/brand/launchpad-logo.svg.
+ * Source of truth for both is design/launchpad-logo.svg (kept out of public/
+ * so the print-scale exports aren't published with the site — see design/README.md).
  */
 const useStyles = makeStyles({
   img: {
