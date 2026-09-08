@@ -28,6 +28,7 @@ launchpad/
 │   ├── LaunchPad.Application.Tests/
 │   └── LaunchPad.Api.IntegrationTests/
 ├── infra/                        # Bicep IaC (main.bicep + modules/)
+├── design/                       # brand source art — never served or bundled
 └── .github/workflows/
 ```
 
