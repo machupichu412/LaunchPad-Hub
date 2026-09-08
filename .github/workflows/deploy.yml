@@ -103,6 +103,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - uses: azure/arm-deploy@v2 # infra first, idempotent
+        id: infra
         with:
           resourceGroupName: rg-launchpad-dev
           template: infra/main.bicep
@@ -112,7 +113,11 @@ jobs:
       - run: dotnet ef database update --project src/LaunchPad.Infrastructure --startup-project src/LaunchPad.Api
       - uses: azure/webapps-deploy@v3
         with:
-          app-name: app-launchpad-dev
+          # Not a literal name — main.bicep computes it from uniqueString(subscription().id,
+          # resourceGroup().id), so it can't be hardcoded here. Read it back from this run's
+          # own infra deployment instead (azure/arm-deploy exposes every Bicep `output` as a
+          # step output of the same name).
+          app-name: ${{ steps.infra.outputs.appServiceName }}
           package: ./publish/api
       - uses: actions/download-artifact@v4
         with: { name: web, path: ./dist }
@@ -135,6 +140,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - uses: azure/arm-deploy@v2 # infra first, idempotent
+        id: infra
         with:
           resourceGroupName: rg-launchpad-prod
           template: infra/main.bicep
@@ -144,11 +150,13 @@ jobs:
       - run: dotnet ef database update --project src/LaunchPad.Infrastructure --startup-project src/LaunchPad.Api
       - uses: azure/webapps-deploy@v3
         with:
-          app-name: app-launchpad-prod
+          # Same reasoning as deploy-dev — not a literal name, read back from this run's
+          # own infra deployment output rather than hardcoded.
+          app-name: ${{ steps.infra.outputs.appServiceName }}
           slot-name: staging
           package: ./publish/api
-      - run: ./scripts/smoke-test.sh https://app-launchpad-prod-staging.azurewebsites.net
-      - run: az webapp deployment slot swap -g rg-launchpad-prod -n app-launchpad-prod --slot staging
+      - run: ./scripts/smoke-test.sh https://${{ steps.infra.outputs.appServiceName }}-staging.azurewebsites.net
+      - run: az webapp deployment slot swap -g rg-launchpad-prod -n ${{ steps.infra.outputs.appServiceName }} --slot staging
       - uses: actions/download-artifact@v4
         with: { name: web, path: ./dist }
       - uses: azure/static-web-apps-deploy@v1

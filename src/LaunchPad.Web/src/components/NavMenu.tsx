@@ -16,6 +16,7 @@ import {
   PeopleRegular,
   PeopleTeamRegular,
   PersonRegular,
+  QuestionCircleRegular,
   ShoppingBagRegular,
   TagRegular,
   TaskListSquareLtrRegular,
@@ -168,6 +169,7 @@ export function NavMenu() {
           <NavLink to="/ops/skills" icon={<TagRegular />}>Skills</NavLink>
           <NavLink to="/pipeline" icon={<PeopleRegular />}>Candidates</NavLink>
           <NavLink to="/community" icon={<PeopleCommunityRegular />}>Community</NavLink>
+          <NavLink to="/ops/help" icon={<QuestionCircleRegular />}>Guides</NavLink>
         </>
       )}
 

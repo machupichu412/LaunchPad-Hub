@@ -207,6 +207,7 @@ module serviceBusAccess 'modules/serviceBusAccess.bicep' = {
 // `CREATE USER [app-launchpad-<env>] FROM EXTERNAL PROVIDER` run by the deployment
 // identity — do this as a post-deploy script step in CI, not here. See §9.2/§9.4.
 
+output appServiceName string = appService.outputs.appServiceName
 output appServiceHostName string = appService.outputs.defaultHostName
 output staticWebAppHostName string = staticWebApp.outputs.defaultHostname
 output sqlServerFqdn string = sql.outputs.sqlServerFqdn
