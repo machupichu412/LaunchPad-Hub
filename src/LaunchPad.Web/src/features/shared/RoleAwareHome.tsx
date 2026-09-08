@@ -31,11 +31,11 @@ import {
   PeopleRegular,
   PeopleTeamRegular,
   PersonRegular,
-  RocketRegular,
   ShoppingBagRegular,
   TaskListSquareLtrRegular,
   WarningRegular,
 } from '@fluentui/react-icons';
+import { BrandMark } from '../../components/BrandMark';
 import { useSurfaceStyles } from '../../theme/surfaces';
 import { useApiTokenDiagnostics } from '../../auth/useApiTokenDiagnostics';
 import { useActiveRole } from '../../auth/ActiveRoleContext';
@@ -65,12 +65,6 @@ const useStyles = makeStyles({
     flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    width: '56px',
-    height: '56px',
-    borderRadius: tokens.borderRadiusCircular,
-    backgroundColor: tokens.colorBrandBackground,
-    color: tokens.colorNeutralForegroundOnBrand,
-    fontSize: '28px',
   },
   bannerTitle: {
     color: tokens.colorBrandForeground2,
@@ -306,25 +300,33 @@ export function RoleAwareHome() {
   const { accounts } = useMsal();
   const { activeRole } = useActiveRole();
   const { roles, spaIdTokenClaims, apiAccessTokenClaims } = useApiTokenDiagnostics();
-  const firstName = (accounts[0]?.name ?? 'there').split(' ')[0];
+  // Falling back to a generic name ("there") read as a bug when the display name
+  // was missing, so greet without one instead of inventing a stand-in.
+  const firstName = accounts[0]?.name?.trim().split(' ')[0] || null;
 
   const RoleHome = activeRole ? roleHomes[activeRole] : null;
 
   return (
     <>
       <div className={mergeClasses(styles.banner, surfaces.fadeInUp)}>
-        <span className={styles.bannerIcon} aria-hidden="true">
-          <RocketRegular />
+        <span className={styles.bannerIcon}>
+          <BrandMark variant="full" size={64} />
         </span>
         <div>
-          <Title1 block className={styles.bannerTitle}>Welcome to LaunchPad, {firstName}</Title1>
-          <Body1 block style={{ marginTop: tokens.spacingVerticalXS }}>
-            Use the role switcher in the header to change perspective if you hold more than one role.
-          </Body1>
+          <Title1 block className={styles.bannerTitle}>
+            {firstName ? `Welcome back, ${firstName}` : 'Welcome to LaunchPad'}
+          </Title1>
           <div className={styles.roleRow}>
             {roles.length > 0 ? (
+              /* Filled marks the perspective currently in effect — with one role that
+                 simply reads as a label, and with several it says which home this is
+                 without needing the switcher copy that used to sit above. */
               roles.map((role) => (
-                <Badge key={role} appearance="tint" color="brand">
+                <Badge
+                  key={role}
+                  appearance={role === activeRole ? 'filled' : 'outline'}
+                  color="brand"
+                >
                   {roleLabel(role as AppRole)}
                 </Badge>
               ))
