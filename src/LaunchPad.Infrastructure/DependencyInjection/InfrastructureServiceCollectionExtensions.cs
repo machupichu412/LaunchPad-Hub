@@ -1,3 +1,4 @@
+using LaunchPad.Application.Ai;
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Candidates;
 using LaunchPad.Application.Cohorts;
@@ -11,6 +12,7 @@ using LaunchPad.Application.Reviews;
 using LaunchPad.Application.SharePoint;
 using LaunchPad.Application.Skills;
 using LaunchPad.Application.Sponsors;
+using LaunchPad.Infrastructure.Ai;
 using LaunchPad.Infrastructure.Matching;
 using LaunchPad.Infrastructure.Notifications;
 using LaunchPad.Infrastructure.Persistence;
@@ -66,6 +68,19 @@ public static class InfrastructureServiceCollectionExtensions
         // specific, not something Infrastructure itself should decide.
         services.AddScoped<ServiceBusMatchingJobPublisher>();
         services.AddScoped<InlineMatchingJobPublisher>();
+
+        // The AI clients follow the same "register concrete, let the host choose" shape as the
+        // publishers above. Only the NoOp side exists so far, so these are the effective
+        // registrations too — the Azure OpenAI implementations land with the infra that backs
+        // them, and each host's gate on AzureOpenAI:Endpoint then starts picking between them.
+        // Registering them here now means callers can depend on the interfaces immediately and
+        // degrade cleanly (null / empty) rather than failing to resolve.
+        services.AddSingleton<NoOpResumeExtractionClient>();
+        services.AddSingleton<NoOpEmbeddingClient>();
+        services.AddSingleton<NoOpMatchRationaleWriter>();
+        services.AddSingleton<IResumeExtractionClient>(sp => sp.GetRequiredService<NoOpResumeExtractionClient>());
+        services.AddSingleton<IEmbeddingClient>(sp => sp.GetRequiredService<NoOpEmbeddingClient>());
+        services.AddSingleton<IMatchRationaleWriter>(sp => sp.GetRequiredService<NoOpMatchRationaleWriter>());
 
         // GraphServiceClient is safe to always register — constructing it (and the
         // DefaultAzureCredential behind it) makes no network call; only actually calling it
