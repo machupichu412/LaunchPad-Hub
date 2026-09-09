@@ -1,3 +1,4 @@
+using LaunchPad.Application.Ai;
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Candidates;
 using LaunchPad.Application.Cohorts;
@@ -11,6 +12,7 @@ using LaunchPad.Application.Reviews;
 using LaunchPad.Application.SharePoint;
 using LaunchPad.Application.Skills;
 using LaunchPad.Application.Sponsors;
+using LaunchPad.Infrastructure.Ai;
 using LaunchPad.Infrastructure.Candidates;
 using LaunchPad.Infrastructure.Matching;
 using LaunchPad.Infrastructure.Notifications;
@@ -68,8 +70,22 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ServiceBusMatchingJobPublisher>();
         services.AddScoped<InlineMatchingJobPublisher>();
 
-        // Stateless and thread-safe; both hosts can share one. Registered unconditionally
-        // because it needs nothing from Azure — extraction is entirely local.
+        // The AI clients follow the same "register concrete, let the host choose" shape as the
+        // publishers above. Only the NoOp side exists so far, so these are the effective
+        // registrations too — the Azure OpenAI implementations land with the infra that backs
+        // them, and each host's gate on AzureOpenAI:Endpoint then starts picking between them.
+        // Registering them here now means callers can depend on the interfaces immediately and
+        // degrade cleanly (null / empty) rather than failing to resolve.
+        services.AddSingleton<NoOpResumeExtractionClient>();
+        services.AddSingleton<NoOpEmbeddingClient>();
+        services.AddSingleton<NoOpMatchRationaleWriter>();
+        services.AddSingleton<IResumeExtractionClient>(sp => sp.GetRequiredService<NoOpResumeExtractionClient>());
+        services.AddSingleton<IEmbeddingClient>(sp => sp.GetRequiredService<NoOpEmbeddingClient>());
+        services.AddSingleton<IMatchRationaleWriter>(sp => sp.GetRequiredService<NoOpMatchRationaleWriter>());
+
+        // Not gated on any config: text extraction is entirely local, so unlike the clients
+        // above there is no "unavailable" variant to fall back to. Stateless and thread-safe,
+        // so both hosts share one instance.
         services.AddSingleton<IResumeTextExtractor, ResumeTextExtractor>();
 
         // GraphServiceClient is safe to always register — constructing it (and the

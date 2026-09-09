@@ -191,4 +191,55 @@ public class MatchingEngineTests
         (highScore - lowScore).Should().Be(4m); // +2 vs -2
         neutralScore.Should().BeInRange(lowScore, highScore); // unrated sits between, unpenalized
     }
+
+    /// <summary>
+    /// CLAUDE.md: hidden numeric ratings must never reach a Sponsor or Candidate. The rationale
+    /// built here is persisted to Assignment.MatchRationale and read by both roles through
+    /// SponsorCandidateMatchDto / ProjectMatchDto / MyAssignmentDto — surfaces CandidateDtoMapper's
+    /// role gate on AverageScore never sees. It used to emit "past performance score 78%",
+    /// routing a review-derived figure straight around that gate.
+    ///
+    /// Swept across the whole range rather than spot-checked: the leak was one interpolation, and
+    /// only every value proves no band renders the number back.
+    /// </summary>
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(0.13)]
+    [InlineData(0.25)]
+    [InlineData(0.5)]
+    [InlineData(0.59)]
+    [InlineData(0.6)]
+    [InlineData(0.75)]
+    [InlineData(0.87)]
+    [InlineData(1.0)]
+    public void RankTopMatches_RationaleNeverStatesTheNumericPerformanceScore(double performance)
+    {
+        var project = new MatchProject(1, Availability.FullTime, new[] { (1, true) });
+        var candidate = new MatchCandidate(
+            1, Availability.FullTime, new[] { 1 }, PastPerformanceScore: (decimal)performance);
+
+        var rationale = _sut.RankTopMatches(project, new[] { candidate }).Single().Rationale;
+
+        rationale.Should().NotContain("performance score");
+        rationale.Should().MatchRegex(@"(strong|mixed) prior performance");
+        // The specific figure, in every rendering the old interpolation could have produced.
+        rationale.Should().NotContain($"{Math.Round((decimal)performance * 100m)}%");
+    }
+
+    [Fact]
+    public void RankTopMatches_RationaleDistinguishesStrongFromMixedPerformance()
+    {
+        var project = new MatchProject(1, Availability.FullTime, new[] { (1, true) });
+
+        string RationaleFor(decimal performance) => _sut
+            .RankTopMatches(project, new[] { new MatchCandidate(1, Availability.FullTime, new[] { 1 }, PastPerformanceScore: performance) })
+            .Single().Rationale;
+
+        RationaleFor(0.9m).Should().Contain("strong prior performance");
+        RationaleFor(0.2m).Should().Contain("mixed prior performance");
+        // No review history stays distinguishable from a low score — a first-project candidate
+        // must not read as having performed poorly.
+        _sut.RankTopMatches(project, new[] { new MatchCandidate(1, Availability.FullTime, new[] { 1 }) })
+            .Single().Rationale.Should().Contain("no review history yet");
+    }
 }

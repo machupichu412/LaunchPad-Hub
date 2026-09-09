@@ -2,6 +2,13 @@ namespace LaunchPad.Application.Matching;
 
 public sealed class MatchingEngine : IMatchingEngine
 {
+    /// <summary>Cut between the two performance bands the rationale is allowed to name.
+    /// PastPerformanceScore is (avgOverallScore - 1) / 4, so 0.6 is an average of 3.4 on the
+    /// 1-5 review scale. Two bands rather than three deliberately: the rationale is read by
+    /// Sponsors and Candidates, and every extra band leaks more of the hidden rating it stands
+    /// in for. It says performance was weighed, not what the score was.</summary>
+    private const decimal StrongPerformanceBand = 0.6m;
+
     public IReadOnlyList<MatchResult> RankTopMatches(MatchProject project, IReadOnlyCollection<MatchCandidate> candidates, int topN = 3)
     {
         var requiredSkillIds = project.Skills.Where(s => s.IsRequired).Select(s => s.SkillId).ToHashSet();
@@ -98,8 +105,14 @@ public sealed class MatchingEngine : IMatchingEngine
         {
             $"Matched {requiredMatchedCount}/{requiredCount} required and {preferredMatchedCount}/{preferredCount} preferred skills",
             "availability aligned with project need",
+            // A coarse band, never the number. PastPerformanceScore is derived from
+            // Review.OverallScore, and this string is persisted to Assignment.MatchRationale,
+            // which reaches Sponsors (SponsorCandidateMatchDto, ProjectMatchDto) and Candidates
+            // (MyAssignmentDto) — surfaces where CandidateDtoMapper's role gate on AverageScore
+            // does not apply. Emitting the rounded percentage here routed a hidden rating around
+            // that gate. Ops and Executives still get the real figure through AverageScore.
             pastPerformanceScore is decimal performance
-                ? $"past performance score {Math.Round(performance * 100m)}%"
+                ? (performance >= StrongPerformanceBand ? "strong prior performance" : "mixed prior performance")
                 : "no review history yet (first project — weighted toward skills)",
             graduationAligned switch
             {
