@@ -14,10 +14,27 @@ const useStyles = makeStyles({
   body: {
     display: 'flex',
     flexGrow: 1,
+    // The rail is a fixed 244px at every width, which pushed the whole page sideways on
+    // a phone — the content started off-screen and the body scrolled horizontally. Below
+    // the breakpoint the shell stacks and the rail becomes a horizontal strip instead.
+    '@media (max-width: 767px)': {
+      flexDirection: 'column',
+    },
   },
   nav: {
     width: '244px',
     flexShrink: 0,
+    '@media (max-width: 767px)': {
+      width: '100%',
+      borderRightStyle: 'none',
+      borderBottomWidth: tokens.strokeWidthThin,
+      borderBottomStyle: 'solid',
+      borderBottomColor: tokens.colorNeutralStroke2,
+      // Keeps the strip from growing tall enough to bury the page under itself.
+      position: 'sticky',
+      top: 0,
+      zIndex: 1,
+    },
     backgroundColor: tokens.colorNeutralBackground3,
     borderRightWidth: tokens.strokeWidthThin,
     borderRightStyle: 'solid',
@@ -52,6 +69,12 @@ const useStyles = makeStyles({
   main: {
     flexGrow: 1,
     padding: tokens.spacingHorizontalXL,
+    // Nothing inside a page should be able to widen the document itself; wide children
+    // (tables, card grids) scroll within their own container instead.
+    minWidth: 0,
+    '@media (max-width: 767px)': {
+      padding: tokens.spacingHorizontalM,
+    },
   },
 });
 

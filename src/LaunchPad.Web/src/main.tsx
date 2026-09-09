@@ -2,11 +2,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MsalProvider } from '@azure/msal-react';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components';
+import { FluentProvider } from '@fluentui/react-components';
 import './index.css';
 import App from './App.tsx';
 import { msalInstance, initializeMsal } from './auth/msalInstance';
 import { queryClient } from './api/queryClient';
+import { launchPadDarkTheme, launchPadLightTheme } from './theme/brand';
 import { getInitialMode } from './theme/ThemeModeContext';
 import { InitialLoadingScreen } from './components/InitialLoadingScreen';
 
@@ -19,7 +20,7 @@ const root = createRoot(document.getElementById('root')!);
 // render a themed loading screen first, then swap it for the real app.
 root.render(
   <StrictMode>
-    <FluentProvider theme={getInitialMode() === 'dark' ? webDarkTheme : webLightTheme}>
+    <FluentProvider theme={getInitialMode() === 'dark' ? launchPadDarkTheme : launchPadLightTheme}>
       <InitialLoadingScreen />
     </FluentProvider>
   </StrictMode>,
