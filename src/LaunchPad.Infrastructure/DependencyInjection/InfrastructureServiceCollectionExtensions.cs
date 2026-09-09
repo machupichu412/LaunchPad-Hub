@@ -13,6 +13,7 @@ using LaunchPad.Application.SharePoint;
 using LaunchPad.Application.Skills;
 using LaunchPad.Application.Sponsors;
 using LaunchPad.Infrastructure.Ai;
+using LaunchPad.Infrastructure.Candidates;
 using LaunchPad.Infrastructure.Matching;
 using LaunchPad.Infrastructure.Notifications;
 using LaunchPad.Infrastructure.Persistence;
@@ -81,6 +82,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IResumeExtractionClient>(sp => sp.GetRequiredService<NoOpResumeExtractionClient>());
         services.AddSingleton<IEmbeddingClient>(sp => sp.GetRequiredService<NoOpEmbeddingClient>());
         services.AddSingleton<IMatchRationaleWriter>(sp => sp.GetRequiredService<NoOpMatchRationaleWriter>());
+
+        // Not gated on any config: text extraction is entirely local, so unlike the clients
+        // above there is no "unavailable" variant to fall back to. Stateless and thread-safe,
+        // so both hosts share one instance.
+        services.AddSingleton<IResumeTextExtractor, ResumeTextExtractor>();
 
         // GraphServiceClient is safe to always register — constructing it (and the
         // DefaultAzureCredential behind it) makes no network call; only actually calling it
