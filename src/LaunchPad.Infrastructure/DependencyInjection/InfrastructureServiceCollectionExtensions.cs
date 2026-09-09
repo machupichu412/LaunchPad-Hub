@@ -11,6 +11,7 @@ using LaunchPad.Application.Reviews;
 using LaunchPad.Application.SharePoint;
 using LaunchPad.Application.Skills;
 using LaunchPad.Application.Sponsors;
+using LaunchPad.Infrastructure.Candidates;
 using LaunchPad.Infrastructure.Matching;
 using LaunchPad.Infrastructure.Notifications;
 using LaunchPad.Infrastructure.Persistence;
@@ -66,6 +67,10 @@ public static class InfrastructureServiceCollectionExtensions
         // specific, not something Infrastructure itself should decide.
         services.AddScoped<ServiceBusMatchingJobPublisher>();
         services.AddScoped<InlineMatchingJobPublisher>();
+
+        // Stateless and thread-safe; both hosts can share one. Registered unconditionally
+        // because it needs nothing from Azure — extraction is entirely local.
+        services.AddSingleton<IResumeTextExtractor, ResumeTextExtractor>();
 
         // GraphServiceClient is safe to always register — constructing it (and the
         // DefaultAzureCredential behind it) makes no network call; only actually calling it
