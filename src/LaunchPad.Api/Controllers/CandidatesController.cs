@@ -302,10 +302,31 @@ public class CandidatesController : ControllerBase
         candidate.Degree = request.Degree;
         candidate.Gpa = request.Gpa;
 
-        var skills = await _skills.GetOrCreateByNamesAsync(request.SkillNames, ct);
-        candidate.Skills = skills
-            .Select(s => new CandidateSkill { SkillId = s.SkillId, Skill = s, Source = SkillSource.SelfReported })
-            .ToList();
+        // Merge, don't replace. GetByEntraObjectIdAsync eagerly loads Skills, so assigning a
+        // fresh collection here makes EF delete every tracked CandidateSkill and re-insert it
+        // as SelfReported — silently destroying OpsVerified provenance on every profile save.
+        // This endpoint decides *which* skills are on the list; whatever established a row owns
+        // its Source and Proficiency.
+        var requestedSkills = await _skills.GetOrCreateByNamesAsync(request.SkillNames, ct);
+        var requestedSkillIds = requestedSkills.Select(s => s.SkillId).ToHashSet();
+
+        // Deselecting a skill is a legitimate removal whatever its Source — the candidate owns
+        // their own list, including dropping something a resume parse or Ops added.
+        foreach (var dropped in candidate.Skills.Where(cs => !requestedSkillIds.Contains(cs.SkillId)).ToList())
+        {
+            candidate.Skills.Remove(dropped);
+        }
+
+        var existingSkillIds = candidate.Skills.Select(cs => cs.SkillId).ToHashSet();
+        foreach (var added in requestedSkills.Where(s => !existingSkillIds.Contains(s.SkillId)))
+        {
+            candidate.Skills.Add(new CandidateSkill
+            {
+                SkillId = added.SkillId,
+                Skill = added,
+                Source = SkillSource.SelfReported,
+            });
+        }
 
         await _candidates.SaveChangesAsync(ct);
 
