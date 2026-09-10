@@ -104,8 +104,9 @@ const useStyles = makeStyles({
   rocket: {
     position: 'absolute',
     top: '50%',
-    // Nose-up and riding the leading edge of its own trail.
-    transform: 'translate(-50%, -50%) rotate(8deg)',
+    // The angled art is already tilted into its own flight path — riding the
+    // leading edge of the trail needs only centering, no extra rotation on top.
+    transform: 'translate(-50%, -50%)',
     transitionProperty: 'left',
     transitionDuration: '900ms',
     transitionTimingFunction: tokens.curveDecelerateMid,
@@ -178,7 +179,7 @@ export function JourneyTrail({
           aria-hidden="true"
         />
         <span className={styles.rocket} style={{ left: `${percent}%` }} aria-hidden="true">
-          <BrandMark size={34} />
+          <BrandMark size={34} orientation="angled" />
         </span>
       </div>
 
