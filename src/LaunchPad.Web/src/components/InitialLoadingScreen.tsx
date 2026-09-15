@@ -1,5 +1,5 @@
 import { Spinner, Title2, makeStyles, tokens } from '@fluentui/react-components';
-import { ROCKET_STAGE_COLOR, RocketLaunch } from './RocketLaunch';
+import { RocketLaunch } from './RocketLaunch';
 
 const useStyles = makeStyles({
   root: {
@@ -10,21 +10,6 @@ const useStyles = makeStyles({
     minHeight: '100vh',
     gap: tokens.spacingVerticalL,
     backgroundColor: tokens.colorNeutralBackground1,
-  },
-  porthole: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '176px',
-    height: '176px',
-    flexShrink: 0,
-    borderRadius: tokens.borderRadiusCircular,
-    // Fixed rather than a theme token: the footage's own stage is a near-white that
-    // was never rendered with alpha to key out (see RocketLaunch), so the plate is
-    // pinned to match it exactly in both light and dark mode instead of showing a seam.
-    backgroundColor: ROCKET_STAGE_COLOR,
-    boxShadow: tokens.shadow16,
-    overflow: 'hidden',
   },
 });
 
@@ -39,9 +24,7 @@ export function InitialLoadingScreen() {
 
   return (
     <div className={styles.root}>
-      <div className={styles.porthole}>
-        <RocketLaunch size={168} />
-      </div>
+      <RocketLaunch size={168} />
       <Title2>LaunchPad</Title2>
       <Spinner size="huge" label="Signing you in..." labelPosition="below" />
     </div>
