@@ -31,11 +31,18 @@ pinned to the footage's own stage color (`#FCFCFA`) instead — same fix as the
 
 ## Regenerating the served assets
 
-The app loads five files, all in `src/LaunchPad.Web/public/brand`:
+The app loads six files, all in `src/LaunchPad.Web/public/brand`:
 `launchpad-mark-96.png` (nav, static chrome), `launchpad-mark-angled-96.png`
 (JourneyTrail), `launchpad-logo-320.png` (sign-in, initial load, home banner),
-and `rocket-launch.mp4` / `rocket-launch-poster.png` (initial-loading porthole,
-nav hover). The favicons live one level up in `public/`.
+and `rocket-launch.mp4` / `rocket-launch-poster.png` / `rocket-launch-poster-end.png`
+(initial-loading porthole, nav hover). The favicons live one level up in `public/`.
+
+`RocketLaunch.tsx` plays the footage once and holds on its last frame rather
+than looping — that final frame is where the trail re-forms the full logo's
+own shape, so it's the intended resting state, not a truncation.
+`rocket-launch-poster.png` (first frame) is the `<video poster>`, shown before
+playback starts; `rocket-launch-poster-end.png` (last frame) is what
+prefers-reduced-motion users see instead of motion.
 
 ```bash
 cd src/LaunchPad.Web/public
@@ -65,11 +72,15 @@ magick /tmp/mark-square-512.png -resize 152x152 -background white \
 
 # Rocket launch — downscaled (960->480; the largest use is a 168px porthole,
 # plenty of headroom at retina) and re-encoded for web delivery. No audio track
-# to strip (source has none). Poster is just the video's own first frame.
+# to strip (source has none).
 ffmpeg -i "$DESIGN/Rocket Launch.mp4" -vf "scale=480:480" -c:v libx264 -profile:v high \
   -pix_fmt yuv420p -crf 23 -movflags +faststart -an brand/rocket-launch.mp4
+
+# First frame -> <video poster>. Last frame -> reduced-motion fallback / the resting state.
 ffmpeg -i brand/rocket-launch.mp4 -update 1 -frames:v 1 /tmp/rocket-poster-raw.png
 magick /tmp/rocket-poster-raw.png -depth 8 -strip brand/rocket-launch-poster.png
+ffmpeg -sseof -0.1 -i brand/rocket-launch.mp4 -update 1 -frames:v 1 /tmp/rocket-poster-end-raw.png
+magick /tmp/rocket-poster-end-raw.png -depth 8 -strip brand/rocket-launch-poster-end.png
 ```
 
 Two flags in there are not optional, both learned the hard way:
@@ -83,8 +94,8 @@ Two flags in there are not optional, both learned the hard way:
 
 `apple-touch-icon.png` is the deliberate exception to transparency: iOS
 composites alpha to black, so it gets a white plate. `rocket-launch-poster.png`
-is the other exception — it's a plain frame grab of opaque footage, not a keyed
-asset, so it's meant to report `opaque=True`.
+and `rocket-launch-poster-end.png` are the other exception — plain frame grabs
+of opaque footage, not keyed assets, so they're meant to report `opaque=True`.
 
 After regenerating, check alpha survived:
 
@@ -92,5 +103,5 @@ After regenerating, check alpha survived:
 magick identify -format "%f %[channels] opaque=%[opaque]\n" brand/*.png favicon-*.png apple-touch-icon.png
 ```
 
-Everything except `apple-touch-icon.png` and `rocket-launch-poster.png` should
-report `opaque=False`.
+Everything except `apple-touch-icon.png`, `rocket-launch-poster.png`, and
+`rocket-launch-poster-end.png` should report `opaque=False`.

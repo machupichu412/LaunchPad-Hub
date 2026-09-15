@@ -3,7 +3,7 @@ import { makeStyles, mergeClasses, tokens, Subtitle1 } from '@fluentui/react-com
 import { NavMenu } from './NavMenu';
 import { Header } from './Header';
 import { BrandMark } from './BrandMark';
-import { RocketLaunch } from './RocketLaunch';
+import { ROCKET_STAGE_COLOR, RocketLaunch } from './RocketLaunch';
 import { usePrefersReducedMotion } from '../utils/usePrefersReducedMotion';
 
 const useStyles = makeStyles({
@@ -69,13 +69,25 @@ const useStyles = makeStyles({
   brandIconStaticHidden: {
     opacity: 0,
   },
-  brandIconVideo: {
+  // Same porthole treatment as InitialLoadingScreen, nav-scaled: the footage's stage
+  // has no alpha to key out, so without this it shows up as a stray white rectangle
+  // next to the icon — especially jarring in dark mode.
+  brandIconPlate: {
     position: 'absolute',
     top: '50%',
     left: '50%',
     // Allowed to overflow its slot — the launch should read at nav-icon scale
     // without shifting the wordmark next to it.
     transform: 'translate(-42%, -55%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '44px',
+    height: '44px',
+    borderRadius: tokens.borderRadiusCircular,
+    backgroundColor: ROCKET_STAGE_COLOR,
+    boxShadow: tokens.shadow8,
+    overflow: 'hidden',
     pointerEvents: 'none',
   },
   main: {
@@ -111,7 +123,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 size={26}
                 className={mergeClasses(styles.brandIconStatic, playLaunch && styles.brandIconStaticHidden)}
               />
-              {playLaunch && <RocketLaunch size={40} className={styles.brandIconVideo} />}
+              {playLaunch && (
+                <div className={styles.brandIconPlate}>
+                  <RocketLaunch size={40} />
+                </div>
+              )}
             </span>
             <Subtitle1 as="h1">LaunchPad</Subtitle1>
           </div>

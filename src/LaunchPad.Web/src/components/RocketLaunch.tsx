@@ -9,16 +9,25 @@ const useStyles = makeStyles({
 });
 
 /**
+ * The footage's own near-white stage colour. Every caller frames the footage in a
+ * plate pinned to this exact value — see the component doc comment below.
+ */
+export const ROCKET_STAGE_COLOR = '#FCFCFA';
+
+/**
  * The rocket mid-launch — the delivered 3D footage itself, not a static mark.
  *
  * The footage was rendered on its own near-white stage with no alpha channel, so
  * unlike every other brand asset it can't be keyed transparent and dropped onto a
  * themed background (see design/README.md). Callers are expected to frame it in
- * their own plate that matches the footage's stage colour, rather than placing it
- * directly against page background.
+ * their own plate colored `ROCKET_STAGE_COLOR`, rather than placing it directly
+ * against page background — otherwise the stage reads as a stray white box,
+ * especially in dark mode.
  *
- * Falls back to a single still frame under prefers-reduced-motion, same as every
- * other motion in the app.
+ * Plays once and holds on its last frame (no loop) — the footage's own tail end
+ * re-forms the full logo's rainbow trail, so ending there rather than cycling
+ * is the resting state, not a truncation. Falls back straight to that same last
+ * frame under prefers-reduced-motion, same as every other motion in the app.
  */
 export function RocketLaunch({ size, className }: { size: number; className?: string }) {
   const styles = useStyles();
@@ -27,7 +36,7 @@ export function RocketLaunch({ size, className }: { size: number; className?: st
   if (reduceMotion) {
     return (
       <img
-        src="/brand/rocket-launch-poster.png"
+        src="/brand/rocket-launch-poster-end.png"
         alt=""
         aria-hidden="true"
         width={size}
@@ -45,7 +54,6 @@ export function RocketLaunch({ size, className }: { size: number; className?: st
       src="/brand/rocket-launch.mp4"
       poster="/brand/rocket-launch-poster.png"
       autoPlay
-      loop
       muted
       playsInline
       aria-hidden="true"

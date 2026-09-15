@@ -1,5 +1,5 @@
 import { Spinner, Title2, makeStyles, tokens } from '@fluentui/react-components';
-import { RocketLaunch } from './RocketLaunch';
+import { ROCKET_STAGE_COLOR, RocketLaunch } from './RocketLaunch';
 
 const useStyles = makeStyles({
   root: {
@@ -22,7 +22,7 @@ const useStyles = makeStyles({
     // Fixed rather than a theme token: the footage's own stage is a near-white that
     // was never rendered with alpha to key out (see RocketLaunch), so the plate is
     // pinned to match it exactly in both light and dark mode instead of showing a seam.
-    backgroundColor: '#FCFCFA',
+    backgroundColor: ROCKET_STAGE_COLOR,
     boxShadow: tokens.shadow16,
     overflow: 'hidden',
   },
