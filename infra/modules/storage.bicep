@@ -114,3 +114,8 @@ resource lifecyclePolicy 'Microsoft.Storage/storageAccounts/managementPolicies@2
 
 output storageAccountName string = storageAccount.name
 output storageAccountId string = storageAccount.id
+
+// Consumed as the API's Storage__AccountUrl app setting. Without it the host falls back
+// to LocalDiskProfilePictureStorage (see LaunchPad.Api/Program.cs), which writes uploads
+// to App Service local disk — lost on restart and unshareable across instances.
+output primaryBlobEndpoint string = storageAccount.properties.primaryEndpoints.blob

@@ -13,6 +13,9 @@ param keyVaultUri string
 param appInsightsConnectionString string
 param serviceBusNamespace string
 
+@description('Blob service endpoint of the shared storage account. Selects the Blob-backed IProfilePictureStorage/ICommunityImageStorage over the local-disk fallback — see LaunchPad.Api/Program.cs')
+param storageAccountBlobEndpoint string
+
 @description('Deploy the Prod staging slot used for the swap-on-deploy pattern (§9.3)')
 param deployStagingSlot bool = false
 
@@ -64,6 +67,7 @@ resource appService 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'KeyVault__Uri', value: keyVaultUri }
         { name: 'ApplicationInsights__ConnectionString', value: appInsightsConnectionString }
         { name: 'ServiceBus__Namespace', value: '${serviceBusNamespace}.servicebus.windows.net' }
+        { name: 'Storage__AccountUrl', value: storageAccountBlobEndpoint }
       ]
     }
   }
