@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
+import { Suspense, lazy, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { FluentProvider } from '@fluentui/react-components';
+import { FluentProvider, Spinner } from '@fluentui/react-components';
 import { AuthenticatedTemplate, UnauthenticatedTemplate } from '@azure/msal-react';
 import { AppShell } from './components/AppShell';
 import { SignInPrompt } from './components/SignInPrompt';
@@ -13,33 +13,37 @@ import { AppRoles } from './auth/roles';
 import { ThemeModeProvider, useThemeMode } from './theme/ThemeModeContext';
 import { RoleAwareHome } from './features/shared/RoleAwareHome';
 import { Unauthorized } from './features/shared/Unauthorized';
-import { TalentPipeline } from './features/ops/TalentPipeline';
-import { ApprovalQueue } from './features/ops/ApprovalQueue';
-import { OpsDashboard } from './features/ops/OpsDashboard';
-import { OpsProjects } from './features/ops/OpsProjects';
-import { ProjectApprovals } from './features/ops/ProjectApprovals';
-import { Cohorts } from './features/ops/Cohorts';
-import { Risks } from './features/ops/Risks';
-import { SkillsManagement } from './features/ops/SkillsManagement';
-import { HelpCenter } from './features/ops/help/HelpCenter';
-import { ExecutiveDashboard } from './features/exec/ExecutiveDashboard';
-import { CandidateDashboard } from './features/candidate/CandidateDashboard';
-import { MyProfile } from './features/candidate/MyProfile';
-import { Assignments } from './features/candidate/Assignments';
-import { Tasks } from './features/candidate/Tasks';
-import { Deliverables } from './features/candidate/Deliverables';
-import { Evaluations } from './features/candidate/Evaluations';
-import { Community } from './features/candidate/Community';
-import { MyProjects } from './features/sponsor/MyProjects';
-import { ProjectMatches } from './features/sponsor/ProjectMatches';
-import { MyCandidates } from './features/sponsor/MyCandidates';
-import { SubmitReview } from './features/sponsor/SubmitReview';
-import { ManageTodos } from './features/sponsor/ManageTodos';
-import { ProjectMarketplace } from './features/candidate/ProjectMarketplace';
-import { ProjectDetail } from './features/candidate/ProjectDetail';
-import { Onboarding } from './features/candidate/Onboarding';
-import { SponsorOnboarding } from './features/sponsor/SponsorOnboarding';
-import { ProjectEditor } from './components/ProjectEditor';
+
+// Route components load per role area rather than in the initial bundle: an Ops user
+// should not download the candidate, sponsor, and exec screens to see a dashboard.
+// The .then() mapping is because these are named exports, which lazy() cannot take directly.
+const TalentPipeline = lazy(() => import('./features/ops/TalentPipeline').then(m => ({ default: m.TalentPipeline })));
+const ApprovalQueue = lazy(() => import('./features/ops/ApprovalQueue').then(m => ({ default: m.ApprovalQueue })));
+const OpsDashboard = lazy(() => import('./features/ops/OpsDashboard').then(m => ({ default: m.OpsDashboard })));
+const OpsProjects = lazy(() => import('./features/ops/OpsProjects').then(m => ({ default: m.OpsProjects })));
+const ProjectApprovals = lazy(() => import('./features/ops/ProjectApprovals').then(m => ({ default: m.ProjectApprovals })));
+const Cohorts = lazy(() => import('./features/ops/Cohorts').then(m => ({ default: m.Cohorts })));
+const Risks = lazy(() => import('./features/ops/Risks').then(m => ({ default: m.Risks })));
+const SkillsManagement = lazy(() => import('./features/ops/SkillsManagement').then(m => ({ default: m.SkillsManagement })));
+const HelpCenter = lazy(() => import('./features/ops/help/HelpCenter').then(m => ({ default: m.HelpCenter })));
+const ExecutiveDashboard = lazy(() => import('./features/exec/ExecutiveDashboard').then(m => ({ default: m.ExecutiveDashboard })));
+const CandidateDashboard = lazy(() => import('./features/candidate/CandidateDashboard').then(m => ({ default: m.CandidateDashboard })));
+const MyProfile = lazy(() => import('./features/candidate/MyProfile').then(m => ({ default: m.MyProfile })));
+const Assignments = lazy(() => import('./features/candidate/Assignments').then(m => ({ default: m.Assignments })));
+const Tasks = lazy(() => import('./features/candidate/Tasks').then(m => ({ default: m.Tasks })));
+const Deliverables = lazy(() => import('./features/candidate/Deliverables').then(m => ({ default: m.Deliverables })));
+const Evaluations = lazy(() => import('./features/candidate/Evaluations').then(m => ({ default: m.Evaluations })));
+const Community = lazy(() => import('./features/candidate/Community').then(m => ({ default: m.Community })));
+const MyProjects = lazy(() => import('./features/sponsor/MyProjects').then(m => ({ default: m.MyProjects })));
+const ProjectMatches = lazy(() => import('./features/sponsor/ProjectMatches').then(m => ({ default: m.ProjectMatches })));
+const MyCandidates = lazy(() => import('./features/sponsor/MyCandidates').then(m => ({ default: m.MyCandidates })));
+const SubmitReview = lazy(() => import('./features/sponsor/SubmitReview').then(m => ({ default: m.SubmitReview })));
+const ManageTodos = lazy(() => import('./features/sponsor/ManageTodos').then(m => ({ default: m.ManageTodos })));
+const ProjectMarketplace = lazy(() => import('./features/candidate/ProjectMarketplace').then(m => ({ default: m.ProjectMarketplace })));
+const ProjectDetail = lazy(() => import('./features/candidate/ProjectDetail').then(m => ({ default: m.ProjectDetail })));
+const Onboarding = lazy(() => import('./features/candidate/Onboarding').then(m => ({ default: m.Onboarding })));
+const SponsorOnboarding = lazy(() => import('./features/sponsor/SponsorOnboarding').then(m => ({ default: m.SponsorOnboarding })));
+const ProjectEditor = lazy(() => import('./components/ProjectEditor').then(m => ({ default: m.ProjectEditor })));
 
 export default function App() {
   return (
@@ -58,7 +62,8 @@ function AppContent() {
         <ActiveRoleProvider>
           <BrowserRouter>
             <AppShell>
-              <Routes>
+              <Suspense fallback={<Spinner size="large" label="Loading..." />}>
+                <Routes>
                 <Route path="/" element={<RoleAwareHome />} />
                 <Route path="/unauthorized" element={<Unauthorized />} />
                 <Route
@@ -348,7 +353,8 @@ function AppContent() {
                     </RequireRole>
                   }
                 />
-              </Routes>
+                </Routes>
+              </Suspense>
             </AppShell>
           </BrowserRouter>
         </ActiveRoleProvider>
