@@ -15,6 +15,8 @@ using LaunchPad.Api;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -178,6 +180,29 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddApplicationInsightsTelemetry();
 
+// Unhandled exceptions produced a bare Kestrel 500 with no body; these give every
+// failure the same ProblemDetails shape the validation failures already use.
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
+// DTO payloads are JSON and highly compressible — the talent pipeline and project list
+// responses are the largest. Brotli first, gzip for anything that can't take it.
+builder.Services.AddResponseCompression(options =>
+{
+    // Only over HTTPS here, which is all this API serves (httpsOnly in appService.bicep);
+    // the BREACH concern that makes this opt-in doesn't apply to bearer-token auth with
+    // no secrets reflected into response bodies.
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(["application/problem+json"]);
+});
+
+// A global ceiling behind the existing per-endpoint [RequestSizeLimit]s. Defaults to the
+// largest of them (deliverable upload) so it backstops rather than overrides.
+var maxRequestBodyBytes = builder.Configuration.GetValue<long?>("Api:MaxRequestBodyBytes") ?? 110L * 1024 * 1024;
+builder.Services.Configure<KestrelServerOptions>(o => o.Limits.MaxRequestBodySize = maxRequestBodyBytes);
+
 var healthChecks = builder.Services.AddHealthChecks();
 if (!useInMemoryForLocalDemo)
 {
@@ -218,6 +243,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<CorrelationIdMiddleware>();
+// After the correlation id so the handler can put it in the problem body; in Development
+// UseDeveloperExceptionPage is registered above and wins, keeping stack traces local.
+app.UseExceptionHandler();
+app.UseResponseCompression();
 app.UseCors("Spa");
 app.UseAuthentication();
 app.UseMiddleware<AppUserProvisioningMiddleware>();
