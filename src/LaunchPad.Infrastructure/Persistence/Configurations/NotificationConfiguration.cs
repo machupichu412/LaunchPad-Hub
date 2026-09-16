@@ -18,5 +18,12 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
             .HasForeignKey(n => n.RecipientAppUserId);
 
         builder.HasIndex(n => new { n.RecipientAppUserId, n.IsRead });
+
+        // The bell menu polls this every 30s per signed-in user (Header.tsx). The IsRead
+        // index above can't serve the ordering, so the top-N read was sorting the user's
+        // whole notification history on every poll.
+        builder.HasIndex(n => new { n.RecipientAppUserId, n.CreatedUtc })
+            .IsDescending(false, true)
+            .HasDatabaseName("IX_Notification_Recipient_Created");
     }
 }

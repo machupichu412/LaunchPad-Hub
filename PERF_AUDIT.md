@@ -95,11 +95,11 @@ Highest impact / lowest risk first. One commit per group.
 
 | Group | Change | Impact | Risk | Status |
 |---|---|---|---|---|
-| 0 | This audit document | — | — | ☐ |
-| 1 | `Storage__AccountUrl` in Bicep — uploads reach Blob, not local disk | H | L | ☐ |
-| 2 | Response compression + global `IExceptionHandler`/ProblemDetails + body cap | H | L | ☐ |
-| 3 | Candidate N+1 fix + `AsNoTracking` on read paths + command timeout | H | M | ☐ |
-| 4 | 8 performance indexes (migration generated, **not applied**) | H | L | ☐ |
+| 0 | This audit document | — | — | ☑ |
+| 1 | `Storage__AccountUrl` in Bicep — uploads reach Blob, not local disk | H | L | ☑ |
+| 2 | Response compression + global `IExceptionHandler`/ProblemDetails + body cap | H | L | ☑ |
+| 3 | Candidate N+1 fix + `AsNoTracking` on read paths + command timeout | H | M | ☑ |
+| 4 | 8 performance indexes (migration generated, **not applied**) | H | L | ☑ |
 | 5 | Global rate limit + singleton Service Bus / Graph clients with timeouts | H | M | ☐ |
 | 6 | Route-level code splitting + vendor chunks | H | L | ☐ |
 | 7 | ErrorBoundary + request timeout + retry affordance + JWT-log removal | H | L | ☐ |
@@ -140,6 +140,35 @@ upload path validates, so this is an inconsistency worth its own reviewed change
   lives outside version control.
 
 ---
+
+## Generated index migration (not applied)
+
+`AddPerformanceIndexes` is committed but **has not been run against any database**. CI
+applies migrations on deploy (`deploy.yml:113,150`); review this first.
+
+```sql
+DROP INDEX [IX_Project_CohortId] ON [Project];
+DROP INDEX [IX_Deliverable_AssignmentId] ON [Deliverable];
+DROP INDEX [IX_Candidate_CohortId] ON [Candidate];
+DROP INDEX [IX_Assignment_ProjectId] ON [Assignment];
+CREATE INDEX [IX_Review_Type_Checkpoint_Submitted] ON [Review] ([ReviewType], [Checkpoint], [SubmittedUtc] DESC);
+CREATE INDEX [IX_Project_Cohort_Status_Approval] ON [Project] ([CohortId], [Status], [ApprovalStatus]);
+CREATE INDEX [IX_Notification_Recipient_Created] ON [Notification] ([RecipientAppUserId], [CreatedUtc] DESC);
+CREATE INDEX [IX_Deliverable_Assignment_Submitted] ON [Deliverable] ([AssignmentId], [SubmittedUtc] DESC);
+CREATE INDEX [IX_Candidate_Cohort_Status] ON [Candidate] ([CohortId], [Status]);
+CREATE INDEX [IX_Assignment_Candidate_Status] ON [Assignment] ([CandidateId], [Status]);
+CREATE INDEX [IX_Assignment_Project_Status] ON [Assignment] ([ProjectId], [Status]);
+CREATE INDEX [IX_Assignment_Status] ON [Assignment] ([Status]);
+```
+
+The four `DROP`s are not a loss of coverage: each dropped index was a single-column
+FK index whose column is now the leading key of one of the new composites, so foreign-key
+enforcement and joins are still served. This is the duplicate-index cleanup item #1 asks
+for, and EF generated it on its own from the model change.
+
+Every statement is additive and fast on tables this size. If these ever run against a
+table large enough to matter, add `WITH (ONLINE = ON)` — Azure SQL supports it on all of
+these, and EF does not emit it by default.
 
 ## Manual follow-ups
 

@@ -25,5 +25,10 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.HasOne(p => p.Sponsor)
             .WithMany(s => s.Projects)
             .HasForeignKey(p => p.SponsorId);
+
+        // Column order matches GetOpenByCohortAsync's predicate, the hottest of the three:
+        // the candidate-facing marketplace filters cohort, then Open, then Approved.
+        builder.HasIndex(p => new { p.CohortId, p.Status, p.ApprovalStatus })
+            .HasDatabaseName("IX_Project_Cohort_Status_Approval");
     }
 }

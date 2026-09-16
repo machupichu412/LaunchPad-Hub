@@ -31,5 +31,11 @@ public class DeliverableConfiguration : IEntityTypeConfiguration<Deliverable>
             .WithMany()
             .HasForeignKey(d => d.ProjectTodoId)
             .OnDelete(DeleteBehavior.ClientSetNull);
+
+        // Deliverables are always read newest-first for one assignment; the FK index on
+        // AssignmentId alone leaves the sort to be done separately.
+        builder.HasIndex(d => new { d.AssignmentId, d.SubmittedUtc })
+            .IsDescending(false, true)
+            .HasDatabaseName("IX_Deliverable_Assignment_Submitted");
     }
 }

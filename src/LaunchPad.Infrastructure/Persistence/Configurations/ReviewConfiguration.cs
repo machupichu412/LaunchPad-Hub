@@ -28,5 +28,13 @@ public class ReviewConfiguration : IEntityTypeConfiguration<Review>
         builder.HasIndex(r => new { r.AssignmentId, r.ReviewType, r.Checkpoint, r.SubmittedBy })
             .IsUnique()
             .HasDatabaseName("UX_Review_Once");
+
+        // Not redundant with UX_Review_Once: that index leads with AssignmentId, but the
+        // hire-outcome lookup searches by type and checkpoint across every assignment a
+        // candidate has had, then takes the most recent. SubmittedUtc trails so the sort
+        // is satisfied by the index rather than a separate sort step.
+        builder.HasIndex(r => new { r.ReviewType, r.Checkpoint, r.SubmittedUtc })
+            .IsDescending(false, false, true)
+            .HasDatabaseName("IX_Review_Type_Checkpoint_Submitted");
     }
 }
