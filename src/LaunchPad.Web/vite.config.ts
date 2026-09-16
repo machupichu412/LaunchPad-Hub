@@ -1,4 +1,6 @@
-import { defineConfig } from 'vite'
+// defineConfig from 'vitest/config', not 'vite' — it is the same function widened to accept
+// the `test` block below, which vite's own types reject.
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
@@ -25,5 +27,11 @@ export default defineConfig({
     // The default 500 kB warning is noise once Fluent is deliberately its own chunk;
     // this still flags anything unexpectedly large.
     chunkSizeWarningLimit: 700,
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+    css: false,
   },
 })

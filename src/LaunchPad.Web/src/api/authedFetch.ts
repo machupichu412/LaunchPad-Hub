@@ -7,6 +7,32 @@ import { resolveMock } from '../dev/mockApi';
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 30_000);
 
 /**
+ * Combines the caller's abort signal (if any) with a timeout, rather than replacing it —
+ * replacing it would silently break cancel-on-unmount, which fails quietly.
+ * Exported for tests.
+ */
+export function composeRequestSignal(
+  callerSignal: AbortSignal | null | undefined,
+  timeoutMs: number = API_TIMEOUT_MS,
+): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  if (!callerSignal) return timeoutSignal;
+
+  // Hand-rolled rather than AbortSignal.any: that landed in Safari only in 17.4, which is
+  // recent enough to be worth not depending on, and jsdom does not implement it at all.
+  const controller = new AbortController();
+  for (const source of [callerSignal, timeoutSignal]) {
+    if (source.aborted) {
+      controller.abort(source.reason);
+      break;
+    }
+    source.addEventListener('abort', () => controller.abort(source.reason), { once: true });
+  }
+
+  return controller.signal;
+}
+
+/**
  * The single place a bearer token is acquired — no call site should acquire tokens
  * itself. See launchpad-build-guide.md §7.2.
  */
@@ -50,10 +76,8 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   const isFormData = init.body instanceof FormData;
 
   // Without a deadline a hung request never settles, and the view that awaits it shows its
-  // loading state forever — there is no browser-level fetch timeout. Combined with any
-  // caller-supplied signal rather than replacing it, so component unmount still cancels.
-  const timeoutSignal = AbortSignal.timeout(API_TIMEOUT_MS);
-  const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal;
+  // loading state forever — there is no browser-level fetch timeout.
+  const signal = composeRequestSignal(init.signal);
 
   const response = await fetch(`${baseUrl}${input}`, {
     ...init,
