@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Body1,
@@ -340,12 +340,17 @@ function ArticleIndex() {
   const styles = useStyles();
   const surfaces = useSurfaceStyles();
   const [query, setQuery] = useState('');
+  // Deferred rather than debounced: these filters are entirely client-side, so there is no
+  // request to delay. useDeferredValue lets the input repaint immediately and re-renders the
+  // list at low priority, abandoning that work if another keystroke arrives — which adapts to
+  // the device instead of guessing a fixed delay.
+  const deferredQuery = useDeferredValue(query);
 
   const matches = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = deferredQuery.trim().toLowerCase();
     if (!needle) return helpArticles;
     return helpArticles.filter((article) => articleSearchText(article).includes(needle));
-  }, [query]);
+  }, [deferredQuery]);
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Body1, Button, Caption1, Field, Input, Select, Spinner, Subtitle2, makeStyles, tokens } from '@fluentui/react-components';
 import { AddCircleRegular, SearchRegular } from '@fluentui/react-icons';
@@ -43,6 +43,11 @@ export function SkillPicker({
   const styles = useStyles();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  // Deferred rather than debounced: these filters are entirely client-side, so there is no
+  // request to delay. useDeferredValue lets the input repaint immediately and re-renders the
+  // list at low priority, abandoning that work if another keystroke arrives — which adapts to
+  // the device instead of guessing a fixed delay.
+  const deferredSearch = useDeferredValue(search);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newSkillName, setNewSkillName] = useState('');
   const [newSkillCategoryId, setNewSkillCategoryId] = useState('');
@@ -76,7 +81,7 @@ export function SkillPicker({
   };
 
   const skillsByCategory = useMemo(() => {
-    const filtered = (skills ?? []).filter((s) => s.name.toLowerCase().includes(search.trim().toLowerCase()));
+    const filtered = (skills ?? []).filter((s) => s.name.toLowerCase().includes(deferredSearch.trim().toLowerCase()));
     const grouped = new Map<string, typeof filtered>();
     for (const skill of filtered) {
       const bucket = grouped.get(skill.skillCategoryName) ?? [];
@@ -84,7 +89,7 @@ export function SkillPicker({
       grouped.set(skill.skillCategoryName, bucket);
     }
     return Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [skills, search]);
+  }, [skills, deferredSearch]);
 
   return (
     <div>

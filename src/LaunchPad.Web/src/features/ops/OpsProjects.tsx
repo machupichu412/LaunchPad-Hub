@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -59,6 +59,11 @@ export function OpsProjects() {
   const surfaces = useSurfaceStyles();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  // Deferred rather than debounced: these filters are entirely client-side, so there is no
+  // request to delay. useDeferredValue lets the input repaint immediately and re-renders the
+  // list at low priority, abandoning that work if another keystroke arrives — which adapts to
+  // the device instead of guessing a fixed delay.
+  const deferredSearch = useDeferredValue(search);
   const [category, setCategory] = useState<string | null>(null);
 
   const { data: projects, isLoading, isError, error } = useQuery({
@@ -76,15 +81,18 @@ export function OpsProjects() {
     return Array.from(set).sort();
   }, [projects]);
 
-  const filtered = (projects ?? []).filter((project) => {
-    const matchesSearch =
-      search.trim().length === 0 ||
-      project.name.toLowerCase().includes(search.toLowerCase()) ||
-      project.sponsorName.toLowerCase().includes(search.toLowerCase()) ||
-      project.requiredSkills.some((s) => s.skillName.toLowerCase().includes(search.toLowerCase()));
-    const matchesCategory = category == null || project.requiredSkills.some((s) => s.category === category);
-    return matchesSearch && matchesCategory;
-  });
+  const filtered = useMemo(() => {
+    const term = deferredSearch.trim().toLowerCase();
+    return (projects ?? []).filter((project) => {
+      const matchesSearch =
+        term.length === 0 ||
+        project.name.toLowerCase().includes(term) ||
+        project.sponsorName.toLowerCase().includes(term) ||
+        project.requiredSkills.some((s) => s.skillName.toLowerCase().includes(term));
+      const matchesCategory = category == null || project.requiredSkills.some((s) => s.category === category);
+      return matchesSearch && matchesCategory;
+    });
+  }, [projects, deferredSearch, category]);
 
   return (
     <>
