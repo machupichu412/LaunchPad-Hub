@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { FluentProvider, Spinner } from '@fluentui/react-components';
 import { AuthenticatedTemplate, UnauthenticatedTemplate } from '@azure/msal-react';
 import { AppShell } from './components/AppShell';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { SignInPrompt } from './components/SignInPrompt';
 import { isMockMode } from './dev/mockMode';
 import { RequireRole } from './auth/RequireRole';
@@ -62,7 +63,8 @@ function AppContent() {
         <ActiveRoleProvider>
           <BrowserRouter>
             <AppShell>
-              <Suspense fallback={<Spinner size="large" label="Loading..." />}>
+              <ErrorBoundary>
+                <Suspense fallback={<Spinner size="large" label="Loading..." />}>
                 <Routes>
                 <Route path="/" element={<RoleAwareHome />} />
                 <Route path="/unauthorized" element={<Unauthorized />} />
@@ -354,7 +356,8 @@ function AppContent() {
                   }
                 />
                 </Routes>
-              </Suspense>
+                </Suspense>
+              </ErrorBoundary>
             </AppShell>
           </BrowserRouter>
         </ActiveRoleProvider>

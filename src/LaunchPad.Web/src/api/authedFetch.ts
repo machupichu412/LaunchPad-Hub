@@ -4,6 +4,8 @@ import { msalInstance } from '../auth/msalInstance';
 import { isMockMode } from '../dev/mockMode';
 import { resolveMock } from '../dev/mockApi';
 
+const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 30_000);
+
 /**
  * The single place a bearer token is acquired — no call site should acquire tokens
  * itself. See launchpad-build-guide.md §7.2.
@@ -47,8 +49,15 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   // and pre-setting application/json here would strip that boundary and break the upload.
   const isFormData = init.body instanceof FormData;
 
+  // Without a deadline a hung request never settles, and the view that awaits it shows its
+  // loading state forever — there is no browser-level fetch timeout. Combined with any
+  // caller-supplied signal rather than replacing it, so component unmount still cancels.
+  const timeoutSignal = AbortSignal.timeout(API_TIMEOUT_MS);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal;
+
   const response = await fetch(`${baseUrl}${input}`, {
     ...init,
+    signal,
     headers: {
       // Defaults first so a caller-supplied Content-Type (e.g. the raw
       // image/jpeg body avatar uploads send, see api/avatar.ts) overrides it —
@@ -59,19 +68,15 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
     },
   });
 
-  // Temporary diagnostic — 401 means the JWT itself failed validation (wrong
-  // audience/issuer, expired, wrong tenant), not a missing-role 403. The
-  // WWW-Authenticate header from ASP.NET Core's JwtBearer handler names the exact
-  // reason; the decoded token claims show what was actually sent. Remove once the
-  // current 401 investigation is resolved.
+  // 401 means the JWT itself failed validation (wrong audience/issuer, expired, wrong
+  // tenant), not a missing-role 403. The WWW-Authenticate header from ASP.NET Core's
+  // JwtBearer handler names the exact reason, which is enough to tell those apart.
+  //
+  // This used to also decode and log the access token's own claims. That printed token
+  // contents into the browser console, where anything with console access can read them
+  // and any error-reporting tool that captures console output would ship them off-box.
   if (response.status === 401) {
     console.warn('authedFetch: 401 from', input, '\nWWW-Authenticate:', response.headers.get('www-authenticate'));
-    try {
-      const payload = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-      console.warn('authedFetch: decoded access token claims:', { aud: payload.aud, iss: payload.iss, tid: payload.tid, exp: payload.exp ? new Date(payload.exp * 1000).toISOString() : undefined, roles: payload.roles });
-    } catch {
-      console.warn('authedFetch: could not decode access token');
-    }
   }
 
   return response;
