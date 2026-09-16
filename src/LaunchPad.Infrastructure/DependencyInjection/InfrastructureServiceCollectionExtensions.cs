@@ -31,10 +31,20 @@ public static class InfrastructureServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        // Serverless Azure SQL can take several seconds to resume from auto-pause, so the
+        // retry delay is deliberately longer than the provider default. The command timeout
+        // is the point of this block: without one a blocked query holds a request thread
+        // until the client gives up, and the pool drains behind it.
+        var commandTimeoutSeconds = int.TryParse(configuration["Database:CommandTimeoutSeconds"], out var configured)
+            ? configured
+            : 30;
+
         services.AddDbContext<LaunchPadDbContext>(options =>
             options.UseSqlServer(
                 configuration.GetConnectionString("Sql"),
-                sql => sql.EnableRetryOnFailure()));
+                sql => sql
+                    .EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null)
+                    .CommandTimeout(commandTimeoutSeconds)));
 
         services.AddScoped<ICandidateRepository, CandidateRepository>();
         services.AddScoped<IProjectRepository, ProjectRepository>();

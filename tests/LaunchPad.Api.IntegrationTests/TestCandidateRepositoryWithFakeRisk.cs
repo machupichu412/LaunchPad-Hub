@@ -36,11 +36,19 @@ public sealed class TestCandidateRepositoryWithFakeRisk : ICandidateRepository
     public Task SaveChangesAsync(CancellationToken ct = default) => _inner.SaveChangesAsync(ct);
 
     public Task<CandidateRisk?> GetRiskAsync(int candidateId, CancellationToken ct = default) =>
-        Task.FromResult<CandidateRisk?>(new CandidateRisk
-        {
-            CandidateId = candidateId,
-            AvgScore = 2.1m,
-            HasPerformanceRisk = true,
-            HasEngagementRisk = false,
-        });
+        Task.FromResult<CandidateRisk?>(FakeRiskFor(candidateId));
+
+    // Must agree with GetRiskAsync above, or a list endpoint and a detail endpoint would
+    // report different risk for the same candidate and the redaction tests would diverge.
+    public Task<IReadOnlyDictionary<int, CandidateRisk>> GetRisksAsync(IReadOnlyList<int> candidateIds, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<int, CandidateRisk>>(
+            candidateIds.ToDictionary(id => id, FakeRiskFor));
+
+    private static CandidateRisk FakeRiskFor(int candidateId) => new()
+    {
+        CandidateId = candidateId,
+        AvgScore = 2.1m,
+        HasPerformanceRisk = true,
+        HasEngagementRisk = false,
+    };
 }

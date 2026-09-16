@@ -22,6 +22,7 @@ public sealed class ProjectRepository : IProjectRepository
 
     public async Task<IReadOnlyList<Project>> GetByCohortAsync(int cohortId, CancellationToken ct = default) =>
         await _db.Projects
+            .AsNoTracking()
             .Include(p => p.Sponsor).ThenInclude(s => s.AppUser)
             .Include(p => p.Skills).ThenInclude(ps => ps.Skill).ThenInclude(s => s.SkillCategory)
             .Include(p => p.Assignments)
@@ -30,6 +31,7 @@ public sealed class ProjectRepository : IProjectRepository
 
     public async Task<IReadOnlyList<Project>> GetOpenByCohortAsync(int cohortId, CancellationToken ct = default) =>
         await _db.Projects
+            .AsNoTracking()
             .Include(p => p.Sponsor).ThenInclude(s => s.AppUser)
             .Include(p => p.Skills).ThenInclude(ps => ps.Skill).ThenInclude(s => s.SkillCategory)
             .Include(p => p.Assignments)
@@ -38,6 +40,7 @@ public sealed class ProjectRepository : IProjectRepository
 
     public async Task<IReadOnlyList<Project>> GetBySponsorAsync(int sponsorId, CancellationToken ct = default) =>
         await _db.Projects
+            .AsNoTracking()
             .Include(p => p.Sponsor).ThenInclude(s => s.AppUser)
             .Include(p => p.Skills).ThenInclude(ps => ps.Skill).ThenInclude(s => s.SkillCategory)
             .Include(p => p.Assignments)

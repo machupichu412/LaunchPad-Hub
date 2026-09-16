@@ -24,10 +24,21 @@ public sealed class CandidateRepository : ICandidateRepository
             .FirstOrDefaultAsync(ct);
 
     public Task<CandidateRisk?> GetRiskAsync(int candidateId, CancellationToken ct = default) =>
-        _db.CandidateRisks.FirstOrDefaultAsync(r => r.CandidateId == candidateId, ct);
+        _db.CandidateRisks.AsNoTracking().FirstOrDefaultAsync(r => r.CandidateId == candidateId, ct);
+
+    public async Task<IReadOnlyDictionary<int, CandidateRisk>> GetRisksAsync(IReadOnlyList<int> candidateIds, CancellationToken ct = default)
+    {
+        if (candidateIds.Count == 0) return new Dictionary<int, CandidateRisk>();
+
+        return await _db.CandidateRisks
+            .AsNoTracking()
+            .Where(r => candidateIds.Contains(r.CandidateId))
+            .ToDictionaryAsync(r => r.CandidateId, ct);
+    }
 
     public async Task<IReadOnlyList<Candidate>> GetByCohortAsync(int cohortId, CancellationToken ct = default) =>
         await _db.Candidates
+            .AsNoTracking()
             .Include(c => c.AppUser)
             .Include(c => c.Skills).ThenInclude(cs => cs.Skill)
             .Where(c => c.CohortId == cohortId)
@@ -35,6 +46,7 @@ public sealed class CandidateRepository : ICandidateRepository
 
     public async Task<IReadOnlyList<Candidate>> GetByCohortsAsync(IReadOnlyList<int> cohortIds, CancellationToken ct = default) =>
         await _db.Candidates
+            .AsNoTracking()
             .Include(c => c.AppUser)
             .Include(c => c.Skills).ThenInclude(cs => cs.Skill)
             .Where(c => cohortIds.Count == 0 || cohortIds.Contains(c.CohortId))
