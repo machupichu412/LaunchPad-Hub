@@ -1,6 +1,6 @@
 using System.Text.Json;
-using Azure.Identity;
 using Azure.Messaging.ServiceBus;
+using LaunchPad.Infrastructure.Messaging;
 using LaunchPad.Application.Matching;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -15,20 +15,20 @@ namespace LaunchPad.Infrastructure.Matching;
 /// </summary>
 public sealed class ServiceBusMatchingJobPublisher : IMatchingJobPublisher
 {
-    private readonly string? _namespace;
+    private readonly ServiceBusSenderProvider _senders;
     private readonly string _queueName;
     private readonly ILogger<ServiceBusMatchingJobPublisher> _logger;
 
-    public ServiceBusMatchingJobPublisher(IConfiguration configuration, ILogger<ServiceBusMatchingJobPublisher> logger)
+    public ServiceBusMatchingJobPublisher(ServiceBusSenderProvider senders, IConfiguration configuration, ILogger<ServiceBusMatchingJobPublisher> logger)
     {
-        _namespace = configuration["ServiceBus:Namespace"];
+        _senders = senders;
         _queueName = configuration["ServiceBus:MatchingJobsQueueName"] ?? "matching-jobs";
         _logger = logger;
     }
 
     public async Task PublishAsync(CohortMatchingJob job, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_namespace) || _namespace.Contains("<env>"))
+        if (!_senders.IsConfigured)
         {
             _logger.LogWarning(
                 "ServiceBus:Namespace not configured — matching job for cohort {CohortId} was not queued.",
@@ -36,9 +36,7 @@ public sealed class ServiceBusMatchingJobPublisher : IMatchingJobPublisher
             return;
         }
 
-        await using var client = new ServiceBusClient(_namespace, new DefaultAzureCredential());
-        var sender = client.CreateSender(_queueName);
         var body = JsonSerializer.Serialize(job);
-        await sender.SendMessageAsync(new ServiceBusMessage(body), ct);
+        await _senders.GetSender(_queueName).SendMessageAsync(new ServiceBusMessage(body), ct);
     }
 }

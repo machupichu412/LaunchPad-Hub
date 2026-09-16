@@ -15,6 +15,7 @@ using LaunchPad.Application.Sponsors;
 using LaunchPad.Infrastructure.Ai;
 using LaunchPad.Infrastructure.Candidates;
 using LaunchPad.Infrastructure.Matching;
+using LaunchPad.Infrastructure.Messaging;
 using LaunchPad.Infrastructure.Notifications;
 using LaunchPad.Infrastructure.Persistence;
 using LaunchPad.Infrastructure.Persistence.Repositories;
@@ -65,6 +66,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IMatchingEngine, MatchingEngine>();
         services.AddSingleton<ITextSimilarityScorer, TfIdfCosineTextSimilarityScorer>();
         services.AddScoped<ICohortMatchingRunner, CohortMatchingRunner>();
+
+        // Shared by all three Service Bus publishers below — one client and one sender per
+        // queue for the process, instead of an AMQP connection per published message.
+        services.AddSingleton<ServiceBusSenderProvider>();
 
         // ServiceBusNotificationPublisher stays registered under its own concrete type —
         // CompositeNotificationPublisher (the actual INotificationPublisher) wraps it to

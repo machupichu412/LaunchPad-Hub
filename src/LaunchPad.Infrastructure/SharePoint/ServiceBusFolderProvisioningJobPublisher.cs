@@ -1,6 +1,6 @@
 using System.Text.Json;
-using Azure.Identity;
 using Azure.Messaging.ServiceBus;
+using LaunchPad.Infrastructure.Messaging;
 using LaunchPad.Application.SharePoint;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -15,20 +15,20 @@ namespace LaunchPad.Infrastructure.SharePoint;
 /// </summary>
 public sealed class ServiceBusFolderProvisioningJobPublisher : IFolderProvisioningJobPublisher
 {
-    private readonly string? _namespace;
+    private readonly ServiceBusSenderProvider _senders;
     private readonly string _queueName;
     private readonly ILogger<ServiceBusFolderProvisioningJobPublisher> _logger;
 
-    public ServiceBusFolderProvisioningJobPublisher(IConfiguration configuration, ILogger<ServiceBusFolderProvisioningJobPublisher> logger)
+    public ServiceBusFolderProvisioningJobPublisher(ServiceBusSenderProvider senders, IConfiguration configuration, ILogger<ServiceBusFolderProvisioningJobPublisher> logger)
     {
-        _namespace = configuration["ServiceBus:Namespace"];
+        _senders = senders;
         _queueName = configuration["ServiceBus:SharePointProvisioningQueueName"] ?? "sharepoint-provisioning";
         _logger = logger;
     }
 
     public async Task PublishAsync(FolderProvisioningJob job, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_namespace) || _namespace.Contains("<env>"))
+        if (!_senders.IsConfigured)
         {
             _logger.LogWarning(
                 "ServiceBus:Namespace not configured — folder provisioning job for {TargetType} {TargetId} was not queued.",
@@ -36,9 +36,7 @@ public sealed class ServiceBusFolderProvisioningJobPublisher : IFolderProvisioni
             return;
         }
 
-        await using var client = new ServiceBusClient(_namespace, new DefaultAzureCredential());
-        var sender = client.CreateSender(_queueName);
         var body = JsonSerializer.Serialize(job);
-        await sender.SendMessageAsync(new ServiceBusMessage(body), ct);
+        await _senders.GetSender(_queueName).SendMessageAsync(new ServiceBusMessage(body), ct);
     }
 }

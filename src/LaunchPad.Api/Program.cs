@@ -22,6 +22,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Identity.Web;
 using Serilog;
+using System.Globalization;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
@@ -79,9 +80,40 @@ builder.Services.AddScoped<IAuthorizationHandler, OwnsAssignmentHandler>();
 // a determined abuser, just a cheap backstop appropriate for a ~2,000-user internal app. Only
 // applied to Community's post/comment creation (see [EnableRateLimiting] there), never to
 // reads or reactions.
+var globalPermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:PermitLimit") ?? 300;
+var globalWindowSeconds = builder.Configuration.GetValue<int?>("RateLimiting:WindowSeconds") ?? 60;
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // A runaway client (a retry loop, a stuck refetchInterval) could previously issue
+    // unlimited requests against SQL. Deliberately generous — a normal session loads many
+    // queries per page — so this is a backstop, not a quota.
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.User.GetObjectId()
+                ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromSeconds(globalWindowSeconds),
+                PermitLimit = globalPermitLimit,
+                QueueLimit = 0,
+            }));
+
+    // Without this a 429 tells the client to back off but not for how long, so the usual
+    // response is an immediate retry — which is what produced the 429.
+    options.OnRejected = (context, ct) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)retryAfter.TotalSeconds).ToString(NumberFormatInfo.InvariantInfo);
+        }
+
+        return ValueTask.CompletedTask;
+    };
 
     options.AddPolicy(RateLimitPolicies.CommunityWrite, httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(

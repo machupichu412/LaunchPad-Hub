@@ -1,6 +1,7 @@
 using FluentAssertions;
 using LaunchPad.Application.Notifications;
 using LaunchPad.Domain.Entities;
+using LaunchPad.Infrastructure.Messaging;
 using LaunchPad.Infrastructure.Notifications;
 using LaunchPad.Infrastructure.Persistence;
 using LaunchPad.Infrastructure.Persistence.Repositories;
@@ -29,7 +30,13 @@ public class CompositeNotificationPublisherTests
         new(
             new NotificationRepository(db),
             new AppUserRepository(db),
-            new ServiceBusNotificationPublisher(new ConfigurationBuilder().Build(), NullLogger<ServiceBusNotificationPublisher>.Instance));
+            new ServiceBusNotificationPublisher(
+                // Empty configuration means IsConfigured is false, so the publisher takes its
+                // log-and-return branch and never touches Service Bus — the same reason this
+                // test could use the real publisher before the client was hoisted out of it.
+                new ServiceBusSenderProvider(new ConfigurationBuilder().Build()),
+                new ConfigurationBuilder().Build(),
+                NullLogger<ServiceBusNotificationPublisher>.Instance));
 
     [Fact]
     public async Task PublishAsync_WhenToUpnMatchesAnAppUser_WritesAnUnreadNotificationRow()

@@ -1,4 +1,3 @@
-using Azure.Identity;
 using LaunchPad.Application.Notifications;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -20,12 +19,14 @@ namespace LaunchPad.Infrastructure.Notifications;
 /// </summary>
 public sealed class GraphEmailNotifier : IEmailNotifier
 {
+    private readonly GraphServiceClient _graphClient;
     private readonly string? _tenantId;
     private readonly string? _senderUpn;
     private readonly ILogger<GraphEmailNotifier> _logger;
 
-    public GraphEmailNotifier(IConfiguration configuration, ILogger<GraphEmailNotifier> logger)
+    public GraphEmailNotifier(GraphServiceClient graphClient, IConfiguration configuration, ILogger<GraphEmailNotifier> logger)
     {
+        _graphClient = graphClient;
         _tenantId = configuration["Graph:TenantId"];
         _senderUpn = configuration["Graph:NotificationSenderUpn"];
         _logger = logger;
@@ -41,8 +42,6 @@ public sealed class GraphEmailNotifier : IEmailNotifier
             return;
         }
 
-        var graphClient = new GraphServiceClient(new DefaultAzureCredential(), new[] { "https://graph.microsoft.com/.default" });
-
         var requestBody = new SendMailPostRequestBody
         {
             Message = new Message
@@ -57,6 +56,6 @@ public sealed class GraphEmailNotifier : IEmailNotifier
             SaveToSentItems = false,
         };
 
-        await graphClient.Users[_senderUpn].SendMail.PostAsync(requestBody, cancellationToken: ct);
+        await _graphClient.Users[_senderUpn].SendMail.PostAsync(requestBody, cancellationToken: ct);
     }
 }

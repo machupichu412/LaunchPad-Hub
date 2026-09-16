@@ -15,7 +15,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace LaunchPad.Api.IntegrationTests;
 
-public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
+// Not sealed: tests that need the same fakes but different configuration derive from it
+// and override ConfigureWebHost (see RateLimitingTests).
+public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
     // Must be fixed per factory instance, not evaluated inside the options lambda —
     // AddDbContext rebuilds DbContextOptions<T> for every new scope, so a

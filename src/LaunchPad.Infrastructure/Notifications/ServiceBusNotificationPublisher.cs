@@ -1,6 +1,6 @@
 using System.Text.Json;
-using Azure.Identity;
 using Azure.Messaging.ServiceBus;
+using LaunchPad.Infrastructure.Messaging;
 using LaunchPad.Application.Notifications;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -17,20 +17,20 @@ namespace LaunchPad.Infrastructure.Notifications;
 /// </summary>
 public sealed class ServiceBusNotificationPublisher : INotificationPublisher
 {
-    private readonly string? _namespace;
+    private readonly ServiceBusSenderProvider _senders;
     private readonly string _queueName;
     private readonly ILogger<ServiceBusNotificationPublisher> _logger;
 
-    public ServiceBusNotificationPublisher(IConfiguration configuration, ILogger<ServiceBusNotificationPublisher> logger)
+    public ServiceBusNotificationPublisher(ServiceBusSenderProvider senders, IConfiguration configuration, ILogger<ServiceBusNotificationPublisher> logger)
     {
-        _namespace = configuration["ServiceBus:Namespace"];
+        _senders = senders;
         _queueName = configuration["ServiceBus:NotificationsQueueName"] ?? "notifications";
         _logger = logger;
     }
 
     public async Task PublishAsync(NotificationMessage message, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_namespace) || _namespace.Contains("<env>"))
+        if (!_senders.IsConfigured)
         {
             _logger.LogWarning(
                 "ServiceBus:Namespace not configured — notification to {ToUpn} ({Subject}) was not queued.",
@@ -38,9 +38,7 @@ public sealed class ServiceBusNotificationPublisher : INotificationPublisher
             return;
         }
 
-        await using var client = new ServiceBusClient(_namespace, new DefaultAzureCredential());
-        var sender = client.CreateSender(_queueName);
         var body = JsonSerializer.Serialize(message);
-        await sender.SendMessageAsync(new ServiceBusMessage(body), ct);
+        await _senders.GetSender(_queueName).SendMessageAsync(new ServiceBusMessage(body), ct);
     }
 }
