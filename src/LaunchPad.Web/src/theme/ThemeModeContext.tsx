@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { webDarkTheme, webLightTheme, type Theme } from '@fluentui/react-components';
+import { type Theme } from '@fluentui/react-components';
+import { launchPadDarkTheme, launchPadLightTheme } from './brand';
 
 export type ThemeMode = 'light' | 'dark';
 
@@ -38,7 +39,7 @@ export function ThemeModeProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ThemeModeState>(
     () => ({
       mode,
-      theme: mode === 'dark' ? webDarkTheme : webLightTheme,
+      theme: mode === 'dark' ? launchPadDarkTheme : launchPadLightTheme,
       toggleMode: () => setMode((current) => (current === 'dark' ? 'light' : 'dark')),
     }),
     [mode],

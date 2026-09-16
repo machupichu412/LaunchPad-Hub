@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Body1, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
@@ -23,6 +23,8 @@ import {
   WarningRegular,
 } from '@fluentui/react-icons';
 import { AppRoles } from '../auth/roles';
+import { hueForPath, sectionHues } from '../theme/brand';
+import { useThemeMode } from '../theme/ThemeModeContext';
 import { useActiveRole } from '../auth/ActiveRoleContext';
 import { getMyCandidateProfile } from '../api/candidates';
 import { getMySponsorProfile } from '../api/sponsors';
@@ -35,10 +37,26 @@ const useStyles = makeStyles({
     marginTop: tokens.spacingVerticalM,
     listStyle: 'none',
     padding: 0,
+    // On a phone the rail lies down and scrolls sideways on its own, so the page never
+    // has to. The hue rule moves to the bottom edge to stay readable in that direction.
+    '@media (max-width: 767px)': {
+      flexDirection: 'row',
+      marginTop: tokens.spacingVerticalS,
+      overflowX: 'auto',
+      gap: tokens.spacingHorizontalXXS,
+      scrollbarWidth: 'thin',
+    },
   },
   item: {
     display: 'flex',
     alignItems: 'center',
+    '@media (max-width: 767px)': {
+      whiteSpace: 'nowrap',
+      // Fluent's Body1 renders its own span, which wraps independently of the anchor.
+      '& span': {
+        whiteSpace: 'nowrap',
+      },
+    },
     gap: tokens.spacingHorizontalS,
     padding: `${tokens.spacingVerticalSNudge} ${tokens.spacingHorizontalM}`,
     borderRadius: tokens.borderRadiusMedium,
@@ -68,6 +86,28 @@ const useStyles = makeStyles({
       color: tokens.colorBrandForeground2,
     },
   },
+  // Candidate destinations each carry one hue from the logo's trail, so eight screens
+  // built from identical grey parts stay tellable apart at a glance. The 3px rule does
+  // the identifying and uses the raw logo value; the label and icon use the solved-for
+  // `ink` variant, since most of the trail is too light to read as text. Ops and
+  // Executive keep stock Fluent blue — the color story belongs to the candidate.
+  // The hue arrives as a custom property rather than an inline border color, because the
+  // rule switches edges at the breakpoint — left on the rail, bottom on the phone strip —
+  // and an inline style can only ever set one of them.
+  itemHued: {
+    borderLeftWidth: '3px',
+    borderLeftStyle: 'solid',
+    borderLeftColor: 'var(--lp-hue, transparent)',
+    paddingLeft: `calc(${tokens.spacingHorizontalM} - 3px)`,
+    '@media (max-width: 767px)': {
+      borderLeftStyle: 'none',
+      paddingLeft: tokens.spacingHorizontalM,
+      borderBottomWidth: '3px',
+      borderBottomStyle: 'solid',
+      borderBottomColor: 'var(--lp-hue, transparent)',
+      paddingBottom: `calc(${tokens.spacingVerticalSNudge} - 3px)`,
+    },
+  },
   icon: {
     display: 'flex',
     fontSize: '20px',
@@ -78,11 +118,25 @@ const useStyles = makeStyles({
 function NavLink({ to, icon, children }: { to: string; icon: ReactElement; children: string }) {
   const styles = useStyles();
   const { pathname } = useLocation();
+  const { mode } = useThemeMode();
   const isSelected = to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`);
+
+  const hueName = hueForPath(to);
+  const hue = hueName ? sectionHues[hueName] : null;
+  const hueStyle = hue
+    ? ({
+        '--lp-hue': isSelected ? hue.fill : 'transparent',
+        color: isSelected ? (mode === 'dark' ? hue.inkDark : hue.ink) : undefined,
+      } as CSSProperties)
+    : undefined;
 
   return (
     <li>
-      <Link to={to} className={mergeClasses(styles.item, isSelected && styles.itemSelected)}>
+      <Link
+        to={to}
+        className={mergeClasses(styles.item, isSelected && styles.itemSelected, hue !== null && styles.itemHued)}
+        style={hueStyle}
+      >
         <span className={styles.icon} aria-hidden="true">
           {icon}
         </span>

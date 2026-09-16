@@ -1,5 +1,5 @@
 import { Spinner, Title2, makeStyles, tokens } from '@fluentui/react-components';
-import { BrandMark } from './BrandMark';
+import { RocketLaunch } from './RocketLaunch';
 
 const useStyles = makeStyles({
   root: {
@@ -24,7 +24,7 @@ export function InitialLoadingScreen() {
 
   return (
     <div className={styles.root}>
-      <BrandMark variant="full" size={112} />
+      <RocketLaunch size={168} />
       <Title2>LaunchPad</Title2>
       <Spinner size="huge" label="Signing you in..." labelPosition="below" />
     </div>

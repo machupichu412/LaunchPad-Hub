@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Body1, Title1, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { useSurfaceStyles } from '../theme/surfaces';
+import { hueForPath, sectionHues } from '../theme/brand';
 
 const useStyles = makeStyles({
   root: {
@@ -20,6 +22,16 @@ const useStyles = makeStyles({
   },
   title: {
     letterSpacing: '-0.01em',
+  },
+  // The same 3px rule the nav uses for the active destination, repeated at the top of
+  // the page it leads to. Two marks of the same color at either end of the click are
+  // what turn a hue into wayfinding rather than paint — you can see where you landed
+  // without reading anything. Candidate routes only; Ops and Exec keep stock Fluent.
+  hueRule: {
+    width: '32px',
+    height: '3px',
+    borderRadius: tokens.borderRadiusCircular,
+    marginBottom: tokens.spacingVerticalS,
   },
   actions: {
     display: 'flex',
@@ -49,9 +61,19 @@ export function PageHeader({
 }) {
   const styles = useStyles();
   const surfaces = useSurfaceStyles();
+  const { pathname } = useLocation();
+  const hueName = hueForPath(pathname);
+
   return (
     <div className={mergeClasses(styles.root, surfaces.fadeInUp)}>
       <div className={styles.text}>
+        {hueName && (
+          <div
+            className={styles.hueRule}
+            style={{ backgroundColor: sectionHues[hueName].fill }}
+            aria-hidden="true"
+          />
+        )}
         <Title1 block className={styles.title}>
           {title}
         </Title1>
