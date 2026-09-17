@@ -237,7 +237,6 @@ public class CandidatesController : ControllerBase
             ActiveProject = assignment.ToMyAssignmentDto(todos.Count, tasksComplete),
             TasksComplete = tasksComplete,
             TasksTotal = todos.Count,
-            MatchScore = assignment.MatchScore,
             CommunityPostsThisWeek = communityPostsThisWeek,
         });
     }
@@ -375,7 +374,14 @@ public class CandidatesController : ControllerBase
         // as SelfReported — silently destroying OpsVerified provenance on every profile save.
         // This endpoint decides *which* skills are on the list; whatever established a row owns
         // its Source and Proficiency.
-        var requestedSkills = await _skills.GetOrCreateByNamesAsync(request.SkillNames, ct);
+        var (requestedSkills, unknownSkillNames) = await _skills.GetByNamesAsync(request.SkillNames, ct);
+        if (unknownSkillNames.Count > 0)
+        {
+            ModelState.AddModelError(
+                nameof(request.SkillNames),
+                $"These skills aren't in the skill list yet: {string.Join(", ", unknownSkillNames)}. Add them from the skill picker first.");
+            return ValidationProblem(ModelState);
+        }
         var requestedSkillIds = requestedSkills.Select(s => s.SkillId).ToHashSet();
 
         // Deselecting a skill is a legitimate removal whatever its Source — the candidate owns

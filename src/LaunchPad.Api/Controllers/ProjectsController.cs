@@ -258,7 +258,9 @@ public class ProjectsController : ControllerBase
             Status = Domain.Enums.ProjectStatus.Open,
         };
 
-        project.Skills = await ResolveSkillsAsync(request.RequiredSkillNames, request.PreferredSkillNames, ct);
+        var (skills, unknownSkillNames) = await ResolveSkillsAsync(request.RequiredSkillNames, request.PreferredSkillNames, ct);
+        if (unknownSkillNames.Count > 0) return UnknownSkillsProblem(unknownSkillNames);
+        project.Skills = skills;
 
         await _projects.AddAsync(project, ct);
         await _projects.SaveChangesAsync(ct);
@@ -292,7 +294,9 @@ public class ProjectsController : ControllerBase
         project.StartDate = request.StartDate;
         project.EndDate = request.EndDate;
         project.MaxCandidates = request.MaxCandidates;
-        project.Skills = await ResolveSkillsAsync(request.RequiredSkillNames, request.PreferredSkillNames, ct);
+        var (skills, unknownSkillNames) = await ResolveSkillsAsync(request.RequiredSkillNames, request.PreferredSkillNames, ct);
+        if (unknownSkillNames.Count > 0) return UnknownSkillsProblem(unknownSkillNames);
+        project.Skills = skills;
 
         await _projects.SaveChangesAsync(ct);
 
@@ -556,7 +560,7 @@ public class ProjectsController : ControllerBase
                 Degree = c.Degree,
                 Gpa = c.Gpa,
                 Skills = c.Skills.Select(s => s.Skill.Name).ToArray(),
-                Score = r.Score,
+                // Ranked best-first; the number itself stays with Ops and Exec.
                 Rationale = r.Rationale,
                 InterestRating = interestsForThisProject.TryGetValue(c.CandidateId, out var rating) ? rating : null,
                 HasPendingAssignmentElsewhere = pendingElsewhere.Contains(c.CandidateId),
@@ -666,7 +670,6 @@ public class ProjectsController : ControllerBase
             AssignmentId = result.Assignment.AssignmentId,
             CandidateId = candidate.CandidateId,
             CandidateName = candidate.AppUser.DisplayName,
-            MatchScore = result.Assignment.MatchScore,
             MatchRationale = result.Assignment.MatchRationale,
         });
     }
@@ -829,21 +832,33 @@ public class ProjectsController : ControllerBase
         AssignmentId = assignment.AssignmentId,
         CandidateId = assignment.CandidateId,
         CandidateName = assignment.Candidate.AppUser.DisplayName,
-        MatchScore = assignment.MatchScore,
         MatchRationale = assignment.MatchRationale,
     };
 
-    private async Task<List<ProjectSkill>> ResolveSkillsAsync(string[] requiredNames, string[] preferredNames, CancellationToken ct)
+    /// <summary>Resolves skill names against the taxonomy. Unknown names come back in
+    /// UnknownNames instead of quietly becoming new global skills — Ops adds skills
+    /// deliberately, with a category.</summary>
+    private async Task<(List<ProjectSkill> Skills, IReadOnlyList<string> UnknownNames)> ResolveSkillsAsync(
+        string[] requiredNames, string[] preferredNames, CancellationToken ct)
     {
-        var requiredSkills = await _skills.GetOrCreateByNamesAsync(requiredNames, ct);
-        var preferredSkills = await _skills.GetOrCreateByNamesAsync(preferredNames, ct);
+        var (requiredSkills, unknownRequired) = await _skills.GetByNamesAsync(requiredNames, ct);
+        var (preferredSkills, unknownPreferred) = await _skills.GetByNamesAsync(preferredNames, ct);
 
         var result = requiredSkills.Select(s => new ProjectSkill { SkillId = s.SkillId, Skill = s, IsRequired = true }).ToList();
         result.AddRange(preferredSkills
             .Where(s => result.All(r => r.SkillId != s.SkillId))
             .Select(s => new ProjectSkill { SkillId = s.SkillId, Skill = s, IsRequired = false }));
 
-        return result;
+        return (result, [.. unknownRequired, .. unknownPreferred]);
+    }
+
+    /// <summary>The same message on create and update, naming what wasn't recognized.</summary>
+    private ActionResult UnknownSkillsProblem(IReadOnlyList<string> unknownNames)
+    {
+        ModelState.AddModelError(
+            "RequiredSkillNames",
+            $"These skills aren't in the skill list yet: {string.Join(", ", unknownNames)}. Ask Program Ops to add them.");
+        return ValidationProblem(ModelState);
     }
 
     private static ProjectDto ToDto(Project project)

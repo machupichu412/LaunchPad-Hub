@@ -275,12 +275,6 @@ export function CandidateDashboard() {
       </div>
 
       <div className={styles.asideRow}>
-        {dashboard.matchScore != null && (
-          <div className={styles.aside}>
-            <Caption1>Match strength</Caption1>
-            <span className={styles.asideValue}>{dashboard.matchScore}%</span>
-          </div>
-        )}
         <div className={styles.aside}>
           <Caption1>Open tasks</Caption1>
           <span className={styles.asideValue}>{openTasks.length}</span>

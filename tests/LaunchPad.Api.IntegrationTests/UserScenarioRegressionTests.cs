@@ -555,4 +555,61 @@ public class UserScenarioRegressionTests : IClassFixture<CustomWebApplicationFac
         (await candidate.PostAsync("/api/community/posts", Post("Announcement"))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await ClientAs(Roles.ProgramOps).PostAsync("/api/community/posts", Post("Announcement"))).StatusCode.Should().Be(HttpStatusCode.OK);
     }
+
+    // G-09
+    [Fact]
+    public async Task NeitherCandidateNorSponsorReceivesAMatchScore()
+    {
+        var world = await SeedTwoCohortsAsync();
+        // Proposed for the sponsor's match list; the same candidate is what Ops sees in the
+        // queue once it reaches SponsorApproved.
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Proposed);
+
+        var candidateJson = await ClientAs(Roles.Candidate, world.CandidateAOid).GetStringAsync("/api/candidates/me/dashboard");
+        candidateJson.Should().NotContain("matchScore");
+
+        var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
+        (await sponsor.GetStringAsync($"/api/projects/{world.ProjectInA}/matches")).Should().NotContain("matchScore");
+        (await sponsor.GetStringAsync($"/api/projects/{world.ProjectInA}/eligible-candidates"))
+            .Should().NotContain("\"score\"");
+
+        // Ops keeps the number: it arbitrates the queue.
+        (await sponsor.PostAsync($"/api/projects/{world.ProjectInA}/matches/{assignmentId}/recommend", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ClientAs(Roles.ProgramOps).GetStringAsync($"/api/matching/queue?cohortId={world.CohortA}"))
+            .Should().Contain("matchScore");
+
+        // The rationale survives — it is the part that explains the match.
+        (await ClientAs(Roles.Candidate, world.CandidateAOid).GetStringAsync("/api/assignments/mine"))
+            .Should().Contain("matchRationale").And.NotContain("matchScore");
+    }
+
+    // G-10
+    [Fact]
+    public async Task ASkillNameNobodyDefined_IsRejectedOnProjectsAndProfiles()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var invented = $"Telepathy {Guid.NewGuid():N}";
+
+        var project = new CreateProjectRequest
+        {
+            CohortId = world.CohortA,
+            Name = "Needs telepathy",
+            AvailabilityNeeded = Availability.PartTime,
+            MaxCandidates = 1,
+            RequiredSkillNames = [invented],
+        };
+        var projectResponse = await ClientAs(Roles.Sponsor, world.SponsorOid).PostAsJsonAsync("/api/projects", project, TestJsonOptions.Default);
+        projectResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await projectResponse.Content.ReadAsStringAsync()).Should().Contain(invented);
+
+        var profile = new UpdateCandidateProfileRequest { Availability = Availability.PartTime, SkillNames = [invented] };
+        (await ClientAs(Roles.Candidate, world.CandidateAOid).PutAsJsonAsync("/api/candidates/me", profile, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        (await db.Skills.AnyAsync(s => s.Name == invented))
+            .Should().BeFalse("a typo must not become a skill everyone sees in their picker");
+    }
 }

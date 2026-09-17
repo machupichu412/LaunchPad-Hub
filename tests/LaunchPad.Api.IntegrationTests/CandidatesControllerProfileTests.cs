@@ -38,7 +38,17 @@ public class CandidatesControllerProfileTests : IClassFixture<CustomWebApplicati
             Status = CandidateStatus.InProgress,
         };
 
-        db.AddRange(program, cohort, candidate);
+        // Skill names on a profile now have to exist already (they are no longer created on
+        // the fly), so the taxonomy this fixture's tests select from is seeded here.
+        var category = new SkillCategory { Name = $"Category {oid}" };
+        db.AddRange(program, cohort, candidate, category);
+        foreach (var name in new[] { "React", "TypeScript" })
+        {
+            if (!await db.Skills.AnyAsync(s => s.Name == name))
+            {
+                db.Add(new Skill { Name = name, SkillCategory = category });
+            }
+        }
         await db.SaveChangesAsync();
 
         return oid;
@@ -108,7 +118,12 @@ public class CandidatesControllerProfileTests : IClassFixture<CustomWebApplicati
         var oid = Guid.NewGuid();
         var program = new Domain.Entities.Program { Name = $"Program {oid}" };
         var cohort = new Cohort { Program = program, Name = $"Cohort {oid}", StartDate = new DateOnly(2026, 1, 1), EndDate = new DateOnly(2026, 6, 1), Status = CohortStatus.Active };
-        var skill = new Skill { Name = skillName, SkillCategory = new SkillCategory { Name = $"Category {oid}" } };
+        var category = new SkillCategory { Name = $"Category {oid}" };
+        // Reused if an earlier test in this class already seeded it: names are resolved
+        // against the taxonomy now, so two rows sharing a name would both match and the
+        // candidate would end up holding the same skill twice.
+        var skill = await db.Skills.FirstOrDefaultAsync(s => s.Name == skillName)
+            ?? new Skill { Name = skillName, SkillCategory = category };
         var candidate = new Candidate
         {
             Cohort = cohort,
@@ -121,7 +136,16 @@ public class CandidatesControllerProfileTests : IClassFixture<CustomWebApplicati
             },
         };
 
-        db.AddRange(program, cohort, skill, candidate);
+        db.AddRange(program, cohort, candidate);
+        if (skill.SkillId == 0) db.Add(skill);
+        // The other names each provenance test swaps in must exist too.
+        foreach (var name in new[] { "Terraform (provenance)", "Rust (provenance)", "Elixir (provenance)", "Go (provenance)", "Kubernetes (provenance)" })
+        {
+            if (name != skillName && !await db.Skills.AnyAsync(s => s.Name == name))
+            {
+                db.Add(new Skill { Name = name, SkillCategory = category });
+            }
+        }
         await db.SaveChangesAsync();
 
         return (oid, skill.SkillId);
