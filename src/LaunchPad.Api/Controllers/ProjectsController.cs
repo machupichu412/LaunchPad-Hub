@@ -2,6 +2,7 @@ using FluentValidation;
 using LaunchPad.Api.Authorization;
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Candidates;
+using LaunchPad.Application.Cohorts;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
 using LaunchPad.Application.Notifications;
@@ -28,6 +29,7 @@ public class ProjectsController : ControllerBase
     private readonly ISponsorRepository _sponsors;
     private readonly ICandidateRepository _candidates;
     private readonly ISkillRepository _skills;
+    private readonly ICohortRepository _cohorts;
     private readonly IAssignmentRepository _assignments;
     private readonly IProjectInterestRepository _projectInterests;
     private readonly IAppUserRepository _appUsers;
@@ -50,6 +52,7 @@ public class ProjectsController : ControllerBase
         ISponsorRepository sponsors,
         ICandidateRepository candidates,
         ISkillRepository skills,
+        ICohortRepository cohorts,
         IAssignmentRepository assignments,
         IProjectInterestRepository projectInterests,
         IAppUserRepository appUsers,
@@ -71,6 +74,7 @@ public class ProjectsController : ControllerBase
         _sponsors = sponsors;
         _candidates = candidates;
         _skills = skills;
+        _cohorts = cohorts;
         _assignments = assignments;
         _projectInterests = projectInterests;
         _appUsers = appUsers;
@@ -143,22 +147,16 @@ public class ProjectsController : ControllerBase
     [Authorize(Roles = Roles.Candidate)]
     public async Task<ActionResult<ProjectDto>> GetOpenDetail(int id, CancellationToken ct)
     {
+        var candidate = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         var project = await _projects.GetWithSponsorAsync(id, ct);
-        if (project is null
-            || project.ApprovalStatus != Domain.Enums.ProjectApprovalStatus.Approved
-            || project.Status != Domain.Enums.ProjectStatus.Open)
+        if (candidate is null || !IsBrowsableBy(project, candidate))
         {
             return NotFound();
         }
 
-        var dto = ToDto(project);
-
-        var candidate = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
-        if (candidate is not null)
-        {
-            var ratings = await _projectInterests.GetRatingsForCandidateAsync(candidate.CandidateId, ct);
-            if (ratings.TryGetValue(id, out var rating)) dto.MyInterestRating = rating;
-        }
+        var dto = ToDto(project!);
+        var ratings = await _projectInterests.GetRatingsForCandidateAsync(candidate.CandidateId, ct);
+        if (ratings.TryGetValue(id, out var rating)) dto.MyInterestRating = rating;
 
         return Ok(dto);
     }
@@ -173,21 +171,19 @@ public class ProjectsController : ControllerBase
         var validation = await _rateInterestValidator.ValidateAsync(request, ct);
         if (!validation.IsValid) return ValidationProblem(AddErrors(validation));
 
+        var candidate = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        if (candidate is null) return Forbid();
+
         var project = await _projects.GetWithSponsorAsync(id, ct);
-        if (project is null
-            || project.ApprovalStatus != Domain.Enums.ProjectApprovalStatus.Approved
-            || project.Status != Domain.Enums.ProjectStatus.Open)
+        if (!IsBrowsableBy(project, candidate))
         {
             return NotFound();
         }
 
-        var candidate = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
-        if (candidate is null) return Forbid();
-
         await _projectInterests.UpsertAsync(candidate.CandidateId, id, request.Rating, ct);
         await _projectInterests.SaveChangesAsync(ct);
 
-        var dto = ToDto(project);
+        var dto = ToDto(project!);
         dto.MyInterestRating = request.Rating;
         return Ok(dto);
     }
@@ -209,7 +205,11 @@ public class ProjectsController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<ProjectDto>>> GetPendingApproval([FromQuery] int cohortId, CancellationToken ct)
     {
         var projects = await _projects.GetByCohortAsync(cohortId, ct);
-        return Ok(projects.Where(p => p.ApprovalStatus == ProjectApprovalStatus.PendingOps).Select(ToDto).ToArray());
+        // A project cancelled while pending has nothing left to decide — approving it would
+        // only produce an Approved project nobody can ever see.
+        return Ok(projects
+            .Where(p => p.ApprovalStatus == ProjectApprovalStatus.PendingOps && p.Status != ProjectStatus.Cancelled)
+            .Select(ToDto).ToArray());
     }
 
     [HttpPost]
@@ -221,6 +221,13 @@ public class ProjectsController : ControllerBase
 
         var sponsor = await _sponsors.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         if (sponsor is null) return Forbid();
+
+        // Without this a bad id only surfaces as a foreign-key failure at SaveChanges — a 500.
+        if (await _cohorts.GetByIdAsync(request.CohortId, ct) is null)
+        {
+            ModelState.AddModelError(nameof(request.CohortId), "Cohort not found.");
+            return ValidationProblem(ModelState);
+        }
 
         var project = new Project
         {
@@ -374,6 +381,11 @@ public class ProjectsController : ControllerBase
         if (project.ApprovalStatus == Domain.Enums.ProjectApprovalStatus.Draft)
         {
             return BadRequest("A Draft project hasn't been submitted for review yet.");
+        }
+
+        if (project.Status == Domain.Enums.ProjectStatus.Cancelled)
+        {
+            return BadRequest("This project was cancelled and can't be approved.");
         }
 
         var wasAlreadyApproved = project.ApprovalStatus == Domain.Enums.ProjectApprovalStatus.Approved;
@@ -756,6 +768,16 @@ public class ProjectsController : ControllerBase
         await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "SponsorReject", ct: ct);
         return Ok(ToMatchDto(assignment));
     }
+
+    /// <summary>The marketplace visibility rule, shared by the list, detail and interest
+    /// endpoints: Open, Ops-approved, and in the candidate's own cohort. Detail and interest
+    /// take an id from the URL, so without the cohort check a candidate could reach any
+    /// other cohort's projects just by guessing ids.</summary>
+    private static bool IsBrowsableBy(Project? project, Candidate candidate) =>
+        project is not null
+        && project.ApprovalStatus == Domain.Enums.ProjectApprovalStatus.Approved
+        && project.Status == Domain.Enums.ProjectStatus.Open
+        && project.CohortId == candidate.CohortId;
 
     private static ProjectMatchDto ToMatchDto(Assignment assignment) => new()
     {

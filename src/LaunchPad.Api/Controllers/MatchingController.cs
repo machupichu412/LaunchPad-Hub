@@ -84,6 +84,14 @@ public class MatchingController : ControllerBase
         var assignment = await _assignments.GetAsync(assignmentId, ct);
         if (assignment is null) return NotFound();
 
+        // Deny is the other half of the Ops queue decision, so it gets the same precondition
+        // Approve has. Without it, a deny aimed at an already-approved or active assignment
+        // silently withdrew a candidate from work they had been given.
+        if (assignment.Status != AssignmentStatus.SponsorApproved)
+        {
+            return BadRequest("Only an assignment waiting for Ops approval can be denied.");
+        }
+
         assignment.Status = AssignmentStatus.Withdrawn;
         await _assignments.SaveChangesAsync(ct);
         await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "OpsDeny", ct: ct);

@@ -19,19 +19,25 @@ public class CohortsController : ControllerBase
     private readonly IValidator<CreateCohortRequest> _createValidator;
     private readonly IValidator<ScheduleReviewsRequest> _scheduleReviewsValidator;
     private readonly IFolderProvisioningJobPublisher _folderProvisioning;
+    private readonly IAuditLog _auditLog;
+    private readonly ICurrentUser _currentUser;
 
     public CohortsController(
         ICohortRepository cohorts,
         IAssignmentRepository assignments,
         IValidator<CreateCohortRequest> createValidator,
         IValidator<ScheduleReviewsRequest> scheduleReviewsValidator,
-        IFolderProvisioningJobPublisher folderProvisioning)
+        IFolderProvisioningJobPublisher folderProvisioning,
+        IAuditLog auditLog,
+        ICurrentUser currentUser)
     {
         _cohorts = cohorts;
         _assignments = assignments;
         _createValidator = createValidator;
         _scheduleReviewsValidator = scheduleReviewsValidator;
         _folderProvisioning = folderProvisioning;
+        _auditLog = auditLog;
+        _currentUser = currentUser;
     }
 
     [HttpGet]
@@ -88,8 +94,12 @@ public class CohortsController : ControllerBase
         var cohort = await _cohorts.GetByIdAsync(id, ct);
         if (cohort is null) return NotFound();
 
+        var previousStatus = cohort.Status;
         cohort.Status = request.Status;
         await _cohorts.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(
+            _currentUser.EntraObjectId, "Cohort", cohort.CohortId.ToString(), "StatusChanged",
+            data: new { From = previousStatus, To = request.Status }, ct: ct);
 
         var updated = (await _cohorts.GetAllWithCountsAsync(ct)).First(c => c.Cohort.CohortId == id);
         return Ok(ToDto(updated));

@@ -86,6 +86,16 @@ public class ReviewsController : ControllerBase
             submittedByAppUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         }
 
+        // Backstops the unique (AssignmentId, ReviewType, Checkpoint, SubmittedBy) index: hitting
+        // the index instead surfaces as an unhandled DbUpdateException, a 500 for a double-click.
+        var existing = await _reviews.GetByAssignmentAsync(request.AssignmentId, ct);
+        if (existing.Any(r => r.ReviewType == request.ReviewType
+            && r.Checkpoint == request.Checkpoint
+            && r.SubmittedBy == (submittedByAppUserId ?? 0)))
+        {
+            return Conflict("You've already submitted this review.");
+        }
+
         var review = new Review
         {
             AssignmentId = request.AssignmentId,
