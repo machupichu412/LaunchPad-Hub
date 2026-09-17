@@ -37,5 +37,9 @@ public sealed class CreateTodoRequestValidator : AbstractValidator<CreateTodoReq
     {
         RuleFor(r => r.Title).NotEmpty().MaximumLength(300);
         RuleFor(r => r.Priority).IsInEnum();
+        RuleFor(r => r.DueDate)
+            .GreaterThanOrEqualTo(_ => DateOnly.FromDateTime(DateTime.UtcNow))
+            .When(r => r.DueDate.HasValue)
+            .WithMessage("A due date in the past is almost certainly a typo.");
     }
 }

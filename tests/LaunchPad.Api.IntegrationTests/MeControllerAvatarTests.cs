@@ -49,13 +49,13 @@ public class MeControllerAvatarTests : IClassFixture<CustomWebApplicationFactory
     }
 
     [Fact]
-    public async Task Get_WithNoAvatarUploaded_ReturnsNotFound()
+    public async Task Get_WithNoAvatarUploaded_ReturnsNoContent()
     {
         var client = CreateClient(Guid.NewGuid());
 
         var response = await client.GetAsync("/api/me/avatar");
 
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class MeControllerAvatarTests : IClassFixture<CustomWebApplicationFactory
     }
 
     [Fact]
-    public async Task Delete_ClearsTheAvatar_SoASubsequentGetIsNotFound()
+    public async Task Delete_ClearsTheAvatar_SoASubsequentGetHasNoContent()
     {
         var client = CreateClient(Guid.NewGuid());
         await client.PostAsync("/api/me/avatar", ImageContent(TestFiles.Jpeg()));
@@ -89,7 +89,7 @@ public class MeControllerAvatarTests : IClassFixture<CustomWebApplicationFactory
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var getResponse = await client.GetAsync("/api/me/avatar");
-        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        getResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
     [Fact]

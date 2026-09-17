@@ -612,4 +612,71 @@ public class UserScenarioRegressionTests : IClassFixture<CustomWebApplicationFac
         (await db.Skills.AnyAsync(s => s.Name == invented))
             .Should().BeFalse("a typo must not become a skill everyone sees in their picker");
     }
+
+    // G-11
+    [Fact]
+    public async Task ToDos_NeedALiveAssignmentAndASensibleDueDate()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
+        var withdrawn = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Withdrawn);
+        var active = await AddAssignmentAsync(world.ProjectInB, world.CandidateBId, AssignmentStatus.Active);
+
+        (await sponsor.PostAsJsonAsync($"/api/assignments/{withdrawn}/todos", new { title = "Too late" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var yesterday = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1).ToString("yyyy-MM-dd");
+        (await sponsor.PostAsJsonAsync($"/api/assignments/{active}/todos", new { title = "Backdated", dueDate = yesterday }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        (await sponsor.PostAsJsonAsync($"/api/assignments/{active}/todos", new { title = "Fine" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // G-11
+    [Fact]
+    public async Task ADeliverableComesFromTheCandidate_NotTheirSponsor()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+
+        MultipartFormDataContent Upload()
+        {
+            var form = new MultipartFormDataContent { { new StringContent("Report"), "title" } };
+            var file = new ByteArrayContent([.. "%PDF-1.7 report"u8]);
+            file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+            form.Add(file, "file", "report.pdf");
+            return form;
+        }
+
+        using var sponsorUpload = Upload();
+        (await ClientAs(Roles.Sponsor, world.SponsorOid).PostAsync($"/api/assignments/{assignmentId}/deliverables", sponsorUpload))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        using var candidateUpload = Upload();
+        (await ClientAs(Roles.Candidate, world.CandidateAOid).PostAsync($"/api/assignments/{assignmentId}/deliverables", candidateUpload))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // G-16
+    [Fact]
+    public async Task ApprovingAnAlreadyApprovedMatch_SaysSo()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.OpsApproved);
+
+        var response = await ClientAs(Roles.ProgramOps).PostAsync($"/api/matching/{assignmentId}/approve", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("already been approved");
+    }
+
+    // G-19
+    [Fact]
+    public async Task AskingForAPhotoNobodyUploaded_IsNotAnError()
+    {
+        var response = await ClientAs(Roles.Candidate, Guid.NewGuid()).GetAsync("/api/me/avatar");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent, "every page asks for this, and most people have no photo");
+    }
 }

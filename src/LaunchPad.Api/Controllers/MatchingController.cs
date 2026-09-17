@@ -84,7 +84,15 @@ public class MatchingController : ControllerBase
             case OpsApproveOutcome.NotFound:
                 return NotFound();
             case OpsApproveOutcome.WrongStatus:
-                return BadRequest("This assignment must be recommended by the sponsor before Ops can approve it.");
+                // Distinguishes "already dealt with" from "not ready yet" — the single message
+                // sent people looking for a sponsor recommendation that had already happened.
+                return BadRequest(result.Assignment?.Status switch
+                {
+                    AssignmentStatus.OpsApproved or AssignmentStatus.Active or AssignmentStatus.Completed =>
+                        "This assignment has already been approved.",
+                    AssignmentStatus.Withdrawn => "This assignment was withdrawn.",
+                    _ => "This assignment must be recommended by the sponsor before Ops can approve it.",
+                });
             case OpsApproveOutcome.CandidateConflict:
                 return Conflict("This candidate already has another active or approved assignment.");
             case OpsApproveOutcome.ProjectFull:

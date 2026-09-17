@@ -412,6 +412,10 @@ public class CandidatesController : ControllerBase
     /// <summary>Ops applies or overrides a candidate's hire outcome — see HireOutcomeRule for
     /// the suggestion this is meant to act on. Sets CandidateStatus directly; this is the only
     /// write path for it outside profile creation (which always starts at InProgress).</summary>
+    /// <summary>Records the hire decision for a candidate. Deliberately does not touch their
+    /// assignment: a No Hire is a decision about conversion at the end of the program, not a
+    /// reason to pull someone off work they are in the middle of. Ops ends an assignment
+    /// explicitly (AssignmentsController.SetLifecycleStatus) when that is what they mean.</summary>
     [HttpPatch("{id:int}/status")]
     [Authorize(Roles = Roles.ProgramOps)]
     public async Task<ActionResult<CandidateDto>> UpdateStatus(int id, UpdateCandidateStatusRequest request, CancellationToken ct)

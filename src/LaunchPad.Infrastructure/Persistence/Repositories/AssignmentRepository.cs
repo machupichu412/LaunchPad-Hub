@@ -267,7 +267,8 @@ public sealed class AssignmentRepository : IAssignmentRepository
 
         if (assignment.Status != AssignmentStatus.SponsorApproved)
         {
-            return new OpsApproveResult(OpsApproveOutcome.WrongStatus);
+            // Carries the assignment so the caller can say which wrong status it is.
+            return new OpsApproveResult(OpsApproveOutcome.WrongStatus, assignment);
         }
 
         var existingLive = await GetLiveAssignmentAsync(assignment.CandidateId, ct);

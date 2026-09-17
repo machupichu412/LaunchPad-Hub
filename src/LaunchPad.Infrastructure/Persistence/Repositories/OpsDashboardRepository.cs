@@ -13,7 +13,11 @@ public sealed class OpsDashboardRepository : IOpsDashboardRepository
     {
         var activeCandidateCount = await _db.Candidates.CountAsync(c => c.Status == CandidateStatus.InProgress, ct);
 
-        var activeProjects = _db.Projects.Where(p => p.Status == ProjectStatus.Open || p.Status == ProjectStatus.InProgress);
+        // Ops-approved only: a draft nobody submitted, or one Ops rejected, is not an active
+        // project, and counting them made the dashboard read higher than the project list.
+        var activeProjects = _db.Projects.Where(p =>
+            p.ApprovalStatus == ProjectApprovalStatus.Approved
+            && (p.Status == ProjectStatus.Open || p.Status == ProjectStatus.InProgress));
         var activeProjectCount = await activeProjects.CountAsync(ct);
         var activeProjectCohortCount = await activeProjects.Select(p => p.CohortId).Distinct().CountAsync(ct);
 

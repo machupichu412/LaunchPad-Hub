@@ -96,14 +96,17 @@ public class MeController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>204, not 404, when the caller simply has no photo: every page asks for this,
+    /// and most people never upload one, so a 404 logged a browser console error on every
+    /// page load for a state that is entirely normal.</summary>
     [HttpGet("avatar")]
     public async Task<IActionResult> GetAvatar(CancellationToken ct)
     {
         var appUser = await _appUsers.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
-        if (appUser?.AvatarBlobPath is null) return NotFound();
+        if (appUser?.AvatarBlobPath is null) return NoContent();
 
         var result = await _profilePictures.GetAsync(appUser.AvatarBlobPath, ct);
-        if (result is null) return NotFound();
+        if (result is null) return NoContent();
 
         return File(result.Value.Content, result.Value.ContentType);
     }
