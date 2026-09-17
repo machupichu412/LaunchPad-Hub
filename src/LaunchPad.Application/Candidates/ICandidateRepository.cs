@@ -7,6 +7,10 @@ public interface ICandidateRepository
     Task<Candidate?> GetWithSkillsAsync(int candidateId, CancellationToken ct = default);
     Task<Candidate?> GetByEntraObjectIdAsync(Guid entraObjectId, CancellationToken ct = default);
     Task<CandidateRisk?> GetRiskAsync(int candidateId, CancellationToken ct = default);
+
+    /// <summary>Batch form of <see cref="GetRiskAsync"/> for list endpoints — candidates
+    /// with no risk row are simply absent from the dictionary.</summary>
+    Task<IReadOnlyDictionary<int, CandidateRisk>> GetRisksAsync(IReadOnlyList<int> candidateIds, CancellationToken ct = default);
     Task<IReadOnlyList<Candidate>> GetByCohortAsync(int cohortId, CancellationToken ct = default);
 
     /// <summary>An empty/null cohortIds list means every cohort — the Talent Pipeline's

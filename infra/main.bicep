@@ -11,6 +11,9 @@ param sqlAadAdminObjectId string
 @description('Display name of that Entra admin principal')
 param sqlAadAdminLogin string
 
+@description('Email address that receives operational alerts. Empty (the default in non-prod) deploys no action group and no alerts.')
+param alertEmail string = ''
+
 var isProd = env == 'prod'
 
 // --- Networking ---
@@ -105,6 +108,7 @@ module appService 'modules/appService.bicep' = {
     keyVaultUri: keyVault.outputs.keyVaultUri
     appInsightsConnectionString: appInsights.outputs.connectionString
     serviceBusNamespace: serviceBus.outputs.namespaceName
+    storageAccountBlobEndpoint: storage.outputs.primaryBlobEndpoint
     deployStagingSlot: isProd
     vnetIntegrationSubnetId: network.outputs.appSubnetId
   }
@@ -169,10 +173,16 @@ module storageAccess 'modules/storageAccess.bicep' = {
   name: 'storageAccess'
   params: {
     storageAccountName: storage.outputs.storageAccountName
-    roleAssignments: [
+    // The staging slot runs the same image with the same Storage__AccountUrl, so it needs
+    // the same grant — without it, pre-swap smoke traffic hits Blob with no data-plane
+    // access. Only exists when isProd, and an empty principalId is not a valid assignment,
+    // hence the conditional append rather than a fourth static entry.
+    roleAssignments: concat([
       { principalId: appService.outputs.appServicePrincipalId, roleDefinitionId: storageBlobDataContributorRoleId }
       { principalId: functionApp.outputs.functionAppPrincipalId, roleDefinitionId: storageBlobDataContributorRoleId }
-    ]
+    ], isProd ? [
+      { principalId: appService.outputs.stagingSlotPrincipalId, roleDefinitionId: storageBlobDataContributorRoleId }
+    ] : [])
   }
 }
 
@@ -199,6 +209,19 @@ module serviceBusAccess 'modules/serviceBusAccess.bicep' = {
       { principalId: appService.outputs.appServicePrincipalId, roleDefinitionId: serviceBusDataSenderRoleId }
       { principalId: functionApp.outputs.functionAppPrincipalId, roleDefinitionId: serviceBusDataReceiverRoleId }
     ]
+  }
+}
+
+// --- Monitoring ---
+// Depends on nothing but resource ids, so it deploys last and cannot delay anything else.
+module alerts 'modules/alerts.bicep' = {
+  name: 'alerts'
+  params: {
+    env: env
+    alertEmail: alertEmail
+    appServiceId: appService.outputs.appServiceId
+    sqlDatabaseId: sql.outputs.sqlDatabaseId
+    serviceBusNamespaceId: serviceBus.outputs.namespaceId
   }
 }
 

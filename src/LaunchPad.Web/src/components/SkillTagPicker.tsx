@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
@@ -46,6 +46,11 @@ export function SkillTagPicker({
 }) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
+  // Deferred rather than debounced: these filters are entirely client-side, so there is no
+  // request to delay. useDeferredValue lets the input repaint immediately and re-renders the
+  // list at low priority, abandoning that work if another keystroke arrives — which adapts to
+  // the device instead of guessing a fixed delay.
+  const deferredQuery = useDeferredValue(query);
   const [pendingNewSkillName, setPendingNewSkillName] = useState<string | null>(null);
   const [newSkillCategoryId, setNewSkillCategoryId] = useState('');
 
@@ -73,12 +78,14 @@ export function SkillTagPicker({
   const trimmedQuery = query.trim();
 
   const filteredOptions = useMemo(() => {
-    const lowerQuery = trimmedQuery.toLowerCase();
+    // Only the option list defers; canOfferCreate below stays on the immediate query so the
+    // "create this skill" affordance appears as you type rather than a beat later.
+    const lowerQuery = deferredQuery.trim().toLowerCase();
     return (skills ?? [])
       .map((s) => s.name)
       .filter((name) => !selectedNames.includes(name))
       .filter((name) => lowerQuery.length === 0 || name.toLowerCase().includes(lowerQuery));
-  }, [skills, selectedNames, trimmedQuery]);
+  }, [skills, selectedNames, deferredQuery]);
 
   const canOfferCreate =
     allowCreate &&

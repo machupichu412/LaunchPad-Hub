@@ -6,6 +6,10 @@ export type RolesState = {
   isLoading: boolean;
 };
 
+// Module-level so the no-roles case returns the same array identity every call. A fresh
+// [] was enough to invalidate every memo and effect keyed on roles, on every render.
+const NO_ROLES: AppRole[] = [];
+
 /**
  * Reads roles from the API access token, not the SPA's ID token — see
  * useApiAccessTokenClaims for why. This is navigation UX only; the API
@@ -16,5 +20,5 @@ export type RolesState = {
  */
 export function useRoles(): RolesState {
   const { claims, isLoading } = useApiAccessTokenClaims();
-  return { roles: (claims?.roles as AppRole[] | undefined) ?? [], isLoading };
+  return { roles: (claims?.roles as AppRole[] | undefined) ?? NO_ROLES, isLoading };
 }

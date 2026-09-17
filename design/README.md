@@ -36,11 +36,19 @@ result ships as an animated WebP (real per-pixel alpha, unlike WebM here).
 
 ## Regenerating the served assets
 
-The app loads six files, all in `src/LaunchPad.Web/public/brand`:
+The app loads seven files, all in `src/LaunchPad.Web/public/brand`:
 `launchpad-mark-96.png` (nav, static chrome), `launchpad-mark-angled-96.png`
-(JourneyTrail), `launchpad-logo-320.png` (sign-in, initial load, home banner),
-and `rocket-launch.webp` / `rocket-launch-poster-end.png` (initial loading,
-nav hover). The favicons live one level up in `public/`.
+(JourneyTrail), `launchpad-logo-320.png` + `launchpad-logo-320.webp`
+(sign-in, initial load, home banner — `BrandMark.tsx` serves the WebP via
+`<picture>`, with the PNG as the `<img>` fallback for a browser that doesn't
+support WebP), and `rocket-launch.webp` / `rocket-launch-poster-end.png`
+(initial loading, nav hover). The favicons live one level up in `public/`.
+
+Only the full logo gets a WebP twin — the mark PNGs are already 7-10KB, not
+worth a second request for. `launchpad-logo-320.png` is 60KB; `cwebp -q 90`
+gets it to 11KB with no visible difference at 4x zoom (checked by decoding
+both and comparing side by side, same as the animated rocket's compression
+check below).
 
 `rocket-launch.webp` is authored with a **finite loop count (1)**, not JS —
 `RocketLaunch.tsx` is a plain `<img>`. That's what makes it play through once
@@ -58,6 +66,10 @@ DESIGN=../../../design
 magick -background none -density 600 "$DESIGN/launchpad-logo.svg" -resize 2249x2582 -depth 8 /tmp/full4x.png
 magick /tmp/full4x.png -trim +repage -resize x320 -background none \
   -depth 8 -strip brand/launchpad-logo-320.png
+
+# WebP twin, served in preference to the PNG above — see "Regenerating the served
+# assets" for why only this asset gets one.
+cwebp -q 90 brand/launchpad-logo-320.png -o brand/launchpad-logo-320.webp
 
 # Rocket marks — tightly trimmed to their own art, natural (non-square) aspect.
 # Rendered oversize first so the trim/resize order can't clip fine detail (the

@@ -28,5 +28,11 @@ public class CandidateConfiguration : IEntityTypeConfiguration<Candidate>
             .HasForeignKey(c => c.CohortId);
 
         builder.HasIndex(c => new { c.AppUserId, c.CohortId }).IsUnique();
+
+        // Cohort-scoped status reporting (executive dashboard hire counts, hire-ready and
+        // decided breakdowns). Also narrow enough to scan for the Ops dashboard's
+        // cohort-less InProgress count, which is why that doesn't get its own index.
+        builder.HasIndex(c => new { c.CohortId, c.Status })
+            .HasDatabaseName("IX_Candidate_Cohort_Status");
     }
 }

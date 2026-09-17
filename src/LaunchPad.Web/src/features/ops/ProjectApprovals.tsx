@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Badge,
@@ -201,6 +201,11 @@ export function ProjectApprovals() {
   const styles = useStyles();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  // Deferred rather than debounced: these filters are entirely client-side, so there is no
+  // request to delay. useDeferredValue lets the input repaint immediately and re-renders the
+  // list at low priority, abandoning that work if another keystroke arrives — which adapts to
+  // the device instead of guessing a fixed delay.
+  const deferredSearch = useDeferredValue(search);
 
   const { data: pending, isLoading, isError, error } = useQuery({
     queryKey: pendingQueryKey,
@@ -218,11 +223,11 @@ export function ProjectApprovals() {
   };
 
   const decided = useMemo(() => {
-    const term = search.trim().toLowerCase();
+    const term = deferredSearch.trim().toLowerCase();
     return (allProjects ?? [])
       .filter((p) => p.approvalStatus === 'Approved' || p.approvalStatus === 'Rejected')
       .filter((p) => matchesSearch(p, term));
-  }, [allProjects, search]);
+  }, [allProjects, deferredSearch]);
 
   return (
     <>

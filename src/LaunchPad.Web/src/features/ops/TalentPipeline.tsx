@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -73,6 +73,11 @@ export function TalentPipeline() {
   const styles = useStyles();
   const surfaces = useSurfaceStyles();
   const [search, setSearch] = useState('');
+  // Deferred rather than debounced: these filters are entirely client-side, so there is no
+  // request to delay. useDeferredValue lets the input repaint immediately and re-renders the
+  // list at low priority, abandoning that work if another keystroke arrives — which adapts to
+  // the device instead of guessing a fixed delay.
+  const deferredSearch = useDeferredValue(search);
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateDto | null>(null);
   const { cohortId: cohortIdParam } = useParams<{ cohortId?: string }>();
   const queryClient = useQueryClient();
@@ -115,15 +120,16 @@ export function TalentPipeline() {
 
   const showScores = (candidates ?? []).some((c) => c.averageScore != null || c.hasPerformanceRisk != null);
 
-  const filtered = (candidates ?? []).filter((c) => {
-    const term = search.trim().toLowerCase();
-    if (term.length === 0) return true;
-    return (
-      c.displayName.toLowerCase().includes(term) ||
-      c.school?.toLowerCase().includes(term) ||
-      c.skills.some((s) => s.toLowerCase().includes(term))
+  const filtered = useMemo(() => {
+    const term = deferredSearch.trim().toLowerCase();
+    if (term.length === 0) return candidates ?? [];
+    return (candidates ?? []).filter(
+      (c) =>
+        c.displayName.toLowerCase().includes(term) ||
+        c.school?.toLowerCase().includes(term) ||
+        c.skills.some((s) => s.toLowerCase().includes(term)),
     );
-  });
+  }, [candidates, deferredSearch]);
 
   return (
     <>

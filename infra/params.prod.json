@@ -5,6 +5,8 @@
     "env": { "value": "prod" },
     "location": { "value": "centralus" },
     "sqlAadAdminObjectId": { "value": "023774fd-7a38-4b22-a62a-fecf5e7d3a6a" },
-    "sqlAadAdminLogin": { "value": "SG-LaunchPad-ProgramOps" }
+    "sqlAadAdminLogin": { "value": "SG-LaunchPad-ProgramOps" },
+    "_comment_alertEmail": "Set to the on-call distribution list to deploy the action group and the four alerts in modules/alerts.bicep. Left empty, none of them are created.",
+    "alertEmail": { "value": "" }
   }
 }

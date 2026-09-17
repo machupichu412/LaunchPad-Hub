@@ -189,7 +189,10 @@ export function PostCard({ post, onHashtagClick }: { post: CommunityPostDto; onH
 
       <Body1>{renderBodyWithHashtags(post.body, styles.hashtagButton, onHashtagClick)}</Body1>
 
-      {post.hasImage && imageUrl && <img src={imageUrl} alt="" className={styles.image} />}
+      {/* Lazy: the community feed is a long scroll and most post images start off-screen. */}
+      {post.hasImage && imageUrl && (
+        <img src={imageUrl} alt="" className={styles.image} loading="lazy" decoding="async" />
+      )}
 
       <div className={styles.actionsRow}>
         <Button

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AppRoles, type AppRole } from './roles';
 import { useRoles } from './useRoles';
 
@@ -34,11 +34,15 @@ export function ActiveRoleProvider({ children }: { children: ReactNode }) {
     });
   }, [roles, isLoading]);
 
-  return (
-    <ActiveRoleContext.Provider value={{ activeRole, roles, isLoading, setActiveRole: setActiveRoleState }}>
-      {children}
-    </ActiveRoleContext.Provider>
+  // A fresh object here re-renders every consumer on every provider render, and this
+  // provider wraps the entire router. setActiveRoleState is a useState setter, so it is
+  // already stable and does not belong in the dependency list.
+  const value = useMemo(
+    () => ({ activeRole, roles, isLoading, setActiveRole: setActiveRoleState }),
+    [activeRole, roles, isLoading],
   );
+
+  return <ActiveRoleContext.Provider value={value}>{children}</ActiveRoleContext.Provider>;
 }
 
 export function useActiveRole(): ActiveRoleState {

@@ -34,5 +34,21 @@ public class AssignmentConfiguration : IEntityTypeConfiguration<Assignment>
             .IsUnique()
             .HasDatabaseName("UX_Assignment_Active")
             .HasFilter("[Status] IN (2,3)");
+
+        // UX_Assignment_Active above is filtered to Status IN (2,3), so it cannot serve a
+        // lookup for Proposed/SponsorApproved — which is exactly what the candidate's
+        // pending-request list asks for (GetPendingAssignmentsForCandidateAsync).
+        builder.HasIndex(a => new { a.CandidateId, a.Status })
+            .HasDatabaseName("IX_Assignment_Candidate_Status");
+
+        // The project-scoped status queries: proposed matches, committed roster, and the
+        // committed-count check that gates over-assignment.
+        builder.HasIndex(a => new { a.ProjectId, a.Status })
+            .HasDatabaseName("IX_Assignment_Project_Status");
+
+        // Ops dashboard counts assignments by status across every project, with no other
+        // predicate to narrow on.
+        builder.HasIndex(a => a.Status)
+            .HasDatabaseName("IX_Assignment_Status");
     }
 }

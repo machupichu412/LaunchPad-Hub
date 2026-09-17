@@ -138,11 +138,22 @@ public class CandidatesController : ControllerBase
 
     private async Task<List<CandidateDto>> ToDtosAsync(IReadOnlyList<Candidate> candidates, CancellationToken ct)
     {
+        // Two batch lookups rather than two queries per candidate — this runs over a whole
+        // cohort from the Talent Pipeline, so the per-row form was 2N+1 round trips.
+        var candidateIds = candidates.Select(c => c.CandidateId).ToList();
+        var risks = await _candidates.GetRisksAsync(candidateIds, ct);
+        var latestFinalRecommends = await _reviews.GetLatestFinalRecommendConversionsAsync(candidateIds, ct);
+
         var dtos = new List<CandidateDto>(candidates.Count);
         foreach (var candidate in candidates)
         {
-            var risk = await _candidates.GetRiskAsync(candidate.CandidateId, ct);
-            var suggestion = await ComputeSuggestedHireOutcomeAsync(candidate.CandidateId, risk, ct);
+            risks.TryGetValue(candidate.CandidateId, out var risk);
+            latestFinalRecommends.TryGetValue(candidate.CandidateId, out var latestFinalRecommend);
+
+            var suggestion = HireOutcomeRule.Evaluate(new HireOutcomeSignal(
+                candidate.CandidateId, risk?.FinalScore, latestFinalRecommend,
+                risk?.HasPerformanceRisk ?? false, risk?.HasEngagementRisk ?? false));
+
             dtos.Add(_mapper.ToDto(candidate, risk, suggestion, User));
         }
 
