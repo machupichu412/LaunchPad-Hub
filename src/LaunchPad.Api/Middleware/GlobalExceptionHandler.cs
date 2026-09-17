@@ -21,11 +21,14 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             ? value?.ToString()
             : null;
 
+        var sanitizedMethod = SanitizeForLog(context.Request.Method);
+        var sanitizedPath = SanitizeForLog(context.Request.Path.ToString());
+
         _logger.LogError(
             exception,
             "Unhandled exception for {Method} {Path}",
-            context.Request.Method,
-            context.Request.Path);
+            sanitizedMethod,
+            sanitizedPath);
 
         var problem = new ProblemDetails
         {
@@ -49,5 +52,15 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
         await context.Response.WriteAsJsonAsync(problem, ct);
         return true;
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
