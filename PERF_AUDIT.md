@@ -183,6 +183,7 @@ All eleven change groups landed, one commit each, on `perf/production-readiness`
 | Initial JS/CSS transfer | **469.2 kB gzip** (one 1,713.97 kB chunk) | **308.0 kB gzip** (index + react + msal + fluent) |
 | Code fetched only on demand | 0 kB | **182.0 kB gzip** across 40 route/vendor chunks |
 | `recharts` | in the initial bundle for every user | 102.8 kB gzip, only on the two dashboards that chart |
+| `launchpad-logo-320.png` | 60.2 kB, only format served | 11.3 kB WebP served first, PNG kept as fallback |
 | Largest single chunk | 1,713.97 kB | 661.21 kB (Fluent, its own cacheable vendor chunk) |
 | `GET /api/candidates` | 2N+1 queries for N candidates | **3 queries**, any cohort size |
 | Response compression | none | brotli + gzip on JSON |
@@ -231,11 +232,16 @@ line it was actually there for is kept.
 - **`AsNoTracking` applied to verified read-only queries only**, not blanket-applied. The
   assignment and review write paths still track; dropping a tracked entity there loses
   writes silently.
-- **The 60 kB logo was not re-encoded to WebP.** The regeneration recipe lives in
-  `design/README.md`, which is heavily modified on `feature/candidate-ui-refresh` — the
-  change would have conflicted with PR #37 for ~50 kB. Left for after that merges.
 - **No CSP in `staticwebapp.config.json`.** A wrong CSP breaks MSAL silently; it needs its
   own change with auth testing. The other security headers are in.
+
+**Resolved after the pass above:** PR #37 (`feature/candidate-ui-refresh`) merged into
+`main` while this branch was in progress, and this branch was cut from `main` after that
+merge — so the `design/README.md` conflict that deferred the logo re-encode never
+materialized. `launchpad-logo-320.png` (60 kB) now has a `launchpad-logo-320.webp` twin at
+11 kB (`cwebp -q 90`, visually indistinguishable at 4x zoom), served via `<picture>` in
+`BrandMark.tsx` with the PNG as fallback for a browser without WebP support. Only the full
+logo — the mark PNGs are already 7-10 kB, not worth a second request for.
 
 ## Manual follow-ups
 

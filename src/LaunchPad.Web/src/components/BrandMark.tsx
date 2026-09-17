@@ -48,7 +48,7 @@ export function BrandMark({
   const styles = useStyles();
   const isMark = variant === 'mark';
 
-  return (
+  const img = (
     <img
       src={isMark ? markSrc[orientation] : '/brand/launchpad-logo-320.png'}
       // Decorative in every current use — the word "LaunchPad" is always rendered
@@ -59,5 +59,18 @@ export function BrandMark({
       className={mergeClasses(styles.img, className)}
       style={{ height: size, width: 'auto' }}
     />
+  );
+
+  // The mark PNGs are already tiny (7-10KB) — not worth a second request for. The full
+  // logo's PNG is 60KB against an 11KB WebP encode (verified visually indistinguishable
+  // at 4x zoom), so it alone gets the <picture>/WebP treatment; the <img> above is the
+  // fallback for a browser that doesn't support WebP.
+  if (isMark) return img;
+
+  return (
+    <picture>
+      <source srcSet="/brand/launchpad-logo-320.webp" type="image/webp" />
+      {img}
+    </picture>
   );
 }
