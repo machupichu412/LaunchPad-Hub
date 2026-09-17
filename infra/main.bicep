@@ -11,6 +11,9 @@ param sqlAadAdminObjectId string
 @description('Display name of that Entra admin principal')
 param sqlAadAdminLogin string
 
+@description('Email address that receives operational alerts. Empty (the default in non-prod) deploys no action group and no alerts.')
+param alertEmail string = ''
+
 var isProd = env == 'prod'
 
 // --- Networking ---
@@ -206,6 +209,19 @@ module serviceBusAccess 'modules/serviceBusAccess.bicep' = {
       { principalId: appService.outputs.appServicePrincipalId, roleDefinitionId: serviceBusDataSenderRoleId }
       { principalId: functionApp.outputs.functionAppPrincipalId, roleDefinitionId: serviceBusDataReceiverRoleId }
     ]
+  }
+}
+
+// --- Monitoring ---
+// Depends on nothing but resource ids, so it deploys last and cannot delay anything else.
+module alerts 'modules/alerts.bicep' = {
+  name: 'alerts'
+  params: {
+    env: env
+    alertEmail: alertEmail
+    appServiceId: appService.outputs.appServiceId
+    sqlDatabaseId: sql.outputs.sqlDatabaseId
+    serviceBusNamespaceId: serviceBus.outputs.namespaceId
   }
 }
 

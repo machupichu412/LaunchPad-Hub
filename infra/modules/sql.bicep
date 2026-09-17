@@ -20,6 +20,14 @@ param maxVCore int = 2
 
 param zoneRedundant bool = false
 
+@description('Point-in-time restore window. The 7-day default is short for data whose corruption may not be noticed within a week.')
+param shortTermRetentionDays int = 35
+
+@description('Long-term backup retention, ISO 8601 durations. Empty string disables that tier. Defaults follow build guide §9.4.')
+param weeklyRetention string = 'P12W'
+param monthlyRetention string = 'P12M'
+param yearlyRetention string = ''
+
 @description('Subnet to attach the private endpoint\'s NIC to')
 param privateEndpointSubnetId string
 
@@ -99,6 +107,30 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01-preview' = {
   }
 }
 
+// Point-in-time restore defaults to 7 days. This is HR-adjacent data whose corruption
+// (a bad migration, a mistaken bulk update) may not be noticed within a week.
+resource shortTermRetention 'Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies@2023-08-01-preview' = {
+  parent: sqlDatabase
+  name: 'default'
+  properties: {
+    retentionDays: shortTermRetentionDays
+  }
+}
+
+// The long-term policy the build guide specifies (§9.4) but that was never applied, so
+// nothing older than the PITR window was recoverable at all.
+resource longTermRetention 'Microsoft.Sql/servers/databases/backupLongTermRetentionPolicies@2023-08-01-preview' = {
+  parent: sqlDatabase
+  name: 'default'
+  properties: {
+    weeklyRetention: weeklyRetention
+    monthlyRetention: monthlyRetention
+    yearlyRetention: yearlyRetention
+    weekOfYear: 1
+  }
+}
+
 output sqlServerName string = sqlServer.name
 output sqlServerFqdn string = sqlServer.properties.fullyQualifiedDomainName
 output sqlDatabaseName string = sqlDatabase.name
+output sqlDatabaseId string = sqlDatabase.id

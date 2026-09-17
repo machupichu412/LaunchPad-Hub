@@ -90,6 +90,7 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2023-12-01' = if (deployStagingS
   }
 }
 
+output appServiceId string = appService.id
 output appServiceName string = appService.name
 output appServicePrincipalId string = appService.identity.principalId
 output stagingSlotPrincipalId string = deployStagingSlot ? stagingSlot.identity.principalId : ''

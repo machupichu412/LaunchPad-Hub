@@ -7,6 +7,9 @@ param location string
 @description('Subnet to attach the private endpoint\'s NIC to')
 param privateEndpointSubnetId string
 
+@description('Soft-delete window for blobs and containers holding candidate artifacts.')
+param blobSoftDeleteDays int = 30
+
 @description('Private DNS zone ids, one each for blob/queue/table (privatelink.{blob,queue,table}.core.windows.net) — the Functions host needs all three even with no storage-triggered functions, since AzureWebJobsStorage covers blob leases plus internal queue/table bookkeeping.')
 param blobPrivateDnsZoneId string
 param queuePrivateDnsZoneId string
@@ -71,6 +74,22 @@ resource privateDnsZoneGroups 'Microsoft.Network/privateEndpoints/privateDnsZone
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
   parent: storageAccount
   name: 'default'
+  properties: {
+    // This account holds resumes, deliverables and recordings. Without these an overwrite
+    // or a mistaken delete — by the app, a lifecycle rule, or a person in the portal — was
+    // permanent, with no restore path at all.
+    deleteRetentionPolicy: {
+      enabled: true
+      days: blobSoftDeleteDays
+    }
+    containerDeleteRetentionPolicy: {
+      enabled: true
+      days: blobSoftDeleteDays
+    }
+    // Keeps the prior bytes when a blob path is overwritten, which SaveAsync does not do
+    // today but any future in-place update would.
+    isVersioningEnabled: true
+  }
 }
 
 // Resumes, deliverables, recordings — private container, served via short-lived
