@@ -100,13 +100,13 @@ Highest impact / lowest risk first. One commit per group.
 | 2 | Response compression + global `IExceptionHandler`/ProblemDetails + body cap | H | L | ☑ |
 | 3 | Candidate N+1 fix + `AsNoTracking` on read paths + command timeout | H | M | ☑ |
 | 4 | 8 performance indexes (migration generated, **not applied**) | H | L | ☑ |
-| 5 | Global rate limit + singleton Service Bus / Graph clients with timeouts | H | M | ☐ |
-| 6 | Route-level code splitting + vendor chunks | H | L | ☐ |
-| 7 | ErrorBoundary + request timeout + retry affordance + JWT-log removal | H | L | ☐ |
-| 8 | Debounced filters + lazy images + logo re-encode | M | L | ☐ |
-| 9 | vitest + tests for changed components | M | L | ☐ |
-| 10 | `staticwebapp.config.json` + backup retention + alerts Bicep | H | L | ☐ |
-| 11 | Final report | — | — | ☐ |
+| 5 | Global rate limit + singleton Service Bus / Graph clients with timeouts | H | M | ☑ |
+| 6 | Route-level code splitting + vendor chunks | H | L | ☑ |
+| 7 | ErrorBoundary + request timeout + retry affordance + JWT-log removal | H | L | ☑ |
+| 8 | Deferred filters + lazy images (logo re-encode deferred, see below) | M | L | ☑ |
+| 9 | vitest + tests for changed components | M | L | ☑ |
+| 10 | `staticwebapp.config.json` + backup retention + alerts Bicep | H | L | ☑ |
+| 11 | Final report | — | — | ☑ |
 
 ---
 
@@ -170,6 +170,114 @@ Every statement is additive and fast on tables this size. If these ever run agai
 table large enough to matter, add `WITH (ONLINE = ON)` — Azure SQL supports it on all of
 these, and EF does not emit it by default.
 
+---
+
+# Final report
+
+All eleven change groups landed, one commit each, on `perf/production-readiness`.
+
+## Measured results
+
+| Metric | Before | After |
+|---|---|---|
+| Initial JS/CSS transfer | **469.2 kB gzip** (one 1,713.97 kB chunk) | **308.0 kB gzip** (index + react + msal + fluent) |
+| Code fetched only on demand | 0 kB | **182.0 kB gzip** across 40 route/vendor chunks |
+| `recharts` | in the initial bundle for every user | 102.8 kB gzip, only on the two dashboards that chart |
+| Largest single chunk | 1,713.97 kB | 661.21 kB (Fluent, its own cacheable vendor chunk) |
+| `GET /api/candidates` | 2N+1 queries for N candidates | **3 queries**, any cohort size |
+| Response compression | none | brotli + gzip on JSON |
+| Backend tests | 339 | **344** (+2 error handling, +1 rate limiting, +2 batch parity) |
+| Frontend tests | none (no runner) | **9** in 3 files, gating CI |
+| API response on unhandled error | bare Kestrel 500, no body | `application/problem+json` + correlation id |
+
+Per-route chunks land between 1.5 kB and 21 kB, so a role only downloads its own screens.
+
+## What changed
+
+| Group | Commit | Item(s) |
+|---|---|---|
+| 0 | `32f1fe2` | This audit |
+| 1 | `c47b9fe` | #31 — `Storage__AccountUrl`, plus staging-slot Blob RBAC |
+| 2 | `3579a09` | #10, #12, #8 — compression, `IExceptionHandler`, global body cap |
+| 3 | `691877b` | #2, #3, #5 — N+1 batch, `AsNoTracking`, command timeout |
+| 4 | `517f34f` | #1 — 8 indexes, 4 duplicate FK indexes dropped |
+| 5 | `be5c504` | #7, #13 — global rate limit + `Retry-After`, shared Service Bus / Graph clients |
+| 6 | `c92f305` | #25, #27 — route lazy-loading, vendor chunks |
+| 7 | `ecf5e6a` | #22, #24 — ErrorBoundary, request timeout, context identity, JWT-log removal |
+| 8 | `b872ee7` | #23, #28 — deferred filters, lazy feed images |
+| 9 | `9f38d0f` | vitest + 9 tests + CI gate |
+| 10 | `064e998` | #30, #35, #33 — cache headers, backup retention, alerts |
+
+### Two findings that were not on the checklist
+
+**The blob storage bug (group 1) is the most consequential single line in this pass.**
+Every deployed environment was writing avatars and community images to App Service local
+disk because one app setting was missing. That data was lost on every restart and slot
+swap, and it made scaling past one instance impossible. Nothing surfaced it because the
+code degrades silently by design.
+
+**`authedFetch` was logging decoded access-token claims to the browser console**
+(`authedFetch.ts:82-90`, marked "temporary"). Removed in group 7; the `WWW-Authenticate`
+line it was actually there for is kept.
+
+### Deviations from the approved plan
+
+- **`useDeferredValue` instead of a `useDebouncedValue` hook** (group 8). These filters are
+  entirely client-side, so there is no request to delay; a fixed debounce would make the
+  list lag even on a fast machine. No new hook file was needed.
+- **vitest 5, not 3** (group 9). Vitest 3 bundles its own older Vite, which conflicts with
+  this project's Vite 8 rolldown types and hangs indefinitely when a test imports Fluent.
+  On 5 the Fluent tests run in milliseconds with no config workarounds.
+- **`AsNoTracking` applied to verified read-only queries only**, not blanket-applied. The
+  assignment and review write paths still track; dropping a tracked entity there loses
+  writes silently.
+- **The 60 kB logo was not re-encoded to WebP.** The regeneration recipe lives in
+  `design/README.md`, which is heavily modified on `feature/candidate-ui-refresh` — the
+  change would have conflicted with PR #37 for ~50 kB. Left for after that merges.
+- **No CSP in `staticwebapp.config.json`.** A wrong CSP breaks MSAL silently; it needs its
+  own change with auth testing. The other security headers are in.
+
 ## Manual follow-ups
 
-To be completed after this pass; see the final report section for the full list.
+**Do these — nothing in this branch does them for you.**
+
+1. **Review and apply the index migration.** `AddPerformanceIndexes` is committed but has
+   been run against no database. The SQL is above. CI applies migrations on deploy.
+2. **Set `alertEmail` in `infra/params.prod.json`.** Until it has a value, the action group
+   and all four alerts deploy as nothing.
+3. **Configure an Azure budget + spending alert** on the subscription (#19). There is no
+   paid third-party API in the code yet, but Azure OpenAI is planned and the Functions plan
+   allows 100 instances.
+4. **Verify a restore actually works.** The retention policies are now declared; a policy
+   you have never restored from is a hypothesis. Do one point-in-time restore to a scratch
+   database and time it.
+5. **`react-router-dom` has a high-severity advisory** (GHSA-qwww-vcr4-c8h2, CSRF bypass in
+   RSC mode) affecting 7.12.0–7.18.1; this repo is on 7.18.1. `nanoid` also has a high
+   advisory. Both have fixes available. Not bundled into this pass because a router
+   upgrade deserves its own change and test run — but it should be next.
+6. **EF migrations cannot currently run in CI** (`deploy.yml:113,150`): a GitHub-hosted
+   runner against private-endpoint-only SQL will fail. Needs a self-hosted runner or a
+   temporary firewall exception. Pre-existing, and it blocks follow-up 1 on any
+   CI-driven path.
+
+## New configuration
+
+All have working defaults; none are required.
+
+| Key | Default | Effect |
+|---|---|---|
+| `Api:MaxRequestBodyBytes` | `115343360` (110 MB) | Global Kestrel body ceiling behind the per-endpoint limits |
+| `Database:CommandTimeoutSeconds` | `30` | SQL command timeout; there was none |
+| `RateLimiting:PermitLimit` | `300` | Global per-user request budget |
+| `RateLimiting:WindowSeconds` | `60` | Window for the above |
+| `VITE_API_TIMEOUT_MS` | `30000` | Client-side fetch deadline |
+| Bicep `alertEmail` | `''` | Empty deploys no action group and no alerts |
+| Bicep `shortTermRetentionDays` | `35` | SQL point-in-time restore window |
+| Bicep `weeklyRetention` / `monthlyRetention` / `yearlyRetention` | `P12W` / `P12M` / `''` | SQL long-term backups |
+| Bicep `blobSoftDeleteDays` | `30` | Blob and container soft delete |
+
+## Still deferred
+
+Everything under [Deferred work](#deferred-work) above stands, plus one discovered during
+group 9: **Fluent components render fine under vitest 5**, so the frontend suite can be
+grown past the 9 tests here whenever that is worth doing.
