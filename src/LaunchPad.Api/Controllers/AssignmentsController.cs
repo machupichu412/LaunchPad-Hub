@@ -180,7 +180,17 @@ public class AssignmentsController : ControllerBase
             candidate.SharePointFolderWebUrl = webUrl;
         }
 
+        // The extension passed validation, but the extension is the uploader's word. Read the
+        // first bytes and make the file prove it before storing something other people download.
         await using var stream = file!.OpenReadStream();
+        var header = new byte[FileSignatures.HeaderBytes];
+        var headerLength = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct);
+        if (!FileSignatures.MatchesExtension(header.AsSpan(0, headerLength), Path.GetExtension(request.FileName)))
+        {
+            return BadRequest("That file's contents don't match its extension.");
+        }
+        stream.Position = 0;
+
         var sharePointItemId = await _documentStorage.SaveAsync(
             candidate.SharePointFolderId, request.FileName, stream, request.ContentType, request.ContentLength, ct);
 

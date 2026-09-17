@@ -75,6 +75,15 @@ public class MeController : ControllerBase
         }
         buffer.Position = 0;
 
+        // Content-Type is the uploader's claim; the bytes are the evidence.
+        var header = new byte[FileSignatures.HeaderBytes];
+        var headerLength = await buffer.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct);
+        if (!FileSignatures.MatchesImageContentType(header.AsSpan(0, headerLength), contentType))
+        {
+            return BadRequest("That file isn't a JPEG, PNG, or WebP image.");
+        }
+        buffer.Position = 0;
+
         var previousBlobPath = appUser.AvatarBlobPath;
         appUser.AvatarBlobPath = await _profilePictures.SaveAsync(appUser.AppUserId, buffer, contentType, ct);
         await _appUsers.SaveChangesAsync(ct);

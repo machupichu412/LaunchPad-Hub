@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using FluentAssertions;
 using LaunchPad.Application.Assignments;
@@ -287,5 +288,60 @@ public class UserScenarioRegressionTests : IClassFixture<CustomWebApplicationFac
         var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
         (await sponsor.PostAsJsonAsync($"/api/assignments/{assignmentId}/status", new { status = "Active" }, TestJsonOptions.Default))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // G-02
+    [Theory]
+    [InlineData("payload.exe", "application/octet-stream", new byte[] { 0x4D, 0x5A, 0x90, 0x00 }, "file type isn't accepted")]
+    [InlineData("fake.pdf", "application/pdf", new byte[] { 0x4D, 0x5A, 0x90, 0x00 }, "don't match its extension")]
+    public async Task Deliverable_UploadsMustBeAnAcceptedTypeAndLookLikeIt(
+        string fileName, string contentType, byte[] content, string expectedMessage)
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent("Deliverable"), "title");
+        var fileContent = new ByteArrayContent(content);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        form.Add(fileContent, "file", fileName);
+
+        var response = await ClientAs(Roles.Candidate, world.CandidateAOid)
+            .PostAsync($"/api/assignments/{assignmentId}/deliverables", form);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain(expectedMessage);
+    }
+
+    // G-02
+    [Fact]
+    public async Task Deliverable_ARealPdfIsStillAccepted()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent("Deliverable"), "title");
+        var fileContent = new ByteArrayContent([.. "%PDF-1.7 report"u8]);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        form.Add(fileContent, "file", "report.pdf");
+
+        (await ClientAs(Roles.Candidate, world.CandidateAOid).PostAsync($"/api/assignments/{assignmentId}/deliverables", form))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // G-02
+    [Fact]
+    public async Task Avatar_MustActuallyBeTheImageTypeItClaims()
+    {
+        var candidate = ClientAs(Roles.Candidate, Guid.NewGuid());
+
+        var lying = new ByteArrayContent([.. "<script>alert(1)</script>"u8]);
+        lying.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        (await candidate.PostAsync("/api/me/avatar", lying)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var realPng = new ByteArrayContent([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x01]);
+        realPng.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        (await candidate.PostAsync("/api/me/avatar", realPng)).StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 }

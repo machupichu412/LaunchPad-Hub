@@ -112,6 +112,18 @@ public class CommunityController : ControllerBase
         var validation = await _postValidator.ValidateAsync(request, ct);
         if (!validation.IsValid) return ValidationProblem(AddErrors(validation));
 
+        if (image is not null)
+        {
+            // Checked before the post is created, so a bad image can't leave a bodiless post behind.
+            await using var probe = image.OpenReadStream();
+            var header = new byte[FileSignatures.HeaderBytes];
+            var headerLength = await probe.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct);
+            if (!FileSignatures.MatchesImageContentType(header.AsSpan(0, headerLength), image.ContentType))
+            {
+                return BadRequest("That file isn't a JPEG, PNG, GIF, or WebP image.");
+            }
+        }
+
         var myAppUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         if (myAppUserId is null) return Forbid();
 
