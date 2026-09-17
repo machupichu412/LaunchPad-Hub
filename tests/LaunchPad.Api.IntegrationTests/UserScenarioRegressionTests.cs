@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
 using LaunchPad.Application.Projects;
@@ -233,5 +234,58 @@ public class UserScenarioRegressionTests : IClassFixture<CustomWebApplicationFac
         var todos = await db.ProjectTodos.Where(t => t.AssignmentId == assignmentId && t.LinkedReviewCheckpoint == Checkpoint.Midpoint).ToListAsync();
         todos.Single(t => t.LinkedReviewType == ReviewType.SponsorOnCandidate).Status.Should().Be(TodoStatus.Completed);
         todos.Single(t => t.LinkedReviewType == ReviewType.CandidateOnSponsor).Status.Should().Be(TodoStatus.NotStarted);
+    }
+
+    // G-01
+    [Fact]
+    public async Task NightlySweep_StartsApprovedWorkAndCompletesFinishedWork()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var starting = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.OpsApproved);
+        var finishing = await AddAssignmentAsync(world.ProjectInB, world.CandidateBId, AssignmentStatus.Active);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        // Cohort A runs Jan-Jun 2026, cohort B Jul-Dec — so on this date A's project has
+        // started and B's has not yet ended.
+        var projectA = await db.Projects.SingleAsync(p => p.ProjectId == world.ProjectInA);
+        projectA.StartDate = new DateOnly(2026, 1, 1);
+        var projectB = await db.Projects.SingleAsync(p => p.ProjectId == world.ProjectInB);
+        projectB.EndDate = new DateOnly(2026, 2, 1);
+        await db.SaveChangesAsync();
+
+        var runner = scope.ServiceProvider.GetRequiredService<IAssignmentLifecycleRunner>();
+        // Counts cover every assignment in the shared test database, so assert on these two.
+        var result = await runner.RunAsync(new DateOnly(2026, 3, 1));
+
+        result.Activated.Should().BeGreaterThanOrEqualTo(1);
+        (await db.Assignments.SingleAsync(a => a.AssignmentId == starting)).Status.Should().Be(AssignmentStatus.Active);
+        (await db.Assignments.SingleAsync(a => a.AssignmentId == finishing)).Status.Should().Be(AssignmentStatus.Completed);
+    }
+
+    // G-01
+    [Fact]
+    public async Task OpsCanStartAndCompleteAnAssignmentByHand_ButOnlyFromTheRightStatus()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.OpsApproved);
+        var ops = ClientAs(Roles.ProgramOps);
+
+        // Can't complete work that never started.
+        (await ops.PostAsJsonAsync($"/api/assignments/{assignmentId}/status", new { status = "Completed" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        (await ops.PostAsJsonAsync($"/api/assignments/{assignmentId}/status", new { status = "Active", reason = "Kicked off early" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ops.PostAsJsonAsync($"/api/assignments/{assignmentId}/status", new { status = "Completed" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Approvals still belong to the matching queue.
+        (await ops.PostAsJsonAsync($"/api/assignments/{assignmentId}/status", new { status = "OpsApproved" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
+        (await sponsor.PostAsJsonAsync($"/api/assignments/{assignmentId}/status", new { status = "Active" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 }

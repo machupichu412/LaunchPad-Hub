@@ -66,6 +66,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IMatchingEngine, MatchingEngine>();
         services.AddSingleton<ITextSimilarityScorer, TfIdfCosineTextSimilarityScorer>();
         services.AddScoped<ICohortMatchingRunner, CohortMatchingRunner>();
+        services.AddScoped<IAssignmentLifecycleRunner, AssignmentLifecycleRunner>();
 
         // Shared by all three Service Bus publishers below — one client and one sender per
         // queue for the process, instead of an AMQP connection per published message.

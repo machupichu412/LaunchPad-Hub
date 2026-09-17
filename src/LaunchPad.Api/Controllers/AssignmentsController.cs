@@ -30,6 +30,7 @@ public class AssignmentsController : ControllerBase
     private readonly IValidator<SubmitDeliverableRequest> _deliverableValidator;
     private readonly IFolderProvisioner _folderProvisioner;
     private readonly IDocumentStorage _documentStorage;
+    private readonly IAuditLog _auditLog;
 
     public AssignmentsController(
         IAssignmentRepository assignments,
@@ -40,7 +41,8 @@ public class AssignmentsController : ControllerBase
         IValidator<CreateTodoRequest> createTodoValidator,
         IValidator<SubmitDeliverableRequest> deliverableValidator,
         IFolderProvisioner folderProvisioner,
-        IDocumentStorage documentStorage)
+        IDocumentStorage documentStorage,
+        IAuditLog auditLog)
     {
         _assignments = assignments;
         _candidates = candidates;
@@ -51,6 +53,7 @@ public class AssignmentsController : ControllerBase
         _deliverableValidator = deliverableValidator;
         _folderProvisioner = folderProvisioner;
         _documentStorage = documentStorage;
+        _auditLog = auditLog;
     }
 
     /// <summary>The signed-in Candidate's own active assignment — resolved server-side, never a client-supplied ID.</summary>
@@ -225,6 +228,52 @@ public class AssignmentsController : ControllerBase
 
         var reviews = await _assignments.GetCandidateEvaluationsAsync(id, ct);
         return Ok(reviews.Select(r => r.ToCandidateEvaluationDto()).ToArray());
+    }
+
+    /// <summary>Starts or finishes an assignment ahead of (or behind) its dates. The nightly
+    /// AssignmentLifecycleFunction does this on schedule; this is the manual override for when
+    /// the calendar and reality disagree, and it is Ops's call, not the sponsor's.</summary>
+    [HttpPost("{id:int}/status")]
+    [Authorize(Roles = Roles.ProgramOps)]
+    public async Task<ActionResult<MyAssignmentDto>> SetLifecycleStatus(int id, SetAssignmentStatusRequest request, CancellationToken ct)
+    {
+        if (request.Status is not (AssignmentStatus.Active or AssignmentStatus.Completed))
+        {
+            return BadRequest("Only Active and Completed can be set here — approvals go through the matching queue.");
+        }
+
+        var assignment = await _assignments.GetWithOwnershipDetailsAsync(id, ct);
+        if (assignment is null) return NotFound();
+
+        var allowed = request.Status == AssignmentStatus.Active
+            ? assignment.Status == AssignmentStatus.OpsApproved
+            : assignment.Status == AssignmentStatus.Active;
+        if (!allowed)
+        {
+            return BadRequest(request.Status == AssignmentStatus.Active
+                ? "Only an Ops-approved assignment can be started."
+                : "Only an active assignment can be completed.");
+        }
+
+        var previousStatus = assignment.Status;
+        assignment.Status = request.Status;
+        if (request.Status == AssignmentStatus.Active)
+        {
+            assignment.StartDate ??= DateOnly.FromDateTime(DateTime.UtcNow);
+        }
+        else
+        {
+            assignment.EndDate ??= DateOnly.FromDateTime(DateTime.UtcNow);
+        }
+
+        await _assignments.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(
+            _currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(),
+            request.Status == AssignmentStatus.Active ? "Activated" : "Completed",
+            reason: request.Reason, data: new { From = previousStatus, To = request.Status }, ct: ct);
+
+        var todos = await _assignments.GetTodosAsync(assignment.AssignmentId, ct);
+        return Ok(assignment.ToMyAssignmentDto(todos.Count, todos.Count(t => t.Status == TodoStatus.Completed)));
     }
 
     private async Task<(Assignment? Assignment, ActionResult? Result)> AuthorizeAssignmentAsync(int assignmentId, CancellationToken ct)

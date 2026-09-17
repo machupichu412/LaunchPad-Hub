@@ -314,6 +314,13 @@ public sealed class AssignmentRepository : IAssignmentRepository
         return new OpsApproveResult(OpsApproveOutcome.Approved, assignment);
     }
 
+    public async Task<IReadOnlyList<Assignment>> GetForLifecycleSweepAsync(CancellationToken ct = default) =>
+        await _db.Assignments
+            .Include(a => a.Project).ThenInclude(p => p.Sponsor).ThenInclude(s => s.AppUser)
+            .Include(a => a.Candidate).ThenInclude(c => c.AppUser)
+            .Where(a => a.Status == AssignmentStatus.OpsApproved || a.Status == AssignmentStatus.Active)
+            .ToListAsync(ct);
+
     public async Task CancelProjectAssignmentsAsync(int projectId, CancellationToken ct = default)
     {
         var nonTerminal = await _db.Assignments
