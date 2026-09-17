@@ -178,15 +178,56 @@ public class CandidatesControllerCreateMeMultipleCohortsTests : IClassFixture<Cu
     private readonly CustomWebApplicationFactory _factory;
     public CandidatesControllerCreateMeMultipleCohortsTests(CustomWebApplicationFactory factory) => _factory = factory;
 
+    private static (DateOnly Start, DateOnly End) AroundToday(int startOffsetDays, int endOffsetDays)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        return (today.AddDays(startOffsetDays), today.AddDays(endOffsetDays));
+    }
+
     [Fact]
-    public async Task CreateMe_WithMultipleActiveCohorts_ReturnsConflict()
+    public async Task CreateMe_WithAnOverlappingNextCohort_JoinsTheOneRunningToday()
+    {
+        // Ops opening next season's cohort before closing this one used to lock every new
+        // candidate out. The cohort whose dates cover today is the one they are joining.
+        int runningCohortId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+            var program = new Domain.Entities.Program { Name = "Overlapping Cohorts Program" };
+            var (runningStart, runningEnd) = AroundToday(-30, 30);
+            var (nextStart, nextEnd) = AroundToday(120, 240);
+            var running = new Cohort { Program = program, Name = "Running now", StartDate = runningStart, EndDate = runningEnd, Status = CohortStatus.Active };
+            var next = new Cohort { Program = program, Name = "Next season", StartDate = nextStart, EndDate = nextEnd, Status = CohortStatus.Active };
+            db.AddRange(program, running, next);
+            await db.SaveChangesAsync();
+            runningCohortId = running.CohortId;
+        }
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Candidate);
+        var oid = Guid.NewGuid();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, oid.ToString());
+
+        var response = await client.PostAsJsonAsync("/api/candidates/me", new CreateCandidateProfileRequest { Availability = Availability.PartTime });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        var candidate = await verifyDb.Candidates.Include(c => c.AppUser).SingleAsync(c => c.AppUser.EntraObjectId == oid);
+        candidate.CohortId.Should().Be(runningCohortId);
+    }
+
+    [Fact]
+    public async Task CreateMe_WithTwoCohortsRunningAtOnce_ReturnsConflict()
     {
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
             var program = new Domain.Entities.Program { Name = "Parallel Cohorts Program" };
-            var cohortA = new Cohort { Program = program, Name = "Spring", StartDate = new DateOnly(2026, 1, 1), EndDate = new DateOnly(2026, 5, 1), Status = CohortStatus.Active };
-            var cohortB = new Cohort { Program = program, Name = "Fall", StartDate = new DateOnly(2026, 9, 1), EndDate = new DateOnly(2027, 1, 1), Status = CohortStatus.Active };
+            var (startA, endA) = AroundToday(-30, 30);
+            var (startB, endB) = AroundToday(-10, 60);
+            var cohortA = new Cohort { Program = program, Name = "Spring", StartDate = startA, EndDate = endA, Status = CohortStatus.Active };
+            var cohortB = new Cohort { Program = program, Name = "Fall", StartDate = startB, EndDate = endB, Status = CohortStatus.Active };
             db.AddRange(program, cohortA, cohortB);
             await db.SaveChangesAsync();
         }
@@ -195,8 +236,7 @@ public class CandidatesControllerCreateMeMultipleCohortsTests : IClassFixture<Cu
         client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Candidate);
         client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, Guid.NewGuid().ToString());
 
-        var request = new CreateCandidateProfileRequest { Availability = Availability.PartTime };
-        var response = await client.PostAsJsonAsync("/api/candidates/me", request);
+        var response = await client.PostAsJsonAsync("/api/candidates/me", new CreateCandidateProfileRequest { Availability = Availability.PartTime });
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }

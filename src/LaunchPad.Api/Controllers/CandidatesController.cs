@@ -4,10 +4,12 @@ using LaunchPad.Application.Candidates;
 using LaunchPad.Application.Cohorts;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Community;
+using LaunchPad.Application.Projects;
 using LaunchPad.Application.Reviews;
 using LaunchPad.Application.Risk;
 using LaunchPad.Application.SharePoint;
 using LaunchPad.Application.Skills;
+using LaunchPad.Application.Sponsors;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
@@ -38,6 +40,8 @@ public class CandidatesController : ControllerBase
     private readonly IProfilePictureStorage _profilePictures;
     private readonly IReviewRepository _reviews;
     private readonly IAuditLog _auditLog;
+    private readonly ISponsorRepository _sponsors;
+    private readonly IProjectRepository _projects;
     private readonly IFolderProvisioningJobPublisher _folderProvisioning;
 
     public CandidatesController(
@@ -55,6 +59,8 @@ public class CandidatesController : ControllerBase
         IProfilePictureStorage profilePictures,
         IReviewRepository reviews,
         IAuditLog auditLog,
+        ISponsorRepository sponsors,
+        IProjectRepository projects,
         IFolderProvisioningJobPublisher folderProvisioning)
     {
         _candidates = candidates;
@@ -71,6 +77,8 @@ public class CandidatesController : ControllerBase
         _profilePictures = profilePictures;
         _reviews = reviews;
         _auditLog = auditLog;
+        _sponsors = sponsors;
+        _projects = projects;
         _folderProvisioning = folderProvisioning;
     }
 
@@ -81,12 +89,37 @@ public class CandidatesController : ControllerBase
             candidateId, risk?.FinalScore, latestFinalRecommend, risk?.HasPerformanceRisk ?? false, risk?.HasEngagementRisk ?? false));
     }
 
+    /// <summary>Which cohorts the caller may see candidates from. null means every cohort:
+    /// Ops, Executive, and Hiring Manager all work across the program. A Sponsor works with
+    /// one cohort at a time, so theirs are the cohorts they actually have a project in —
+    /// without this, any sponsor could read every candidate's email and hire outcome in every
+    /// cohort, including one they have nothing to do with.</summary>
+    private async Task<IReadOnlySet<int>?> VisibleCohortIdsAsync(CancellationToken ct)
+    {
+        if (!User.IsInRole(Roles.Sponsor)
+            || User.IsInRole(Roles.ProgramOps)
+            || User.IsInRole(Roles.Executive)
+            || User.IsInRole(Roles.HiringManager))
+        {
+            return null;
+        }
+
+        var sponsor = await _sponsors.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        if (sponsor is null) return new HashSet<int>();
+
+        var projects = await _projects.GetBySponsorAsync(sponsor.SponsorId, ct);
+        return projects.Select(p => p.CohortId).ToHashSet();
+    }
+
     [HttpGet("{id:int}")]
     [Authorize(Policy = Policies.ViewTalentPipeline)]
     public async Task<ActionResult<CandidateDto>> Get(int id, CancellationToken ct)
     {
         var candidate = await _candidates.GetWithSkillsAsync(id, ct);
         if (candidate is null) return NotFound();
+
+        var visibleCohortIds = await VisibleCohortIdsAsync(ct);
+        if (visibleCohortIds is not null && !visibleCohortIds.Contains(candidate.CohortId)) return Forbid();
 
         // Redaction happens inside the mapper — never filter scores here or in the client.
         var risk = await _candidates.GetRiskAsync(id, ct);
@@ -105,6 +138,9 @@ public class CandidatesController : ControllerBase
         var candidate = await _candidates.GetWithSkillsAsync(id, ct);
         if (candidate?.AppUser.AvatarBlobPath is not { } blobPath) return NotFound();
 
+        var visibleCohortIds = await VisibleCohortIdsAsync(ct);
+        if (visibleCohortIds is not null && !visibleCohortIds.Contains(candidate.CohortId)) return Forbid();
+
         var result = await _profilePictures.GetAsync(blobPath, ct);
         if (result is null) return NotFound();
 
@@ -115,6 +151,9 @@ public class CandidatesController : ControllerBase
     [Authorize(Policy = Policies.ViewTalentPipeline)]
     public async Task<ActionResult<IReadOnlyList<CandidateDto>>> GetByCohort(int cohortId, CancellationToken ct)
     {
+        var visibleCohortIds = await VisibleCohortIdsAsync(ct);
+        if (visibleCohortIds is not null && !visibleCohortIds.Contains(cohortId)) return Forbid();
+
         var candidates = await _candidates.GetByCohortAsync(cohortId, ct);
         return Ok(await ToDtosAsync(candidates, ct));
     }
@@ -131,6 +170,15 @@ public class CandidatesController : ControllerBase
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
             .ToList();
+
+        var visibleCohortIds = await VisibleCohortIdsAsync(ct);
+        if (visibleCohortIds is not null)
+        {
+            ids = ids.Count == 0
+                ? visibleCohortIds.ToList()
+                : ids.Where(visibleCohortIds.Contains).ToList();
+            if (ids.Count == 0) return Ok(Array.Empty<CandidateDto>());
+        }
 
         var candidates = await _candidates.GetByCohortsAsync(ids, ct);
         return Ok(await ToDtosAsync(candidates, ct));
@@ -189,7 +237,6 @@ public class CandidatesController : ControllerBase
             ActiveProject = assignment.ToMyAssignmentDto(todos.Count, tasksComplete),
             TasksComplete = tasksComplete,
             TasksTotal = todos.Count,
-            MatchScore = assignment.MatchScore,
             CommunityPostsThisWeek = communityPostsThisWeek,
         });
     }
@@ -233,18 +280,27 @@ public class CandidatesController : ControllerBase
         var appUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         if (appUserId is null) return Conflict("Your account isn't provisioned yet — try signing in again.");
 
+        // Program Ops routinely opens next season's cohort before closing this one, and
+        // "exactly one Active cohort" turned that overlap into a wall every new candidate hit.
+        // The cohort whose dates cover today is the one being joined; only a genuine tie is
+        // ambiguous enough to hand back to Ops.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var activeCohorts = await _cohorts.GetActiveAsync(ct);
-        if (activeCohorts.Count != 1)
+        var runningNow = activeCohorts.Where(c => c.StartDate <= today && today <= c.EndDate).ToList();
+        var chosen = activeCohorts.Count == 1 ? activeCohorts[0]
+            : runningNow.Count == 1 ? runningNow[0]
+            : null;
+        if (chosen is null)
         {
             return Conflict(activeCohorts.Count == 0
                 ? "There's no active cohort to join right now — contact Program Ops."
-                : "More than one cohort is active — contact Program Ops to get assigned.");
+                : "More than one cohort is running right now — contact Program Ops to get assigned.");
         }
 
         var candidate = new Candidate
         {
             AppUserId = appUserId.Value,
-            CohortId = activeCohorts[0].CohortId,
+            CohortId = chosen.CohortId,
             Location = request.Location,
             Availability = request.Availability,
             GraduationDate = request.GraduationDate,
@@ -318,7 +374,14 @@ public class CandidatesController : ControllerBase
         // as SelfReported — silently destroying OpsVerified provenance on every profile save.
         // This endpoint decides *which* skills are on the list; whatever established a row owns
         // its Source and Proficiency.
-        var requestedSkills = await _skills.GetOrCreateByNamesAsync(request.SkillNames, ct);
+        var (requestedSkills, unknownSkillNames) = await _skills.GetByNamesAsync(request.SkillNames, ct);
+        if (unknownSkillNames.Count > 0)
+        {
+            ModelState.AddModelError(
+                nameof(request.SkillNames),
+                $"These skills aren't in the skill list yet: {string.Join(", ", unknownSkillNames)}. Add them from the skill picker first.");
+            return ValidationProblem(ModelState);
+        }
         var requestedSkillIds = requestedSkills.Select(s => s.SkillId).ToHashSet();
 
         // Deselecting a skill is a legitimate removal whatever its Source — the candidate owns
@@ -349,6 +412,10 @@ public class CandidatesController : ControllerBase
     /// <summary>Ops applies or overrides a candidate's hire outcome — see HireOutcomeRule for
     /// the suggestion this is meant to act on. Sets CandidateStatus directly; this is the only
     /// write path for it outside profile creation (which always starts at InProgress).</summary>
+    /// <summary>Records the hire decision for a candidate. Deliberately does not touch their
+    /// assignment: a No Hire is a decision about conversion at the end of the program, not a
+    /// reason to pull someone off work they are in the middle of. Ops ends an assignment
+    /// explicitly (AssignmentsController.SetLifecycleStatus) when that is what they mean.</summary>
     [HttpPatch("{id:int}/status")]
     [Authorize(Roles = Roles.ProgramOps)]
     public async Task<ActionResult<CandidateDto>> UpdateStatus(int id, UpdateCandidateStatusRequest request, CancellationToken ct)

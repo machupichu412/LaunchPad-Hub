@@ -1,6 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMsal } from '@azure/msal-react';
+import { getActivePersona } from '../../dev/devPersonas';
 import { useQuery } from '@tanstack/react-query';
 import {
   Accordion,
@@ -302,7 +303,7 @@ export function RoleAwareHome() {
   const { roles, spaIdTokenClaims, apiAccessTokenClaims } = useApiTokenDiagnostics();
   // Falling back to a generic name ("there") read as a bug when the display name
   // was missing, so greet without one instead of inventing a stand-in.
-  const firstName = accounts[0]?.name?.trim().split(' ')[0] || null;
+  const firstName = (getActivePersona()?.displayName ?? accounts[0]?.name)?.trim().split(' ')[0] || null;
 
   const RoleHome = activeRole ? roleHomes[activeRole] : null;
 

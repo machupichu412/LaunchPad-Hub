@@ -23,8 +23,10 @@ public sealed class CohortRepository : ICohortRepository
     public Task<Cohort?> GetByIdAsync(int cohortId, CancellationToken ct = default) =>
         _db.Cohorts.FirstOrDefaultAsync(c => c.CohortId == cohortId, ct);
 
+    /// <summary>0 when no program exists yet — the caller turns that into a message, where
+    /// First() used to turn an empty database into an unhandled 500.</summary>
     public Task<int> GetDefaultProgramIdAsync(CancellationToken ct = default) =>
-        _db.Programs.OrderBy(p => p.ProgramId).Select(p => p.ProgramId).FirstAsync(ct);
+        _db.Programs.OrderBy(p => p.ProgramId).Select(p => p.ProgramId).FirstOrDefaultAsync(ct);
 
     public async Task<Cohort> AddAsync(Cohort cohort, CancellationToken ct = default)
     {

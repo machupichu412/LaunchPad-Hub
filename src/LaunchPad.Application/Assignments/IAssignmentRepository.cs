@@ -13,6 +13,11 @@ public interface IAssignmentRepository
     Task<Assignment?> GetWithOwnershipDetailsAsync(int assignmentId, CancellationToken ct = default);
 
     Task<Assignment?> GetActiveByCandidateIdAsync(int candidateId, CancellationToken ct = default);
+
+    /// <summary>Every OpsApproved or Active assignment, with the project and both people —
+    /// the nightly lifecycle sweep's working set (see AssignmentLifecycleRunner). Tracked,
+    /// not AsNoTracking: the sweep writes the statuses it decides on.</summary>
+    Task<IReadOnlyList<Assignment>> GetForLifecycleSweepAsync(CancellationToken ct = default);
     Task<Assignment> AddAsync(Assignment assignment, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken ct = default);
 

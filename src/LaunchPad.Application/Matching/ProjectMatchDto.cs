@@ -1,15 +1,14 @@
 namespace LaunchPad.Application.Matching;
 
 /// <summary>
-/// The sponsor's own view of a proposed match on their project — same shape as
-/// PendingAssignmentDto (Ops's queue item) minus the sponsor-identifying fields,
-/// since the sponsor viewing this already knows it's their own project.
+/// The sponsor's own view of a proposed match on their project — PendingAssignmentDto
+/// (Ops's queue item) minus the sponsor-identifying fields, and minus the score, which
+/// sponsors don't receive. Matches arrive best-first, and the rationale says why.
 /// </summary>
 public class ProjectMatchDto
 {
     public int AssignmentId { get; set; }
     public int CandidateId { get; set; }
     public string CandidateName { get; set; } = string.Empty;
-    public decimal? MatchScore { get; set; }
     public string? MatchRationale { get; set; }
 }

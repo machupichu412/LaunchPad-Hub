@@ -163,7 +163,7 @@ public class CommunityControllerTests : IClassFixture<CustomWebApplicationFactor
         client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Candidate);
         client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, Guid.NewGuid().ToString());
 
-        var imageBytes = Encoding.UTF8.GetBytes("the exact image content");
+        var imageBytes = TestFiles.Jpeg("the exact image content");
         using var form = BuildPostForm("Post with a photo", CommunityPostType.Win, imageBytes, "image/jpeg");
 
         var createResponse = await client.PostAsync("/api/community/posts", form);

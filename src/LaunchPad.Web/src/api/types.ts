@@ -177,7 +177,8 @@ export interface MyAssignmentDto {
   status: AssignmentStatus;
   startDate: string | null;
   endDate: string | null;
-  matchScore: number | null;
+  /** No match score: candidates and sponsors never receive one (see the API's MyAssignmentDto).
+   *  The rationale is the part that explains the match anyway. */
   matchRationale: string | null;
   projectId: number;
   projectName: string;
@@ -237,7 +238,6 @@ export interface CandidateDashboardDto {
   activeProject: MyAssignmentDto | null;
   tasksComplete: number;
   tasksTotal: number;
-  matchScore: number | null;
   communityPostsThisWeek: number;
 }
 
@@ -408,7 +408,7 @@ export interface ProjectMatchDto {
   assignmentId: number;
   candidateId: number;
   candidateName: string;
-  matchScore: number | null;
+  /** Sponsors get the reason, not the number — matches arrive best-first. */
   matchRationale: string | null;
 }
 
@@ -465,7 +465,7 @@ export interface SponsorCandidateMatchDto {
   degree: string | null;
   gpa: number | null;
   skills: string[];
-  score: number;
+  /** Ranked best-first by the server; the score itself stays with Ops and Exec. */
   rationale: string;
   interestRating: number | null;
   hasPendingAssignmentElsewhere: boolean;

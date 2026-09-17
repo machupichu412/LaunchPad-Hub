@@ -77,7 +77,7 @@ public class AppUsersControllerTests : IClassFixture<CustomWebApplicationFactory
         ownerClient.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Sponsor);
         ownerClient.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, ownerOid.ToString());
 
-        var imageBytes = new byte[] { 9, 9, 9 };
+        var imageBytes = TestFiles.Jpeg();
         var content = new ByteArrayContent(imageBytes);
         content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
         var uploadResponse = await ownerClient.PostAsync("/api/me/avatar", content);

@@ -3,6 +3,7 @@ import { apiRequest } from '../auth/msalConfig';
 import { msalInstance } from '../auth/msalInstance';
 import { isMockMode } from '../dev/mockMode';
 import { resolveMock } from '../dev/mockApi';
+import { PERSONA_HEADER, getActivePersona, isPersonaMode } from '../dev/devPersonas';
 
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 30_000);
 
@@ -47,6 +48,23 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
     return new Response(body === null || body === undefined ? null : JSON.stringify(body), {
       status,
       headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Persona mode (see dev/devPersonas.ts): the real local API, but identity comes from a
+  // header the API only honours in Development. Stripped from production builds.
+  if (isPersonaMode) {
+    const persona = getActivePersona();
+    if (!persona) throw new Error('No persona selected');
+    const isFormData = init.body instanceof FormData;
+    return fetch(`${import.meta.env.VITE_API_BASE_URL ?? ''}${input}`, {
+      ...init,
+      signal: composeRequestSignal(init.signal),
+      headers: {
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...init.headers,
+        [PERSONA_HEADER]: persona.key,
+      },
     });
   }
 

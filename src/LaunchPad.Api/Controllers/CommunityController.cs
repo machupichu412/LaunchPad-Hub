@@ -1,5 +1,6 @@
 using FluentValidation;
 using LaunchPad.Application.Common;
+using LaunchPad.Application.Notifications;
 using LaunchPad.Application.Community;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
@@ -23,7 +24,10 @@ namespace LaunchPad.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+// The feed belongs to the people running and doing the program. The SPA has always kept
+// Executive and Hiring Manager out of /community; the API allowed them to read and post
+// anyway, and a client-side guard is not a control.
+[Authorize(Roles = $"{Roles.Candidate},{Roles.Sponsor},{Roles.ProgramOps}")]
 public class CommunityController : ControllerBase
 {
     private const int DefaultPageSize = 20;
@@ -33,6 +37,7 @@ public class CommunityController : ControllerBase
     private readonly IAppUserRepository _appUsers;
     private readonly ICurrentUser _currentUser;
     private readonly ICommunityImageStorage _images;
+    private readonly INotificationPublisher _notifications;
     private readonly IValidator<CreateCommunityPostRequest> _postValidator;
     private readonly IValidator<CreateCommunityCommentRequest> _commentValidator;
 
@@ -41,6 +46,7 @@ public class CommunityController : ControllerBase
         IAppUserRepository appUsers,
         ICurrentUser currentUser,
         ICommunityImageStorage images,
+        INotificationPublisher notifications,
         IValidator<CreateCommunityPostRequest> postValidator,
         IValidator<CreateCommunityCommentRequest> commentValidator)
     {
@@ -48,6 +54,7 @@ public class CommunityController : ControllerBase
         _appUsers = appUsers;
         _currentUser = currentUser;
         _images = images;
+        _notifications = notifications;
         _postValidator = postValidator;
         _commentValidator = commentValidator;
     }
@@ -112,6 +119,24 @@ public class CommunityController : ControllerBase
         var validation = await _postValidator.ValidateAsync(request, ct);
         if (!validation.IsValid) return ValidationProblem(AddErrors(validation));
 
+        // An Announcement reads as the program speaking. Anyone can post a Win or a Question.
+        if (request.PostType == CommunityPostType.Announcement && !User.IsInRole(Roles.ProgramOps))
+        {
+            return Forbid();
+        }
+
+        if (image is not null)
+        {
+            // Checked before the post is created, so a bad image can't leave a bodiless post behind.
+            await using var probe = image.OpenReadStream();
+            var header = new byte[FileSignatures.HeaderBytes];
+            var headerLength = await probe.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct);
+            if (!FileSignatures.MatchesImageContentType(header.AsSpan(0, headerLength), image.ContentType))
+            {
+                return BadRequest("That file isn't a JPEG, PNG, GIF, or WebP image.");
+            }
+        }
+
         var myAppUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         if (myAppUserId is null) return Forbid();
 
@@ -171,6 +196,21 @@ public class CommunityController : ControllerBase
         await _community.SaveChangesAsync(ct);
 
         var author = await _appUsers.GetByIdAsync(myAppUserId.Value, ct);
+
+        // Nobody was told their post had been replied to, so conversations only continued if
+        // the author happened to scroll back. Replying to yourself notifies nobody.
+        if (post.AuthorAppUserId != myAppUserId.Value)
+        {
+            var postAuthor = await _appUsers.GetByIdAsync(post.AuthorAppUserId, ct);
+            if (!string.IsNullOrWhiteSpace(postAuthor?.Upn))
+            {
+                await _notifications.PublishAsync(new NotificationMessage(
+                    postAuthor.Upn,
+                    $"{author?.DisplayName ?? "Someone"} commented on your post",
+                    Summarize(comment.Body)), ct);
+            }
+        }
+
         return Ok(new CommunityCommentDto
         {
             CommunityCommentId = comment.CommunityCommentId,
@@ -236,6 +276,11 @@ public class CommunityController : ControllerBase
         Body = comment.Body,
         CreatedUtc = comment.CreatedUtc,
     };
+
+    /// <summary>Notifications carry the comment itself, so a long one is trimmed rather than
+    /// sent in full.</summary>
+    private static string Summarize(string body) =>
+        body.Length <= 200 ? body : body[..197] + "...";
 
     private static string TeamsLinkFor(string? upn) => string.IsNullOrWhiteSpace(upn)
         ? string.Empty

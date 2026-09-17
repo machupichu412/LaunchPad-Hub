@@ -1,4 +1,5 @@
 using FluentValidation;
+using LaunchPad.Application.Common;
 
 namespace LaunchPad.Application.Assignments;
 
@@ -12,7 +13,10 @@ public sealed class SubmitDeliverableRequestValidator : AbstractValidator<Submit
     public SubmitDeliverableRequestValidator()
     {
         RuleFor(r => r.Title).NotEmpty().MaximumLength(300);
-        RuleFor(r => r.FileName).NotEmpty().MaximumLength(300);
+        RuleFor(r => r.FileName)
+            .NotEmpty().MaximumLength(300)
+            .Must(FileSignatures.IsAllowedDeliverableFileName)
+            .WithMessage("That file type isn't accepted. Use a document, image, or zip archive.");
         RuleFor(r => r.ContentLength)
             .GreaterThan(0).WithMessage("The selected file is empty.")
             .LessThanOrEqualTo(MaxDeliverableBytes).WithMessage("That file is too large — maximum size is 100 MB.");
@@ -33,5 +37,9 @@ public sealed class CreateTodoRequestValidator : AbstractValidator<CreateTodoReq
     {
         RuleFor(r => r.Title).NotEmpty().MaximumLength(300);
         RuleFor(r => r.Priority).IsInEnum();
+        RuleFor(r => r.DueDate)
+            .GreaterThanOrEqualTo(_ => DateOnly.FromDateTime(DateTime.UtcNow))
+            .When(r => r.DueDate.HasValue)
+            .WithMessage("A due date in the past is almost certainly a typo.");
     }
 }

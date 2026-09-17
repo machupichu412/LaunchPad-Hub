@@ -2,6 +2,7 @@ using FluentValidation;
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Cohorts;
 using LaunchPad.Application.Common;
+using LaunchPad.Application.Reviews;
 using LaunchPad.Application.SharePoint;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
@@ -19,19 +20,28 @@ public class CohortsController : ControllerBase
     private readonly IValidator<CreateCohortRequest> _createValidator;
     private readonly IValidator<ScheduleReviewsRequest> _scheduleReviewsValidator;
     private readonly IFolderProvisioningJobPublisher _folderProvisioning;
+    private readonly IAuditLog _auditLog;
+    private readonly IReviewRepository _reviews;
+    private readonly ICurrentUser _currentUser;
 
     public CohortsController(
         ICohortRepository cohorts,
         IAssignmentRepository assignments,
         IValidator<CreateCohortRequest> createValidator,
         IValidator<ScheduleReviewsRequest> scheduleReviewsValidator,
-        IFolderProvisioningJobPublisher folderProvisioning)
+        IFolderProvisioningJobPublisher folderProvisioning,
+        IAuditLog auditLog,
+        IReviewRepository reviews,
+        ICurrentUser currentUser)
     {
         _cohorts = cohorts;
         _assignments = assignments;
         _createValidator = createValidator;
         _scheduleReviewsValidator = scheduleReviewsValidator;
         _folderProvisioning = folderProvisioning;
+        _auditLog = auditLog;
+        _reviews = reviews;
+        _currentUser = currentUser;
     }
 
     [HttpGet]
@@ -57,13 +67,24 @@ public class CohortsController : ControllerBase
         }
 
         var programId = await _cohorts.GetDefaultProgramIdAsync(ct);
+        if (programId == 0) return Conflict("There's no program to create a cohort in yet.");
+
+        var existing = await _cohorts.GetAllWithCountsAsync(ct);
+        if (existing.Any(c => c.Cohort.ProgramId == programId
+            && string.Equals(c.Cohort.Name, request.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Conflict($"A cohort named \"{request.Name}\" already exists in this program.");
+        }
         var cohort = new Cohort
         {
             ProgramId = programId,
             Name = request.Name,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
-            Status = Domain.Enums.CohortStatus.Active,
+            // Planned, not Active: candidate onboarding reads the running cohort, so a cohort
+            // created for next season must not start competing with the current one the moment
+            // it is saved. Ops activates it when it opens.
+            Status = Domain.Enums.CohortStatus.Planned,
         };
 
         await _cohorts.AddAsync(cohort, ct);
@@ -71,6 +92,9 @@ public class CohortsController : ControllerBase
 
         await _folderProvisioning.PublishAsync(
             new FolderProvisioningJob(FolderProvisioningTargetType.Cohort, cohort.CohortId), ct);
+
+        await _auditLog.RecordAsync(
+            _currentUser.EntraObjectId, "Cohort", cohort.CohortId.ToString(), "Created", ct: ct);
 
         var created = (await _cohorts.GetAllWithCountsAsync(ct)).First(c => c.Cohort.CohortId == cohort.CohortId);
         return Ok(ToDto(created));
@@ -88,8 +112,12 @@ public class CohortsController : ControllerBase
         var cohort = await _cohorts.GetByIdAsync(id, ct);
         if (cohort is null) return NotFound();
 
+        var previousStatus = cohort.Status;
         cohort.Status = request.Status;
         await _cohorts.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(
+            _currentUser.EntraObjectId, "Cohort", cohort.CohortId.ToString(), "StatusChanged",
+            data: new { From = previousStatus, To = request.Status }, ct: ct);
 
         var updated = (await _cohorts.GetAllWithCountsAsync(ct)).First(c => c.Cohort.CohortId == id);
         return Ok(ToDto(updated));
@@ -115,6 +143,8 @@ public class CohortsController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
+        if (await _cohorts.GetByIdAsync(id, ct) is null) return NotFound();
+
         var assignments = await _assignments.GetActiveByCohortAsync(id, ct);
         var assignmentIds = assignments.Select(a => a.AssignmentId).ToList();
         var existingKeys = await _assignments.GetLinkedReviewTodoKeysAsync(assignmentIds, request.Checkpoint, ct);
@@ -125,6 +155,14 @@ public class CohortsController : ControllerBase
         {
             var createdForThisAssignment = 0;
 
+            // A review submitted before Ops scheduled it (the sponsor's self-serve flow) still
+            // counts. Its to-do is created already complete: left open, it asked for a review
+            // that ReviewsController now refuses as a duplicate, so it could never be closed.
+            var submittedTypes = (await _reviews.GetByAssignmentAsync(assignment.AssignmentId, ct))
+                .Where(r => r.Checkpoint == request.Checkpoint)
+                .Select(r => r.ReviewType)
+                .ToHashSet();
+
             async Task AddIfMissingAsync(ReviewType reviewType, string title)
             {
                 if (existingKeys.Contains((assignment.AssignmentId, reviewType))) return;
@@ -133,7 +171,8 @@ public class CohortsController : ControllerBase
                 {
                     AssignmentId = assignment.AssignmentId,
                     Title = title,
-                    Status = TodoStatus.NotStarted,
+                    Status = submittedTypes.Contains(reviewType) ? TodoStatus.Completed : TodoStatus.NotStarted,
+                    CompletedUtc = submittedTypes.Contains(reviewType) ? DateTime.UtcNow : null,
                     DueDate = request.DueDate,
                     LinkedReviewType = reviewType,
                     LinkedReviewCheckpoint = request.Checkpoint,

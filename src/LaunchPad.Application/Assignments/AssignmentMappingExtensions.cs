@@ -11,7 +11,6 @@ public static class AssignmentMappingExtensions
         Status = assignment.Status,
         StartDate = assignment.StartDate,
         EndDate = assignment.EndDate,
-        MatchScore = assignment.MatchScore,
         MatchRationale = assignment.MatchRationale,
         ProjectId = assignment.ProjectId,
         ProjectName = assignment.Project.Name,
