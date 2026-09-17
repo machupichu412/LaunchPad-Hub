@@ -42,10 +42,10 @@ public static class LocalDemoSeeder
         var skillFigma = new Skill { Name = "Figma", SkillCategory = categoryDesign };
         var skillKubernetes = new Skill { Name = "Kubernetes", SkillCategory = categoryCloud };
 
-        var sponsorUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "sponsor.demo@example.com", DisplayName = "Sam Sponsor" };
+        var sponsorUser = new AppUser { EntraObjectId = DevPersonas.Sponsor.EntraObjectId, Upn = "sponsor.demo@example.com", DisplayName = "Sam Sponsor" };
         var sponsor = new Sponsor { AppUser = sponsorUser, Organization = "Contoso Retail", Title = "Engineering Manager", IsActive = true };
 
-        var sponsor2User = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "priya.shah@example.com", DisplayName = "Priya Shah" };
+        var sponsor2User = new AppUser { EntraObjectId = DevPersonas.Sponsor2.EntraObjectId, Upn = "priya.shah@example.com", DisplayName = "Priya Shah" };
         var sponsor2 = new Sponsor { AppUser = sponsor2User, Organization = "Contoso Cloud", Title = "Director of Data & AI", IsActive = true };
 
         var project = new Project
@@ -155,7 +155,7 @@ public static class LocalDemoSeeder
             Status = ProjectStatus.Open,
             Skills = new List<ProjectSkill> { new() { Skill = skillKubernetes, IsRequired = true } }
         };
-        var cohort2CandidateUser = new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "alex.torres@example.com", DisplayName = "Alex Torres" };
+        var cohort2CandidateUser = new AppUser { EntraObjectId = DevPersonas.CandidateCohort2.EntraObjectId, Upn = "alex.torres@example.com", DisplayName = "Alex Torres" };
         var cohort2Candidate = new Candidate
         {
             AppUser = cohort2CandidateUser,
@@ -168,9 +168,9 @@ public static class LocalDemoSeeder
 
         var candidateUsers = new[]
         {
-            new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "jordan.rivera@example.com", DisplayName = "Jordan Rivera" },
-            new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "casey.kim@example.com", DisplayName = "Casey Kim" },
-            new AppUser { EntraObjectId = Guid.NewGuid(), Upn = "morgan.lee@example.com", DisplayName = "Morgan Lee" }
+            new AppUser { EntraObjectId = DevPersonas.Candidate1.EntraObjectId, Upn = "jordan.rivera@example.com", DisplayName = "Jordan Rivera" },
+            new AppUser { EntraObjectId = DevPersonas.Candidate2.EntraObjectId, Upn = "casey.kim@example.com", DisplayName = "Casey Kim" },
+            new AppUser { EntraObjectId = DevPersonas.Candidate3.EntraObjectId, Upn = "morgan.lee@example.com", DisplayName = "Morgan Lee" }
         };
 
         var candidates = new[]

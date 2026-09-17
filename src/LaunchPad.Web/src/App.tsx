@@ -6,6 +6,8 @@ import { AppShell } from './components/AppShell';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { SignInPrompt } from './components/SignInPrompt';
 import { isMockMode } from './dev/mockMode';
+import { getActivePersona, isPersonaMode } from './dev/devPersonas';
+import { PersonaPicker } from './dev/PersonaPicker';
 import { RequireRole } from './auth/RequireRole';
 import { RequireCandidateProfile } from './auth/RequireCandidateProfile';
 import { RequireSponsorProfile } from './auth/RequireSponsorProfile';
@@ -374,6 +376,7 @@ function AppContent() {
  */
 function AuthGate({ children }: { children: ReactNode }) {
   if (isMockMode) return <>{children}</>;
+  if (isPersonaMode) return getActivePersona() ? <>{children}</> : <PersonaPicker />;
   return (
     <>
       <AuthenticatedTemplate>{children}</AuthenticatedTemplate>

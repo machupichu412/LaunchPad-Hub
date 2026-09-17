@@ -33,9 +33,28 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .Enrich.FromLogContext());
 
 // --- Authentication: validate Entra-issued access tokens ---
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+// Local multi-role testing only (see LocalDemo/DevPersonaAuthHandler.cs). The flag outside
+// Development is a misconfiguration serious enough to refuse to start rather than ignore.
+var useDevPersonas = builder.Configuration.GetValue<bool>("Auth:UseDevPersonas");
+if (useDevPersonas && !builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException("Auth:UseDevPersonas is set outside Development. Persona auth must never run in a deployed environment.");
+}
+
+var authentication = builder.Services.AddAuthentication(useDevPersonas
+    ? DevPersonaAuthHandler.SelectorSchemeName
+    : JwtBearerDefaults.AuthenticationScheme);
+authentication.AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+
+if (useDevPersonas)
+{
+    authentication
+        .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, DevPersonaAuthHandler>(DevPersonaAuthHandler.SchemeName, _ => { })
+        .AddPolicyScheme(DevPersonaAuthHandler.SelectorSchemeName, DevPersonaAuthHandler.SelectorSchemeName, o =>
+            o.ForwardDefaultSelector = ctx => ctx.Request.Headers.ContainsKey(DevPersonaAuthHandler.HeaderName)
+                ? DevPersonaAuthHandler.SchemeName
+                : JwtBearerDefaults.AuthenticationScheme);
+}
 
 // --- Authorization: policies, not scattered role strings ---
 builder.Services.AddAuthorization(options =>

@@ -14,6 +14,7 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { useMsal } from '@azure/msal-react';
+import { getActivePersona } from '../../dev/devPersonas';
 import { ArrowRightRegular, CalendarLtrRegular } from '@fluentui/react-icons';
 import { getMyCandidateDashboard } from '../../api/candidates';
 import { getAssignmentTodos } from '../../api/assignments';
@@ -150,7 +151,7 @@ export function CandidateDashboard() {
   const navigate = useNavigate();
   const { accounts } = useMsal();
   // No stand-in name. "Welcome back, there" read as a bug because it was one.
-  const firstName = accounts[0]?.name?.trim().split(' ')[0] || null;
+  const firstName = (getActivePersona()?.displayName ?? accounts[0]?.name)?.trim().split(' ')[0] || null;
 
   const { data: dashboard, isLoading, isError, error } = useQuery({
     queryKey: ['candidates', 'me', 'dashboard'],

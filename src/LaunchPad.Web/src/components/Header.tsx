@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMsal } from '@azure/msal-react';
+import { getActivePersona, isPersonaMode, setActivePersona } from '../dev/devPersonas';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -132,7 +133,7 @@ export function Header() {
   const { activeRole, roles, setActiveRole } = useActiveRole();
   const { mode, toggleMode } = useThemeMode();
   const account = accounts[0];
-  const displayName = account?.name ?? account?.username ?? 'Signed in';
+  const displayName = getActivePersona()?.displayName ?? account?.name ?? account?.username ?? 'Signed in';
   const { url: avatarUrl } = useMyAvatarUrl();
 
   const switchRole = (role: AppRole) => {
@@ -179,6 +180,12 @@ export function Header() {
             aria-label={mode === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           />
         </Tooltip>
+
+        {isPersonaMode && (
+          <Button appearance="subtle" onClick={() => setActivePersona(null)}>
+            Switch persona
+          </Button>
+        )}
 
         <Popover open={notificationsOpen} onOpenChange={(_, data) => setNotificationsOpen(data.open)} positioning="below-end">
           <PopoverTrigger disableButtonEnhancement>
