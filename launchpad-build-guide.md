@@ -405,7 +405,11 @@ public sealed class OwnsProjectHandler
         OwnsProjectRequirement requirement,
         Project project)
     {
-        // Ops and Exec bypass ownership.
+        // Ops and Exec bypass ownership for *reads*. Changing a project (edit, cancel,
+        // delivery stage, to-dos) uses Policies.ChangeOwnProject instead, which Executive
+        // does not satisfy — it is a reporting role, and every other Ops-only action already
+        // refuses it. Submitting the sponsor's review needs Policies.ProjectOwnerOnly: no
+        // role bypasses that one, since the candidate reads it as their sponsor's words.
         if (ctx.User.IsInRole(Roles.ProgramOps) || ctx.User.IsInRole(Roles.Executive))
         {
             ctx.Succeed(requirement);
@@ -441,6 +445,8 @@ public async Task<ActionResult<ProjectDto>> Get(int id)
 ### 5.3 Field-level redaction for hidden ratings
 
 This is the single most important security control in the app — sponsors and candidates must never receive numeric scores, **including in the JSON payload**. Do not rely on the frontend to hide them.
+
+This covers the algorithmic match score too, not just review ratings: candidates and sponsors get `MatchRationale` and the ranking order, while `MatchScore` stays on the Ops and Exec DTOs (`PendingAssignmentDto`, `AssignmentDto`).
 
 ```csharp
 public CandidateDto ToDto(Candidate c, ClaimsPrincipal user)
