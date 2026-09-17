@@ -67,13 +67,24 @@ public class CohortsController : ControllerBase
         }
 
         var programId = await _cohorts.GetDefaultProgramIdAsync(ct);
+        if (programId == 0) return Conflict("There's no program to create a cohort in yet.");
+
+        var existing = await _cohorts.GetAllWithCountsAsync(ct);
+        if (existing.Any(c => c.Cohort.ProgramId == programId
+            && string.Equals(c.Cohort.Name, request.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Conflict($"A cohort named \"{request.Name}\" already exists in this program.");
+        }
         var cohort = new Cohort
         {
             ProgramId = programId,
             Name = request.Name,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
-            Status = Domain.Enums.CohortStatus.Active,
+            // Planned, not Active: candidate onboarding reads the running cohort, so a cohort
+            // created for next season must not start competing with the current one the moment
+            // it is saved. Ops activates it when it opens.
+            Status = Domain.Enums.CohortStatus.Planned,
         };
 
         await _cohorts.AddAsync(cohort, ct);
@@ -81,6 +92,9 @@ public class CohortsController : ControllerBase
 
         await _folderProvisioning.PublishAsync(
             new FolderProvisioningJob(FolderProvisioningTargetType.Cohort, cohort.CohortId), ct);
+
+        await _auditLog.RecordAsync(
+            _currentUser.EntraObjectId, "Cohort", cohort.CohortId.ToString(), "Created", ct: ct);
 
         var created = (await _cohorts.GetAllWithCountsAsync(ct)).First(c => c.Cohort.CohortId == cohort.CohortId);
         return Ok(ToDto(created));
@@ -128,6 +142,8 @@ public class CohortsController : ControllerBase
             }
             return ValidationProblem(ModelState);
         }
+
+        if (await _cohorts.GetByIdAsync(id, ct) is null) return NotFound();
 
         var assignments = await _assignments.GetActiveByCohortAsync(id, ct);
         var assignmentIds = assignments.Select(a => a.AssignmentId).ToList();

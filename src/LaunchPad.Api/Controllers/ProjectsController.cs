@@ -128,6 +128,13 @@ public class ProjectsController : ControllerBase
         var candidate = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         if (candidate is null) return Ok(Array.Empty<ProjectDto>());
 
+        // A completed cohort's marketplace is closed — its projects are history, not offers.
+        var cohort = await _cohorts.GetByIdAsync(candidate.CohortId, ct);
+        if (cohort is null || cohort.Status == Domain.Enums.CohortStatus.Completed)
+        {
+            return Ok(Array.Empty<ProjectDto>());
+        }
+
         var projects = await _projects.GetOpenByCohortAsync(candidate.CohortId, ct);
         var ratings = await _projectInterests.GetRatingsForCandidateAsync(candidate.CandidateId, ct);
 
@@ -149,7 +156,7 @@ public class ProjectsController : ControllerBase
     {
         var candidate = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         var project = await _projects.GetWithSponsorAsync(id, ct);
-        if (candidate is null || !IsBrowsableBy(project, candidate))
+        if (candidate is null || !await IsBrowsableByAsync(project, candidate, ct))
         {
             return NotFound();
         }
@@ -175,7 +182,7 @@ public class ProjectsController : ControllerBase
         if (candidate is null) return Forbid();
 
         var project = await _projects.GetWithSponsorAsync(id, ct);
-        if (!IsBrowsableBy(project, candidate))
+        if (!await IsBrowsableByAsync(project, candidate, ct))
         {
             return NotFound();
         }
@@ -223,9 +230,17 @@ public class ProjectsController : ControllerBase
         if (sponsor is null) return Forbid();
 
         // Without this a bad id only surfaces as a foreign-key failure at SaveChanges — a 500.
-        if (await _cohorts.GetByIdAsync(request.CohortId, ct) is null)
+        var cohort = await _cohorts.GetByIdAsync(request.CohortId, ct);
+        if (cohort is null)
         {
             ModelState.AddModelError(nameof(request.CohortId), "Cohort not found.");
+            return ValidationProblem(ModelState);
+        }
+
+        // Planned is fine — sponsors line projects up before a cohort opens. Completed is not.
+        if (cohort.Status == Domain.Enums.CohortStatus.Completed)
+        {
+            ModelState.AddModelError(nameof(request.CohortId), "That cohort has finished — pick a current one.");
             return ValidationProblem(ModelState);
         }
 
@@ -773,11 +788,19 @@ public class ProjectsController : ControllerBase
     /// endpoints: Open, Ops-approved, and in the candidate's own cohort. Detail and interest
     /// take an id from the URL, so without the cohort check a candidate could reach any
     /// other cohort's projects just by guessing ids.</summary>
-    private static bool IsBrowsableBy(Project? project, Candidate candidate) =>
-        project is not null
-        && project.ApprovalStatus == Domain.Enums.ProjectApprovalStatus.Approved
-        && project.Status == Domain.Enums.ProjectStatus.Open
-        && project.CohortId == candidate.CohortId;
+    private async Task<bool> IsBrowsableByAsync(Project? project, Candidate candidate, CancellationToken ct)
+    {
+        if (project is null
+            || project.ApprovalStatus != Domain.Enums.ProjectApprovalStatus.Approved
+            || project.Status != Domain.Enums.ProjectStatus.Open
+            || project.CohortId != candidate.CohortId)
+        {
+            return false;
+        }
+
+        var cohort = await _cohorts.GetByIdAsync(candidate.CohortId, ct);
+        return cohort is not null && cohort.Status != Domain.Enums.CohortStatus.Completed;
+    }
 
     private static ProjectMatchDto ToMatchDto(Assignment assignment) => new()
     {

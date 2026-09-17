@@ -2,6 +2,7 @@ using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
 using LaunchPad.Domain.Entities;
+using LaunchPad.Application.Cohorts;
 using LaunchPad.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,6 +23,7 @@ namespace LaunchPad.Api.Controllers;
 public class MatchingController : ControllerBase
 {
     private readonly IAssignmentRepository _assignments;
+    private readonly ICohortRepository _cohorts;
     private readonly IAppUserRepository _appUsers;
     private readonly ICurrentUser _currentUser;
     private readonly IAuditLog _auditLog;
@@ -29,12 +31,14 @@ public class MatchingController : ControllerBase
 
     public MatchingController(
         IAssignmentRepository assignments,
+        ICohortRepository cohorts,
         IAppUserRepository appUsers,
         ICurrentUser currentUser,
         IAuditLog auditLog,
         IMatchingJobPublisher matchingJobPublisher)
     {
         _assignments = assignments;
+        _cohorts = cohorts;
         _appUsers = appUsers;
         _currentUser = currentUser;
         _auditLog = auditLog;
@@ -44,6 +48,15 @@ public class MatchingController : ControllerBase
     [HttpPost("run")]
     public async Task<ActionResult<RunMatchingResult>> Run([FromQuery] int cohortId, CancellationToken ct)
     {
+        // Queuing a job for a cohort that doesn't exist, or one that has finished, reported
+        // success and then did nothing — the failure only showed up as an empty queue later.
+        var cohort = await _cohorts.GetByIdAsync(cohortId, ct);
+        if (cohort is null) return NotFound();
+        if (cohort.Status == CohortStatus.Completed)
+        {
+            return BadRequest("That cohort has finished — matching only runs for a current cohort.");
+        }
+
         await _matchingJobPublisher.PublishAsync(new CohortMatchingJob(cohortId, _currentUser.EntraObjectId), ct);
         return Accepted(new RunMatchingResult { Queued = true });
     }

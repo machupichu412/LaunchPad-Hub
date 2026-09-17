@@ -233,18 +233,27 @@ public class CandidatesController : ControllerBase
         var appUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         if (appUserId is null) return Conflict("Your account isn't provisioned yet — try signing in again.");
 
+        // Program Ops routinely opens next season's cohort before closing this one, and
+        // "exactly one Active cohort" turned that overlap into a wall every new candidate hit.
+        // The cohort whose dates cover today is the one being joined; only a genuine tie is
+        // ambiguous enough to hand back to Ops.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var activeCohorts = await _cohorts.GetActiveAsync(ct);
-        if (activeCohorts.Count != 1)
+        var runningNow = activeCohorts.Where(c => c.StartDate <= today && today <= c.EndDate).ToList();
+        var chosen = activeCohorts.Count == 1 ? activeCohorts[0]
+            : runningNow.Count == 1 ? runningNow[0]
+            : null;
+        if (chosen is null)
         {
             return Conflict(activeCohorts.Count == 0
                 ? "There's no active cohort to join right now — contact Program Ops."
-                : "More than one cohort is active — contact Program Ops to get assigned.");
+                : "More than one cohort is running right now — contact Program Ops to get assigned.");
         }
 
         var candidate = new Candidate
         {
             AppUserId = appUserId.Value,
-            CohortId = activeCohorts[0].CohortId,
+            CohortId = chosen.CohortId,
             Location = request.Location,
             Availability = request.Availability,
             GraduationDate = request.GraduationDate,

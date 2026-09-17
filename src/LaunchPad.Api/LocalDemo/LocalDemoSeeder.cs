@@ -382,7 +382,9 @@ public static class LocalDemoSeeder
             new Notification
             {
                 RecipientAppUserId = sponsorUser.AppUserId,
-                Subject = "New project pending approval",
+                // Addressed to the sponsor, so it reads as the draft reminder its body is —
+                // the Ops-facing "new project pending approval" subject belonged elsewhere.
+                Subject = "Your project is still a draft",
                 Body = "\"Mentorship Program Refresh\" is saved as a draft — submit it when you're ready for Program Ops to review.",
                 CreatedUtc = DateTime.UtcNow.AddHours(-3),
                 IsRead = false,

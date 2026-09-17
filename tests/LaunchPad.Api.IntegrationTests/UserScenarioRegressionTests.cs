@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using FluentAssertions;
 using LaunchPad.Application.Assignments;
+using LaunchPad.Application.Cohorts;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
 using LaunchPad.Application.Projects;
@@ -343,5 +344,63 @@ public class UserScenarioRegressionTests : IClassFixture<CustomWebApplicationFac
         var realPng = new ByteArrayContent([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x01]);
         realPng.Headers.ContentType = new MediaTypeHeaderValue("image/png");
         (await candidate.PostAsync("/api/me/avatar", realPng)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    // G-04
+    [Fact]
+    public async Task CompletingACohort_ClosesItsMarketplaceProjectCreationAndMatching()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var candidateB = ClientAs(Roles.Candidate, world.CandidateBOid);
+        var ops = ClientAs(Roles.ProgramOps);
+
+        // Open while the cohort is running.
+        (await candidateB.GetFromJsonAsync<List<ProjectDto>>("/api/projects/open", TestJsonOptions.Default))
+            .Should().Contain(p => p.ProjectId == world.ProjectInB);
+
+        (await ops.PatchAsJsonAsync($"/api/cohorts/{world.CohortB}/status", new { status = "Completed" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await candidateB.GetFromJsonAsync<List<ProjectDto>>("/api/projects/open", TestJsonOptions.Default))
+            .Should().BeEmpty("a finished cohort's marketplace is closed");
+        (await candidateB.GetAsync($"/api/projects/{world.ProjectInB}/open-detail"))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await candidateB.PostAsJsonAsync($"/api/projects/{world.ProjectInB}/interest", new RateInterestRequest { Rating = 5 }))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var newProject = new CreateProjectRequest
+        {
+            CohortId = world.CohortB,
+            Name = "Too late",
+            AvailabilityNeeded = Availability.PartTime,
+            MaxCandidates = 1,
+        };
+        (await ClientAs(Roles.Sponsor, world.SponsorOid).PostAsJsonAsync("/api/projects", newProject, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        (await ops.PostAsync($"/api/matching/run?cohortId={world.CohortB}", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ops.PostAsync("/api/matching/run?cohortId=987654", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ops.PostAsJsonAsync("/api/cohorts/987654/schedule-reviews", new { checkpoint = "Final", dueDate = "2026-10-01" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // G-03, G-14
+    [Fact]
+    public async Task NewCohorts_StartPlannedAndCannotReuseAName()
+    {
+        await SeedTwoCohortsAsync();   // the program a new cohort is created under
+        var ops = ClientAs(Roles.ProgramOps);
+        var name = $"Scenario cohort {Guid.NewGuid():N}";
+        var request = new { name, startDate = "2027-01-04", endDate = "2027-06-04" };
+
+        var created = await ops.PostAsJsonAsync("/api/cohorts", request, TestJsonOptions.Default);
+        created.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await created.Content.ReadFromJsonAsync<CohortDto>(TestJsonOptions.Default);
+        dto!.Status.Should().Be(CohortStatus.Planned, "a cohort created for later must not start competing with the running one");
+
+        (await ops.PostAsJsonAsync("/api/cohorts", request, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 }
