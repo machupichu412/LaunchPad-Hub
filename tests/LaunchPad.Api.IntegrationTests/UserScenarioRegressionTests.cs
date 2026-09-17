@@ -205,4 +205,33 @@ public class UserScenarioRegressionTests : IClassFixture<CustomWebApplicationFac
         var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
         (await db.Reviews.CountAsync(r => r.AssignmentId == assignmentId)).Should().Be(1);
     }
+    // F-07
+    [Fact]
+    public async Task SchedulingReviews_AfterTheReviewWasAlreadySubmitted_CreatesTheTodoAlreadyCompleted()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+        var review = new SubmitReviewRequest
+        {
+            AssignmentId = assignmentId,
+            ReviewType = ReviewType.SponsorOnCandidate,
+            Checkpoint = Checkpoint.Midpoint,
+            Commitment = 4,
+            Availability = 4,
+            Guidance = 4,
+            OutputQuality = 4,
+        };
+        (await ClientAs(Roles.Sponsor, world.SponsorOid).PostAsJsonAsync("/api/reviews", review, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var schedule = await ClientAs(Roles.ProgramOps).PostAsJsonAsync(
+            $"/api/cohorts/{world.CohortA}/schedule-reviews", new { checkpoint = "Midpoint", dueDate = "2026-10-01" }, TestJsonOptions.Default);
+        schedule.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        var todos = await db.ProjectTodos.Where(t => t.AssignmentId == assignmentId && t.LinkedReviewCheckpoint == Checkpoint.Midpoint).ToListAsync();
+        todos.Single(t => t.LinkedReviewType == ReviewType.SponsorOnCandidate).Status.Should().Be(TodoStatus.Completed);
+        todos.Single(t => t.LinkedReviewType == ReviewType.CandidateOnSponsor).Status.Should().Be(TodoStatus.NotStarted);
+    }
 }

@@ -2,6 +2,7 @@ using FluentValidation;
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Cohorts;
 using LaunchPad.Application.Common;
+using LaunchPad.Application.Reviews;
 using LaunchPad.Application.SharePoint;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
@@ -20,6 +21,7 @@ public class CohortsController : ControllerBase
     private readonly IValidator<ScheduleReviewsRequest> _scheduleReviewsValidator;
     private readonly IFolderProvisioningJobPublisher _folderProvisioning;
     private readonly IAuditLog _auditLog;
+    private readonly IReviewRepository _reviews;
     private readonly ICurrentUser _currentUser;
 
     public CohortsController(
@@ -29,6 +31,7 @@ public class CohortsController : ControllerBase
         IValidator<ScheduleReviewsRequest> scheduleReviewsValidator,
         IFolderProvisioningJobPublisher folderProvisioning,
         IAuditLog auditLog,
+        IReviewRepository reviews,
         ICurrentUser currentUser)
     {
         _cohorts = cohorts;
@@ -37,6 +40,7 @@ public class CohortsController : ControllerBase
         _scheduleReviewsValidator = scheduleReviewsValidator;
         _folderProvisioning = folderProvisioning;
         _auditLog = auditLog;
+        _reviews = reviews;
         _currentUser = currentUser;
     }
 
@@ -135,6 +139,14 @@ public class CohortsController : ControllerBase
         {
             var createdForThisAssignment = 0;
 
+            // A review submitted before Ops scheduled it (the sponsor's self-serve flow) still
+            // counts. Its to-do is created already complete: left open, it asked for a review
+            // that ReviewsController now refuses as a duplicate, so it could never be closed.
+            var submittedTypes = (await _reviews.GetByAssignmentAsync(assignment.AssignmentId, ct))
+                .Where(r => r.Checkpoint == request.Checkpoint)
+                .Select(r => r.ReviewType)
+                .ToHashSet();
+
             async Task AddIfMissingAsync(ReviewType reviewType, string title)
             {
                 if (existingKeys.Contains((assignment.AssignmentId, reviewType))) return;
@@ -143,7 +155,8 @@ public class CohortsController : ControllerBase
                 {
                     AssignmentId = assignment.AssignmentId,
                     Title = title,
-                    Status = TodoStatus.NotStarted,
+                    Status = submittedTypes.Contains(reviewType) ? TodoStatus.Completed : TodoStatus.NotStarted,
+                    CompletedUtc = submittedTypes.Contains(reviewType) ? DateTime.UtcNow : null,
                     DueDate = request.DueDate,
                     LinkedReviewType = reviewType,
                     LinkedReviewCheckpoint = request.Checkpoint,
