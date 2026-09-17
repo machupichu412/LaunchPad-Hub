@@ -16,6 +16,7 @@ import { AppRoles } from './auth/roles';
 import { ThemeModeProvider, useThemeMode } from './theme/ThemeModeContext';
 import { RoleAwareHome } from './features/shared/RoleAwareHome';
 import { Unauthorized } from './features/shared/Unauthorized';
+import { NotFound } from './features/shared/NotFound';
 
 // Route components load per role area rather than in the initial bundle: an Ops user
 // should not download the candidate, sponsor, and exec screens to see a dashboard.
@@ -357,6 +358,8 @@ function AppContent() {
                     </RequireRole>
                   }
                 />
+                {/* Without a catch-all an unknown URL rendered an empty page with no way back. */}
+                <Route path="*" element={<NotFound />} />
                 </Routes>
                 </Suspense>
               </ErrorBoundary>
