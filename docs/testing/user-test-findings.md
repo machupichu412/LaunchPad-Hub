@@ -18,8 +18,9 @@ suggestion, and the match score has since joined them behind the same rule.
   30-endpoint × 10-persona authorization matrix with a scan for score fields in every
   response, plus the write paths of every cross-role flow.
 - **Not run locally:** anything that depends on SQL Server. No local SQL instance was available
-  (Docker not running), so those scenarios are listed under
-  [Not verifiable locally](#not-verifiable-locally) rather than reported as passing.
+  (Docker not running), so those scenarios were listed as unverified rather than reported as
+  passing. Most were picked up afterwards by a SQLite harness — see
+  [Covered afterwards on SQLite](#covered-afterwards-on-sqlite) and what it still does not reach.
 
 ## Results by scenario
 
@@ -27,19 +28,19 @@ suggestion, and the match score has since joined them behind the same rule.
 |---|---|---|
 | Candidate | C1–C12 | Pass (found F-01, F-07, G-02, G-03, G-09, G-12) |
 | Sponsor | S1–S10 | Pass (found F-04, F-06, G-08, G-10, G-11) |
-| Program Ops | O1–O9 | Pass (found F-02, F-03, F-05, G-04, G-14, G-15, G-16). O5 risk register not verifiable |
-| Executive | E1–E3 | Pass (found G-07). KPI tiles not verifiable |
+| Program Ops | O1–O9 | Pass (found F-02, F-03, F-05, G-04, G-14, G-15, G-16). O5 risk signals covered on SQLite |
+| Executive | E1–E3 | Pass (found G-07). KPI tiles covered on SQLite |
 | Hiring Manager | H1 | Pass (no scores; all non-pipeline routes and APIs blocked) |
 | Multi-role / edge | M1–M4 | Pass (found F-08, G-06) |
 | X1 Project lifecycle | UI, 4 tabs | Pass (found F-03) |
 | X2 Match → assignment | API | Was blocked after OpsApproved (G-01); the flow now runs end to end |
 | X3 Direct request | API | Pass (found G-05) |
-| X4 One live assignment | API | App-level check passes; filtered unique index not verifiable |
+| X4 One live assignment | API | Pass. App-level check, and the filtered unique index itself on SQLite |
 | X5 Work delivery | API | Pass (byte-identical download, other sponsor 403; found G-02, G-11) |
-| X6 Reviews and risk | API | Reviews and redaction pass after F-06, F-07; risk view not verifiable |
+| X6 Reviews and risk | API | Pass after F-06, F-07; the risk view itself now runs on SQLite |
 | X7 Community | API + UI | Pass (rate limit 429 after 10, role label can't be spoofed, HTML rendered as text; found G-05, G-12, G-17) |
 | X8 Cohort closed | API | Failed (G-04); passes after the fix |
-| X9 Concurrency | — | Not verifiable locally |
+| X9 Concurrency | API | Pass on SQLite — two simultaneous approvals leave one live assignment |
 | X10 Status change during assignment | API | Was undefined (G-13); the no-op is now deliberate and documented |
 
 ### What held up
@@ -113,24 +114,40 @@ last two.
 Two smaller defects were fixed in passing: creating a cohort with no program in the database was
 an unhandled 500, and the upload tests were posting bytes that were never valid files.
 
-## Not verifiable locally
+## Covered afterwards on SQLite
 
-The local demo uses EF Core's in-memory provider. These behaviours exist only in SQL Server and
-were **not** exercised. Run `scripts/run-local-full.sh` against a SQL container, or rely on
-`SqlServerOnlyBehaviorTests` in the `integration-real-sql` CI job:
+Most of what the in-memory run couldn't reach turned out not to need SQL Server — it needed a
+*relational* database. `tests/LaunchPad.Api.IntegrationTests/Sqlite/` runs the same API host on a
+throwaway SQLite file with both views created and the production indexes carried over, so these
+now run on every `dotnet test`:
 
-- The filtered unique index enforcing one live assignment per candidate (X4); the app-level
-  check did work.
-- Serializable-transaction behaviour under concurrent approvals and requests (X9).
-- `vCandidateRisk` (risk register, performance and engagement risk counts, O5, X6) and
-  `vProjectDeliveryKpi` (Executive delivery tiles, E1). Both return empty in-memory.
-- Temporal-table row history.
+| Scenario | What the SQLite run proves |
+|---|---|
+| X4 | The filtered unique index refuses a second live assignment and allows a Proposed one, and Ops approve returns 409 before the index is reached. |
+| X9 | Two simultaneous Ops approvals of the same candidate leave exactly one live assignment. |
+| X6 / O5 | `vCandidateRisk` flags a 4.0 → 2.0 score drop as performance risk and three overdue to-dos as engagement risk — read through the real `CandidateRepository`, with the sponsor's copy of the same candidate carrying no score or flag. |
+| E1 | `vProjectDeliveryKpi` feeds the Executive tiles and excludes cancelled projects. |
+
+This is a stand-in for SQL Server, not a substitute. It does **not** check the shipped T-SQL:
+the views are hand-ported to SQLite in `SqliteSchema`, so a mistake in the migration's view text
+would still pass here. Keep the two in step by hand when either changes.
+
+## Still not verifiable locally
+
+- The **T-SQL view definitions** themselves, and SQL Server's own error numbers and locking
+  semantics. `SqlServerOnlyBehaviorTests` covers these in the `integration-real-sql` CI job, or
+  run `scripts/run-local-full.sh` against a SQL container.
+- **Optimistic concurrency.** `rowversion` has no SQLite equivalent, so `SqliteModelCustomizer`
+  drops the concurrency token; the X9 invariant above holds through the index and the
+  serializable transaction, not through a version check.
+- **Temporal-table row history.**
+- **`GET /api/ops/risks`** orders by a decimal, which SQLite refuses to translate. Fine on SQL
+  Server — the same view data is asserted through `GET /api/candidates/{id}` instead.
 - Service Bus, email, SharePoint folder provisioning, and Blob Storage. These run through
   in-process local stand-ins.
 
 ## Follow-up left open
 
-- The SQL-only behaviour below still needs a run against a real SQL Server.
 - `GetOrCreateByNamesAsync` is gone from `ISkillRepository`; if a bulk import needs to create
   skills from names, it should go through the category-carrying `CreateAsync`.
 

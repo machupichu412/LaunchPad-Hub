@@ -15,6 +15,11 @@ namespace LaunchPad.Api.IntegrationTests;
 /// candidate, and the vCandidateRisk view. Neither is reachable through the normal
 /// in-memory test host.
 ///
+/// Both behaviours also run under Sqlite/RelationalBehaviorTests on every `dotnet test`, which
+/// is the faster feedback loop. These stay because that harness hand-ports the views to SQLite:
+/// only a real SQL Server proves the T-SQL in the migrations is itself valid, and only here do
+/// SQL Server's own error numbers (2601 below) mean anything.
+///
 /// Skipped entirely unless SQLSERVER_TEST_CONNECTION is set — local `dotnet test`
 /// runs (no SQL Server available) and the fast CI jobs stay unaffected; only the
 /// dedicated integration-real-sql CI job (and scripts/run-local-full.sh, manually)
