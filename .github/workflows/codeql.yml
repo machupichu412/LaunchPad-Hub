@@ -19,7 +19,7 @@ jobs:
         language: ['csharp', 'javascript-typescript']
     steps:
       - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v4.37.4
+      - uses: github/codeql-action/init@v4.37.7
         with:
           languages: ${{ matrix.language }}
       - if: matrix.language == 'csharp'
@@ -27,6 +27,6 @@ jobs:
         with: { dotnet-version: '9.0.x' }
       - if: matrix.language == 'csharp'
         run: dotnet build LaunchPad.sln -c Release
-      - uses: github/codeql-action/analyze@v4.37.4
+      - uses: github/codeql-action/analyze@v4.37.7
         with:
           category: '/language:${{ matrix.language }}'
