@@ -4,6 +4,8 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Cohorts;
+using LaunchPad.Application.Community;
+using LaunchPad.Application.Notifications;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
 using LaunchPad.Application.Projects;
@@ -28,7 +30,7 @@ public class UserScenarioRegressionTests : IClassFixture<CustomWebApplicationFac
 
     private sealed record World(
         int CohortA, int CohortB, int ProjectInA, int ProjectInB,
-        Guid SponsorOid, Guid CandidateAOid, Guid CandidateBOid, int CandidateAId, int CandidateBId);
+        Guid SponsorOid, Guid CandidateAOid, Guid CandidateBOid, int CandidateAId, int CandidateBId, string SponsorTag);
 
     private async Task<World> SeedTwoCohortsAsync()
     {
@@ -69,7 +71,7 @@ public class UserScenarioRegressionTests : IClassFixture<CustomWebApplicationFac
         await db.SaveChangesAsync();
 
         return new World(cohortA.CohortId, cohortB.CohortId, projectA.ProjectId, projectB.ProjectId,
-            sponsorOid, candidateAOid, candidateBOid, candidateA.CandidateId, candidateB.CandidateId);
+            sponsorOid, candidateAOid, candidateBOid, candidateA.CandidateId, candidateB.CandidateId, tag);
     }
 
     private HttpClient ClientAs(string roles, Guid? oid = null)
@@ -402,5 +404,57 @@ public class UserScenarioRegressionTests : IClassFixture<CustomWebApplicationFac
 
         (await ops.PostAsJsonAsync("/api/cohorts", request, TestJsonOptions.Default))
             .StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // G-05
+    [Fact]
+    public async Task EveryAssignmentDecision_ReachesThePeopleItAffects()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Proposed);
+        var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
+        var ops = ClientAs(Roles.ProgramOps);
+        var notifications = (FakeNotificationPublisher)_factory.Services.GetRequiredService<INotificationPublisher>();
+
+        string CandidateUpn() => $"{world.CandidateAOid}@example.com";
+        List<string> SubjectsFor(string upn) => notifications.Sent.Where(n => n.ToUpn == upn).Select(n => n.Subject).ToList();
+
+        (await sponsor.PostAsync($"/api/projects/{world.ProjectInA}/matches/{assignmentId}/recommend", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        SubjectsFor(CandidateUpn()).Should().ContainMatch("A sponsor picked you*");
+
+        (await ops.PostAsync($"/api/matching/{assignmentId}/approve", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        SubjectsFor(CandidateUpn()).Should().ContainMatch("You're confirmed on*");
+        SubjectsFor($"sponsor-{world.SponsorTag}@example.com").Should().ContainMatch("Match confirmed:*");
+    }
+
+    // G-05
+    [Fact]
+    public async Task CommentingOnAPost_TellsItsAuthor()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var notifications = (FakeNotificationPublisher)_factory.Services.GetRequiredService<INotificationPublisher>();
+        var author = ClientAs(Roles.Candidate, world.CandidateAOid);
+
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent("Shipped the first prototype"), "body" },
+            { new StringContent("Win"), "postType" },
+        };
+        var created = await author.PostAsync("/api/community/posts", form);
+        created.StatusCode.Should().Be(HttpStatusCode.OK);
+        var postId = (await created.Content.ReadFromJsonAsync<CommunityPostDto>(TestJsonOptions.Default))!.CommunityPostId;
+
+        // The author's own comment is not an event worth mailing them about.
+        (await author.PostAsJsonAsync($"/api/community/posts/{postId}/comments", new { body = "Adding a detail" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        notifications.Sent.Where(n => n.ToUpn == $"{world.CandidateAOid}@example.com").Should().NotContain(n => n.Subject.Contains("commented"));
+
+        (await ClientAs(Roles.Candidate, world.CandidateBOid)
+            .PostAsJsonAsync($"/api/community/posts/{postId}/comments", new { body = "Nice work" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        notifications.Sent.Where(n => n.ToUpn == $"{world.CandidateAOid}@example.com")
+            .Should().Contain(n => n.Subject.Contains("commented on your post"));
     }
 }

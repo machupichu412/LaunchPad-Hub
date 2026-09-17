@@ -655,6 +655,12 @@ public class ProjectsController : ControllerBase
         await _auditLog.RecordAsync(
             _currentUser.EntraObjectId, "Assignment", result.Assignment!.AssignmentId.ToString(), "SponsorDirectRequest", ct: ct);
 
+        await _notifications.PublishAsync(new NotificationMessage(
+            candidate.AppUser.Upn,
+            $"A sponsor requested you for {project.Name}",
+            $"{project.Sponsor.AppUser.DisplayName} asked for you on \"{project.Name}\". " +
+            "Program Ops reviews the request next — you'll hear once it's confirmed."), ct);
+
         return Ok(new ProjectMatchDto
         {
             AssignmentId = result.Assignment.AssignmentId,
@@ -758,6 +764,13 @@ public class ProjectsController : ControllerBase
 
         await _assignments.SaveChangesAsync(ct);
         await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "SponsorRecommend", ct: ct);
+
+        await _notifications.PublishAsync(new NotificationMessage(
+            assignment.Candidate.AppUser.Upn,
+            $"A sponsor picked you for {assignment.Project.Name}",
+            $"{assignment.Project.Sponsor.AppUser.DisplayName} recommended you for \"{assignment.Project.Name}\". " +
+            "Program Ops reviews the match next — you'll hear once it's confirmed."), ct);
+
         return Ok(ToMatchDto(assignment));
     }
 
@@ -781,6 +794,15 @@ public class ProjectsController : ControllerBase
         assignment.Status = AssignmentStatus.Withdrawn;
         await _assignments.SaveChangesAsync(ct);
         await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "SponsorReject", ct: ct);
+
+        // Says the match is over without dressing it up as a verdict on the candidate — they
+        // go back into the pool for the next matching run.
+        await _notifications.PublishAsync(new NotificationMessage(
+            assignment.Candidate.AppUser.Upn,
+            $"You're no longer being considered for {assignment.Project.Name}",
+            $"\"{assignment.Project.Name}\" is moving ahead with other candidates. " +
+            "You're back in the pool for upcoming projects."), ct);
+
         return Ok(ToMatchDto(assignment));
     }
 

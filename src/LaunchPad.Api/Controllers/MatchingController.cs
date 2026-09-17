@@ -3,6 +3,7 @@ using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Application.Cohorts;
+using LaunchPad.Application.Notifications;
 using LaunchPad.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -27,6 +28,7 @@ public class MatchingController : ControllerBase
     private readonly IAppUserRepository _appUsers;
     private readonly ICurrentUser _currentUser;
     private readonly IAuditLog _auditLog;
+    private readonly INotificationPublisher _notifications;
     private readonly IMatchingJobPublisher _matchingJobPublisher;
 
     public MatchingController(
@@ -35,6 +37,7 @@ public class MatchingController : ControllerBase
         IAppUserRepository appUsers,
         ICurrentUser currentUser,
         IAuditLog auditLog,
+        INotificationPublisher notifications,
         IMatchingJobPublisher matchingJobPublisher)
     {
         _assignments = assignments;
@@ -42,6 +45,7 @@ public class MatchingController : ControllerBase
         _appUsers = appUsers;
         _currentUser = currentUser;
         _auditLog = auditLog;
+        _notifications = notifications;
         _matchingJobPublisher = matchingJobPublisher;
     }
 
@@ -88,7 +92,19 @@ public class MatchingController : ControllerBase
         }
 
         await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignmentId.ToString(), "OpsApprove", ct: ct);
-        return Ok(ToDto(result.Assignment!));
+
+        var approved = result.Assignment!;
+        await _notifications.PublishAsync(new NotificationMessage(
+            approved.Candidate.AppUser.Upn,
+            $"You're confirmed on {approved.Project.Name}",
+            $"Program Ops approved your match with \"{approved.Project.Name}\". " +
+            "Your tasks and deliverables appear in LaunchPad when the project starts."), ct);
+        await _notifications.PublishAsync(new NotificationMessage(
+            approved.Project.Sponsor.AppUser.Upn,
+            $"Match confirmed: {approved.Candidate.AppUser.DisplayName}",
+            $"Program Ops approved {approved.Candidate.AppUser.DisplayName} for \"{approved.Project.Name}\"."), ct);
+
+        return Ok(ToDto(approved));
     }
 
     [HttpPost("{assignmentId:int}/deny")]
@@ -108,6 +124,16 @@ public class MatchingController : ControllerBase
         assignment.Status = AssignmentStatus.Withdrawn;
         await _assignments.SaveChangesAsync(ct);
         await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "OpsDeny", ct: ct);
+
+        // The sponsor picked this candidate, so they are the one who needs to know it didn't
+        // stand. The candidate was never told the match was confirmed, so they aren't told
+        // it was undone either — they simply return to the pool.
+        await _notifications.PublishAsync(new NotificationMessage(
+            assignment.Project.Sponsor.AppUser.Upn,
+            $"Match not approved: {assignment.Candidate.AppUser.DisplayName}",
+            $"Program Ops didn't approve {assignment.Candidate.AppUser.DisplayName} for \"{assignment.Project.Name}\". " +
+            "The spot is open again on your project's matches."), ct);
+
         return Ok(ToDto(assignment));
     }
 
