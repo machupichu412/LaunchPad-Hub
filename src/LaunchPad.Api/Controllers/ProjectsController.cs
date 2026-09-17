@@ -277,7 +277,7 @@ public class ProjectsController : ControllerBase
         var project = await _projects.GetWithSponsorAsync(id, ct);
         if (project is null) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         var committedCount = await _assignments.GetCommittedCountForProjectAsync(id, ct);
@@ -318,7 +318,7 @@ public class ProjectsController : ControllerBase
         var isProgramOps = User.IsInRole(Roles.ProgramOps);
         if (!isProgramOps)
         {
-            var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+            var auth = await _authorization.AuthorizeAsync(User, project, Policies.ChangeOwnProject);
             if (!auth.Succeeded) return Forbid();
 
             if (request.Stage <= project.DeliveryStage)
@@ -347,7 +347,7 @@ public class ProjectsController : ControllerBase
         var project = await _projects.GetWithSponsorAsync(id, ct);
         if (project is null) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         if (project.ApprovalStatus != Domain.Enums.ProjectApprovalStatus.Draft
@@ -579,7 +579,7 @@ public class ProjectsController : ControllerBase
         var project = await _projects.GetWithSponsorAsync(id, ct);
         if (project is null) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         if (project.ApprovalStatus != ProjectApprovalStatus.Approved)
@@ -711,7 +711,7 @@ public class ProjectsController : ControllerBase
         var project = await _projects.GetWithSponsorAsync(id, ct);
         if (project is null) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         project.Status = Domain.Enums.ProjectStatus.Cancelled;
@@ -734,7 +734,7 @@ public class ProjectsController : ControllerBase
         var assignment = await _assignments.GetAsync(assignmentId, ct);
         if (assignment is null || assignment.ProjectId != id) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         if (assignment.Status != AssignmentStatus.Proposed)
@@ -783,7 +783,7 @@ public class ProjectsController : ControllerBase
         var assignment = await _assignments.GetAsync(assignmentId, ct);
         if (assignment is null || assignment.ProjectId != id) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         if (assignment.Status != AssignmentStatus.Proposed)

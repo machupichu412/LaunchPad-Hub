@@ -77,6 +77,15 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(Policies.ManageOwnProject, p =>
         p.Requirements.Add(new OwnsProjectRequirement()));
 
+    options.AddPolicy(Policies.ChangeOwnProject, p =>
+        p.Requirements.Add(new ChangeProjectRequirement()));
+
+    options.AddPolicy(Policies.ProjectOwnerOnly, p =>
+        p.Requirements.Add(new ProjectOwnerRequirement()));
+
+    options.AddPolicy(Policies.ChangeOwnAssignment, p =>
+        p.Requirements.Add(new ChangeAssignmentRequirement()));
+
     options.AddPolicy(Policies.ManageOwnAssignment, p =>
         p.Requirements.Add(new OwnsAssignmentRequirement()));
 
@@ -92,6 +101,9 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddScoped<IAuthorizationHandler, OwnsProjectHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, ChangeProjectHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, ProjectOwnerHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, ChangeAssignmentHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, OwnsCandidateProfileHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, OwnsAssignmentHandler>();
 

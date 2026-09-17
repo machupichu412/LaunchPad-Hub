@@ -24,7 +24,10 @@ namespace LaunchPad.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+// The feed belongs to the people running and doing the program. The SPA has always kept
+// Executive and Hiring Manager out of /community; the API allowed them to read and post
+// anyway, and a client-side guard is not a control.
+[Authorize(Roles = $"{Roles.Candidate},{Roles.Sponsor},{Roles.ProgramOps}")]
 public class CommunityController : ControllerBase
 {
     private const int DefaultPageSize = 20;
@@ -115,6 +118,12 @@ public class CommunityController : ControllerBase
 
         var validation = await _postValidator.ValidateAsync(request, ct);
         if (!validation.IsValid) return ValidationProblem(AddErrors(validation));
+
+        // An Announcement reads as the program speaking. Anyone can post a Win or a Question.
+        if (request.PostType == CommunityPostType.Announcement && !User.IsInRole(Roles.ProgramOps))
+        {
+            return Forbid();
+        }
 
         if (image is not null)
         {

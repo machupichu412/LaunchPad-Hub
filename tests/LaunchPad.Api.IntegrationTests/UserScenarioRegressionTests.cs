@@ -9,6 +9,7 @@ using LaunchPad.Application.Notifications;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
 using LaunchPad.Application.Projects;
+using LaunchPad.Application.Candidates;
 using LaunchPad.Application.Reviews;
 using LaunchPad.Domain.Entities;
 using LaunchPad.Domain.Enums;
@@ -456,5 +457,102 @@ public class UserScenarioRegressionTests : IClassFixture<CustomWebApplicationFac
             .StatusCode.Should().Be(HttpStatusCode.OK);
         notifications.Sent.Where(n => n.ToUpn == $"{world.CandidateAOid}@example.com")
             .Should().Contain(n => n.Subject.Contains("commented on your post"));
+    }
+
+    // G-07
+    [Fact]
+    public async Task Executive_ReadsEveryProjectButChangesNone()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var exec = ClientAs(Roles.Executive);
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+
+        // Reading stays open: dashboards are the role's whole job.
+        (await exec.GetAsync($"/api/projects/{world.ProjectInA}")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await exec.GetAsync($"/api/projects/{world.ProjectInA}/matches")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await exec.GetAsync($"/api/projects/{world.ProjectInA}/assigned-candidates")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await exec.GetAsync($"/api/assignments/{assignmentId}/todos")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var edit = new UpdateProjectRequest { Name = "Renamed by exec", AvailabilityNeeded = Availability.PartTime, MaxCandidates = 1 };
+        (await exec.PutAsJsonAsync($"/api/projects/{world.ProjectInA}", edit, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await exec.PostAsJsonAsync($"/api/projects/{world.ProjectInA}/cancel", new { reason = "no" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await exec.PostAsJsonAsync($"/api/projects/{world.ProjectInA}/delivery-stage", new { stage = "MvpBuilt" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await exec.PostAsJsonAsync($"/api/assignments/{assignmentId}/todos", new { title = "Exec to-do" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // G-06
+    [Fact]
+    public async Task ASponsorReview_CanOnlyComeFromThatProjectsOwnSponsor()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+        var review = new SubmitReviewRequest
+        {
+            AssignmentId = assignmentId,
+            ReviewType = ReviewType.SponsorOnCandidate,
+            Checkpoint = Checkpoint.Final,
+            Commitment = 5,
+            Availability = 5,
+            Guidance = 5,
+            OutputQuality = 5,
+        };
+
+        // Holding ProgramOps as well no longer buys a way into someone else's sponsor voice.
+        var opsAndSponsor = ClientAs($"{Roles.ProgramOps},{Roles.Sponsor}");
+        (await opsAndSponsor.PostAsJsonAsync("/api/reviews", review, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        (await ClientAs(Roles.Sponsor, world.SponsorOid).PostAsJsonAsync("/api/reviews", review, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // G-08
+    [Fact]
+    public async Task ASponsorOnlySeesCandidatesFromCohortsTheyWorkIn()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
+
+        // This sponsor has a project in both cohorts, so both are visible.
+        (await sponsor.GetAsync($"/api/candidates/{world.CandidateAId}")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var strangerOid = Guid.NewGuid();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+            db.Add(new Sponsor { AppUser = new AppUser { EntraObjectId = strangerOid, Upn = $"{strangerOid}@example.com", DisplayName = "Sponsor Elsewhere" } });
+            await db.SaveChangesAsync();
+        }
+
+        var stranger = ClientAs(Roles.Sponsor, strangerOid);
+        (await stranger.GetAsync($"/api/candidates/{world.CandidateAId}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await stranger.GetAsync($"/api/candidates/cohort/{world.CohortA}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await stranger.GetFromJsonAsync<List<CandidateDto>>("/api/candidates", TestJsonOptions.Default)).Should().BeEmpty();
+
+        // Ops still sees the whole program.
+        (await ClientAs(Roles.ProgramOps).GetAsync($"/api/candidates/{world.CandidateAId}")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // G-12, G-17
+    [Fact]
+    public async Task TheCommunityFeedIsForTheProgram_AndAnnouncementsAreOpsOnly()
+    {
+        MultipartFormDataContent Post(string type) => new()
+        {
+            { new StringContent("Body text"), "body" },
+            { new StringContent(type), "postType" },
+        };
+
+        (await ClientAs(Roles.Executive).GetAsync("/api/community/posts")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ClientAs(Roles.HiringManager).GetAsync("/api/community/posts")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var candidate = ClientAs(Roles.Candidate, Guid.NewGuid());
+        (await candidate.PostAsync("/api/community/posts", Post("Win"))).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await candidate.PostAsync("/api/community/posts", Post("Announcement"))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ClientAs(Roles.ProgramOps).PostAsync("/api/community/posts", Post("Announcement"))).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 }
