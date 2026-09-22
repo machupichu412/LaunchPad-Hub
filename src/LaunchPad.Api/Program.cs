@@ -111,6 +111,12 @@ builder.Services.AddScoped<IAuthorizationHandler, OwnsAssignmentHandler>();
 // a determined abuser, just a cheap backstop appropriate for a ~2,000-user internal app. Only
 // applied to Community's post/comment creation (see [EnableRateLimiting] there), never to
 // reads or reactions.
+//
+// ponytail: counters live in this process, so the effective limit is PermitLimit x instance
+// count. Correct at the one instance every environment runs today (no `capacity` or autoscale
+// is configured in appService.bicep). If this ever scales out, either divide the configured
+// limit by the instance count or move the counters to Redis — don't add that dependency for a
+// scale-out that hasn't happened.
 var globalPermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:PermitLimit") ?? 300;
 var globalWindowSeconds = builder.Configuration.GetValue<int?>("RateLimiting:WindowSeconds") ?? 60;
 
@@ -236,7 +242,7 @@ else
     builder.Services.AddSingleton<ICommunityImageStorage, BlobCommunityImageStorage>();
 }
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(options => options.Filters.Add<LargeCollectionResultFilter>())
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddValidatorsFromAssemblyContaining<CreateProjectRequestValidator>();
 builder.Services.AddEndpointsApiExplorer();

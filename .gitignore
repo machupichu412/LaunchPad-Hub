@@ -35,3 +35,6 @@ Thumbs.db
 
 # Scripts
 scripts/setup-entra.sh
+
+# graphify knowledge-graph output (generated; 26MB, rebuild with /graphify .)
+graphify-out/
