@@ -70,6 +70,7 @@ Anything that runs longer than a request should be a Service Bus message consume
 - **CI/CD:** GitHub Actions, OIDC federated credentials (no stored Azure secrets), infra deploys before app deploy, deploy-to-staging-slot → smoke test → slot swap for Prod. PR gates: build + tests green, lint clean, CodeQL, and the per-role authorization integration suite.
 - **Frontend:** Fluent UI v9, TanStack Query for server state, MSAL for auth with a single `authedFetch` interceptor attaching the bearer token (no call site should acquire tokens itself), API client generated from the OpenAPI doc so DTOs can't drift from the backend.
 - **Observability:** every log line and trace should carry `EntraObjectId`, `Role`, and `CorrelationId`. Health checks live at `/healthz` (liveness) and `/healthz/ready` (SQL + Service Bus reachability).
+- **Program Ops guides:** the in-app help center (`src/LaunchPad.Web/src/features/ops/help/helpContent.ts`) is documentation Ops actually reads, not a changelog — if a change alters what a Program Ops user does or sees (a workflow step, a threshold, a status value, a page that's new or gone), update the matching guide article in the same PR. Don't add an article for something that isn't Ops-facing or doesn't need explaining.
 
 ## Build sequence (context on what "done" looks like at each stage)
 
