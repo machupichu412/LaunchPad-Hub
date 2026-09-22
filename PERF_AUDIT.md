@@ -116,23 +116,30 @@ Recorded deliberately, not done in this pass:
 
 **Needs its own plan (API contract change).** Pagination for the ~25 unbounded list
 endpoints (#6, #11) — the frontend consumes full arrays today, so this is a coordinated
-backend + frontend migration.
+backend + frontend migration. Still deferred, but no longer invisible: a global result
+filter (`LargeCollectionResultFilter`) warns when any response exceeds 250 rows, so the
+endpoints that actually outgrow one response name themselves before the migration is
+scoped. Paginate what the warnings name, not all 25.
 
 **Needs design work.** Query caching with TTL and invalidation (#4); ETag / response
 caching (#9); Polly circuit breakers and fallbacks (#14); query pushdown for
 `SearchController` and `ProjectsController.GetEligibleCandidates` (#3); upload image
 compression (#18); Skeleton components to replace spinners (#20).
 
-**Security-adjacent, flagged separately.** Deliverable uploads accept any content type
-with no magic-byte sniffing (`AssignmentRequestValidators.cs:13-20`) — every other
-upload path validates, so this is an inconsistency worth its own reviewed change.
+**Security-adjacent, flagged separately.** ~~Deliverable uploads accept any content type
+with no magic-byte sniffing (`AssignmentRequestValidators.cs:13-20`)~~ — **done since.**
+`FileSignatures` now backs all four upload paths: deliverables check the extension allowlist
+(`AssignmentRequestValidators.cs:18`) and the header bytes (`AssignmentsController.cs:201-203`).
 
 **Pre-existing CI/CD issues found during the audit, outside this scope.**
-- EF migrations run from a GitHub-hosted runner against private-endpoint-only SQL
-  (`deploy.yml:113,150`) — **this will fail as written**; needs a self-hosted runner or
-  a firewall exception.
-- `integration-real-sql` is deliberately excluded from both deploy jobs' `needs`
-  (`deploy.yml:58-60`), so it cannot block a release.
+- ~~EF migrations run from a GitHub-hosted runner against private-endpoint-only SQL~~ —
+  **addressed.** A firewall exception was not possible: public network access is denied
+  tenant-wide by policy, so no runner IP can be allowlisted. CI now generates an idempotent
+  `migrations` artifact (no DB access needed) and an operator applies it from inside the
+  VNet — see `docs/runbooks/migrations.md`.
+- ~~`integration-real-sql` is deliberately excluded from both deploy jobs' `needs`~~ —
+  **addressed.** It is now in both, so a regression in the filtered unique index or the
+  views blocks the release.
 - Coverage is collected but never thresholded or uploaded.
 - No rollback / swap-back step after the prod slot swap (`deploy.yml:156-159`).
 - SWA deploy uses long-lived PATs, the only non-OIDC secrets in the pipeline.
