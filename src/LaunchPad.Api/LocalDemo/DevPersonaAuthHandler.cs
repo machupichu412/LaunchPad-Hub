@@ -37,6 +37,7 @@ public sealed class DevPersonaAuthHandler : AuthenticationHandler<Authentication
 
         var claims = new List<Claim>
         {
+            new("scp", "access_as_user"),
             new("oid", persona.EntraObjectId.ToString()),
             new("name", persona.DisplayName),
             new("preferred_username", persona.Upn),

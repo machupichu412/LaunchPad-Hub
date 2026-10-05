@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
@@ -50,6 +51,7 @@ public class MatchingController : ControllerBase
     }
 
     [HttpPost("run")]
+    [EnableRateLimiting(RateLimitPolicies.Matching)]
     public async Task<ActionResult<RunMatchingResult>> Run([FromQuery] int cohortId, CancellationToken ct)
     {
         // Queuing a job for a cohort that doesn't exist, or one that has finished, reported

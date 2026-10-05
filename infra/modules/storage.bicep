@@ -25,6 +25,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   properties: {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
+    allowSharedKeyAccess: false
     // Public access is disabled in every environment, not just Prod — Microsoft's
     // internal CloudGov policy set denies public network access tenant-wide.
     publicNetworkAccess: 'Disabled'
@@ -118,6 +119,12 @@ resource lifecyclePolicy 'Microsoft.Storage/storageAccounts/managementPolicies@2
               prefixMatch: [ 'artifacts/' ]
             }
             actions: {
+              snapshot: {
+                delete: { daysAfterCreationGreaterThan: 30 }
+              }
+              version: {
+                delete: { daysAfterCreationGreaterThan: 30 }
+              }
               baseBlob: {
                 tierToCool: {
                   daysAfterModificationGreaterThan: 90

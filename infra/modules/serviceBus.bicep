@@ -4,7 +4,9 @@ param env string
 @description('Azure region')
 param location string
 
-param publicNetworkAccess bool = true
+param privateNetworking bool = false
+param privateEndpointSubnetId string
+param privateDnsZoneId string
 
 // Service Bus namespace names are globally unique across all of Azure, not just this
 // subscription — 'sb-launchpad-dev' (no suffix) collided with an unrelated namespace
@@ -15,11 +17,14 @@ resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview
   name: 'sb-launchpad-${env}-${uniqueSuffix}'
   location: location
   sku: {
-    name: 'Standard'
-    tier: 'Standard'
+    name: privateNetworking ? 'Premium' : 'Standard'
+    tier: privateNetworking ? 'Premium' : 'Standard'
+    capacity: privateNetworking ? 1 : 0
   }
   properties: {
-    publicNetworkAccess: publicNetworkAccess ? 'Enabled' : 'Disabled'
+    publicNetworkAccess: privateNetworking ? 'Disabled' : 'Enabled'
+    disableLocalAuth: true
+    minimumTlsVersion: '1.2'
   }
 }
 
@@ -29,7 +34,9 @@ resource matchingJobsQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-pr
   name: 'matching-jobs'
   properties: {
     deadLetteringOnMessageExpiration: true
-    maxDeliveryCount: 5
+    maxDeliveryCount: 3
+    maxSizeInMegabytes: 1024
+    defaultMessageTimeToLive: 'P1D'
   }
 }
 
@@ -39,7 +46,9 @@ resource reviewSubmittedQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01
   name: 'review-submitted'
   properties: {
     deadLetteringOnMessageExpiration: true
-    maxDeliveryCount: 5
+    maxDeliveryCount: 3
+    maxSizeInMegabytes: 1024
+    defaultMessageTimeToLive: 'P1D'
   }
 }
 
@@ -52,7 +61,9 @@ resource notificationsQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-p
   name: 'notifications'
   properties: {
     deadLetteringOnMessageExpiration: true
-    maxDeliveryCount: 5
+    maxDeliveryCount: 3
+    maxSizeInMegabytes: 1024
+    defaultMessageTimeToLive: 'P1D'
   }
 }
 
@@ -64,7 +75,33 @@ resource sharePointProvisioningQueue 'Microsoft.ServiceBus/namespaces/queues@202
   name: 'sharepoint-provisioning'
   properties: {
     deadLetteringOnMessageExpiration: true
-    maxDeliveryCount: 5
+    maxDeliveryCount: 3
+    maxSizeInMegabytes: 1024
+    defaultMessageTimeToLive: 'P1D'
+  }
+}
+
+// Disabling the public endpoint without a private route stranded all production jobs.
+// Private Link requires Premium; one fixed messaging unit bounds its baseline capacity.
+resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = if (privateNetworking) {
+  name: 'pe-sb-launchpad-${env}'
+  location: location
+  properties: {
+    subnet: { id: privateEndpointSubnetId }
+    privateLinkServiceConnections: [{
+      name: 'sb-launchpad-${env}'
+      properties: {
+        privateLinkServiceId: serviceBusNamespace.id
+        groupIds: [ 'namespace' ]
+      }
+    }]
+  }
+}
+resource dnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-11-01' = if (privateNetworking) {
+  parent: privateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [{ name: 'servicebus', properties: { privateDnsZoneId: privateDnsZoneId } }]
   }
 }
 
