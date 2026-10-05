@@ -37,7 +37,8 @@ public sealed class GraphDocumentStorage : IDocumentStorage
         string folderItemId, string fileName, Stream content, string contentType, long contentLength, CancellationToken ct = default)
     {
         var driveId = await _driveResolver.GetDriveIdAsync(ct);
-        var sanitizedFileName = FolderNameSanitizer.Sanitize(fileName);
+        // Every deliverable owns a unique item; a reused name must not overwrite another submission.
+        var sanitizedFileName = $"{Guid.NewGuid():N}_{FolderNameSanitizer.Sanitize(fileName)}";
         var pathAddressedFile = $"{folderItemId}:/{sanitizedFileName}:";
 
         if (contentLength <= SmallFileThresholdBytes)

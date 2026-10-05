@@ -14,8 +14,8 @@ public sealed class CorrelationIdMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var correlationId = context.Request.Headers.TryGetValue(HeaderName, out var incoming)
-            ? incoming.ToString()
+        var correlationId = context.Request.Headers.TryGetValue(HeaderName, out var incoming) && Guid.TryParse(incoming.ToString(), out var parsed)
+            ? parsed.ToString()
             : Guid.NewGuid().ToString();
 
         context.Items[HeaderName] = correlationId;

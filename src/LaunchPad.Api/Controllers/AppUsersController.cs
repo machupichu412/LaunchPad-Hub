@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using LaunchPad.Application.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +29,7 @@ public class AppUsersController : ControllerBase
     /// hidden-score sensitivity CLAUDE.md's redaction rule is about, so no ownership check
     /// beyond being authenticated at all is needed.</summary>
     [HttpGet("{id:int}/avatar")]
+    [EnableRateLimiting(RateLimitPolicies.MediaRead)]
     public async Task<IActionResult> GetAvatar(int id, CancellationToken ct)
     {
         var appUser = await _appUsers.GetByIdAsync(id, ct);

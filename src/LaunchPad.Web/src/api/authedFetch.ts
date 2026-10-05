@@ -1,9 +1,11 @@
+import { checkRateLimit } from './rateLimit';
 import { InteractionRequiredAuthError } from '@azure/msal-browser';
 import { apiRequest } from '../auth/msalConfig';
 import { msalInstance } from '../auth/msalInstance';
 import { isMockMode } from '../dev/mockMode';
 import { resolveMock } from '../dev/mockApi';
 import { PERSONA_HEADER, getActivePersona, isPersonaMode } from '../dev/devPersonas';
+
 
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 30_000);
 
@@ -65,7 +67,7 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
         ...init.headers,
         [PERSONA_HEADER]: persona.key,
       },
-    });
+    }).then(checkRateLimit);
   }
 
   // Falls back to the first cached account if none is explicitly "active" yet —
@@ -121,7 +123,7 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
     console.warn('authedFetch: 401 from', input, '\nWWW-Authenticate:', response.headers.get('www-authenticate'));
   }
 
-  return response;
+  return checkRateLimit(response);
 }
 
 function safeJsonParse(text: string): unknown {

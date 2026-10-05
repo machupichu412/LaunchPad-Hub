@@ -12,6 +12,9 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
       name: 'PerGB2018'
     }
     retentionInDays: 90
+    workspaceCapping: {
+      dailyQuotaGb: 1
+    }
   }
 }
 

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using FluentValidation;
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Candidates;
@@ -132,6 +133,7 @@ public class CandidatesController : ControllerBase
     /// none of the hidden-score sensitivity CLAUDE.md's redaction rule is about, so no
     /// separate ownership check is needed beyond "can this caller see candidates at all."</summary>
     [HttpGet("{id:int}/avatar")]
+    [EnableRateLimiting(RateLimitPolicies.MediaRead)]
     [Authorize(Policy = Policies.ViewTalentPipeline)]
     public async Task<IActionResult> GetAvatar(int id, CancellationToken ct)
     {

@@ -65,9 +65,7 @@ resource peSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' existin
 
 // One private DNS zone per privately-linked service, each linked to this VNet so
 // resources on snet-app/snet-func resolve the private-endpoint IP instead of the
-// public one. servicebus's zone is created now (cheap, no ongoing cost) even though
-// no private endpoint uses it yet — Service Bus private endpoints require the Premium
-// SKU, a real cost jump from Standard deferred until it's actually needed.
+// public one. Production Service Bus uses Premium and its private endpoint.
 var privateDnsZoneNames = [
   'privatelink.vaultcore.azure.net'
   'privatelink.database.windows.net'

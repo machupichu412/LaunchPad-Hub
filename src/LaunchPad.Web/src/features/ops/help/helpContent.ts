@@ -38,6 +38,7 @@ export const helpArticles: HelpArticle[] = [
     summary: 'The four things everything else hangs off — cohorts, candidates, sponsors, and projects — and who can see what.',
     icon: 'compass',
     blocks: [
+      { kind: 'callout', tone: 'info', title: 'Request limits', text: 'Uploads and community post attempts share a limit of six per person per hour. Matching can run once per cohort every five minutes, with ten attempts per hour across all cohorts. If LaunchPad asks you to slow down, wait for the retry period before trying again; repeated clicks also count toward the limit.' },
       {
         kind: 'paragraph',
         text: 'Almost every screen in LaunchPad is scoped to a cohort. A cohort is one run of the program: it holds its own candidates, its own sponsors, and its own projects. Nothing is shared across cohorts, so a candidate in the spring cohort never appears in the fall cohort\'s pipeline.',
@@ -210,7 +211,7 @@ export const helpArticles: HelpArticle[] = [
       },
       {
         kind: 'paragraph',
-        text: 'You can re-run matching as often as you like. It proposes new pairings for candidates who are not yet staffed and does not disturb assignments that are already active.',
+        text: 'You can re-run matching once every five minutes for a cohort, with ten attempts per hour across all cohorts. It proposes new pairings for candidates who are not yet staffed and does not disturb assignments that are already active.',
       },
       {
         kind: 'callout',

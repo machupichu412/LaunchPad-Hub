@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using LaunchPad.Application.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -51,6 +52,8 @@ public class MeController : ControllerBase
     /// identifies the format — no multipart wrapper needed since the client already
     /// has a single cropped Blob to send (see AvatarEditorDialog.tsx).</summary>
     [HttpPost("avatar")]
+    [EnableRateLimiting(RateLimitPolicies.Upload)]
+    [RequestSizeLimit(3 * 1024 * 1024)]
     public async Task<IActionResult> UploadAvatar(CancellationToken ct)
     {
         var contentType = Request.ContentType;
@@ -100,6 +103,7 @@ public class MeController : ControllerBase
     /// and most people never upload one, so a 404 logged a browser console error on every
     /// page load for a state that is entirely normal.</summary>
     [HttpGet("avatar")]
+    [EnableRateLimiting(RateLimitPolicies.MediaRead)]
     public async Task<IActionResult> GetAvatar(CancellationToken ct)
     {
         var appUser = await _appUsers.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);

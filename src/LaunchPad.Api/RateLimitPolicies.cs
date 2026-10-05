@@ -1,10 +1,15 @@
 namespace LaunchPad.Api;
 
-/// <summary>Named rate-limiter policy identifiers, referenced by both Program.cs's
-/// AddRateLimiter registration and the controller actions' [EnableRateLimiting] attributes.</summary>
 public static class RateLimitPolicies
 {
-    /// <summary>Community post/comment creation — a lightweight per-user spam/runaway-script
-    /// guard, not applied to reads or reactions. See Program.cs.</summary>
     public const string CommunityWrite = nameof(CommunityWrite);
+    public const string Upload = nameof(Upload);
+    public const string MediaRead = nameof(MediaRead);
+    public const string Download = nameof(Download);
+    public const string Readiness = nameof(Readiness);
+    public const string Matching = nameof(Matching);
 }
+
+/// <summary>Multipart endpoints that share storage quotas while retaining another endpoint policy.</summary>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class UploadWorkloadAttribute : Attribute { }

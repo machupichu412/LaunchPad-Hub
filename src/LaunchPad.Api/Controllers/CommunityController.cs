@@ -100,8 +100,10 @@ public class CommunityController : ControllerBase
     }
 
     [HttpPost("posts")]
+    [UploadWorkload]
     [Consumes("multipart/form-data")]
     [RequestFormLimits(MultipartBodyLengthLimit = 8 * 1024 * 1024)]
+    [RequestSizeLimit(9 * 1024 * 1024)]
     [EnableRateLimiting(RateLimitPolicies.CommunityWrite)]
     public async Task<ActionResult<CommunityPostDto>> CreatePost(
         [FromForm] string body, [FromForm] CommunityPostType postType, [FromForm] string? activeRole,
@@ -239,6 +241,7 @@ public class CommunityController : ControllerBase
     /// <summary>Proxies a post's image content — mirrors AssignmentsController.GetDeliverableFile's
     /// shape. The client never talks to Blob Storage directly.</summary>
     [HttpGet("posts/{id:int}/image")]
+    [EnableRateLimiting(RateLimitPolicies.MediaRead)]
     public async Task<IActionResult> GetPostImage(int id, CancellationToken ct)
     {
         var post = await _community.GetPostAsync(id, ct);

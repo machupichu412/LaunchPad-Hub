@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using FluentAssertions;
 using LaunchPad.Application.Common;
@@ -34,6 +35,45 @@ public class AuthorizationBoundaryTests : IClassFixture<CustomWebApplicationFact
         var response = await client.GetAsync($"/api/candidates/1");
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Theory]
+    [InlineData("/api/me")]
+    [InlineData("/api/skills")]
+    [InlineData("/api/app-users/1/avatar")]
+    [InlineData("/api/notifications")]
+    public async Task UnknownRole_IsRejectedWithoutProvisioning(string path)
+    {
+        var oid = Guid.NewGuid();
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, "LaunchPad.Nobody");
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, oid.ToString());
+        (await client.GetAsync(path)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPad.Infrastructure.Persistence.LaunchPadDbContext>();
+        db.AppUsers.Any(u => u.EntraObjectId == oid).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("bad-oid")]
+    [InlineData("00000000-0000-0000-0000-000000000000")]
+    public async Task InvalidIdentity_IsRejected(string oid)
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, oid);
+        (await client.GetAsync("/api/skills")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Theory]
+    [InlineData("none")]
+    [InlineData("other_scope")]
+    public async Task MissingDelegatedScope_IsRejected(string scopes)
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.ProgramOps);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.ScopesHeader, scopes);
+        (await client.GetAsync("/api/skills")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
