@@ -6,6 +6,7 @@ export const AppRoles = {
   Sponsor: 'LaunchPad.Sponsor',
   Candidate: 'LaunchPad.Candidate',
   HiringManager: 'LaunchPad.HiringManager',
+  SubjectMatterExpert: 'LaunchPad.SubjectMatterExpert',
 } as const;
 
 export type AppRole = (typeof AppRoles)[keyof typeof AppRoles];
@@ -16,6 +17,7 @@ const roleLabels: Record<AppRole, string> = {
   [AppRoles.Sponsor]: 'Sponsor',
   [AppRoles.Candidate]: 'Candidate',
   [AppRoles.HiringManager]: 'Hiring Manager',
+  [AppRoles.SubjectMatterExpert]: 'Subject Matter Expert',
 };
 
 export function roleLabel(role: AppRole): string {
@@ -32,6 +34,7 @@ const roleHomePaths: Record<AppRole, string> = {
   [AppRoles.Sponsor]: '/projects',
   [AppRoles.Candidate]: '/dashboard',
   [AppRoles.HiringManager]: '/pipeline',
+  [AppRoles.SubjectMatterExpert]: '/project-support',
 };
 
 export function roleHomePath(role: AppRole): string {

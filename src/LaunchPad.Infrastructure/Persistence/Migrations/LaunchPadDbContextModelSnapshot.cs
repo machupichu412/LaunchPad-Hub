@@ -48,6 +48,9 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsSubjectMatterExpert")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Upn")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -661,6 +664,45 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.ToTable("Project", (string)null);
                 });
 
+            modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectAnswer", b =>
+                {
+                    b.Property<int>("ProjectAnswerId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProjectAnswerId"));
+
+                    b.Property<int>("AuthorAppUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(10000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FileItemId")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<int>("ProjectQuestionId")
+                        .HasColumnType("int");
+
+                    b.HasKey("ProjectAnswerId");
+
+                    b.HasIndex("AuthorAppUserId");
+
+                    b.HasIndex("ProjectQuestionId");
+
+                    b.ToTable("ProjectAnswer");
+                });
+
             modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectDeliveryKpi", b =>
                 {
                     b.Property<int>("BusinessValueDocumentedCount")
@@ -681,6 +723,21 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.ToTable((string)null);
 
                     b.ToView("vProjectDeliveryKpi", (string)null);
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectExpert", b =>
+                {
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("AppUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("ProjectId", "AppUserId");
+
+                    b.HasIndex("AppUserId");
+
+                    b.ToTable("ProjectExpert");
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectInterest", b =>
@@ -717,6 +774,47 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("UX_ProjectInterest_Candidate_Project");
 
                     b.ToTable("ProjectInterest", (string)null);
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectQuestion", b =>
+                {
+                    b.Property<int>("ProjectQuestionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProjectQuestionId"));
+
+                    b.Property<int>("AuthorAppUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(10000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DeliverableId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("ProjectQuestionId");
+
+                    b.HasIndex("AuthorAppUserId");
+
+                    b.HasIndex("DeliverableId");
+
+                    b.HasIndex("ProjectId", "CreatedUtc");
+
+                    b.ToTable("ProjectQuestion");
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectSkill", b =>
@@ -1109,6 +1207,44 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.Navigation("Sponsor");
                 });
 
+            modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectAnswer", b =>
+                {
+                    b.HasOne("LaunchPad.Domain.Entities.AppUser", "Author")
+                        .WithMany()
+                        .HasForeignKey("AuthorAppUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("LaunchPad.Domain.Entities.ProjectQuestion", "Question")
+                        .WithMany("Answers")
+                        .HasForeignKey("ProjectQuestionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Author");
+
+                    b.Navigation("Question");
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectExpert", b =>
+                {
+                    b.HasOne("LaunchPad.Domain.Entities.AppUser", "AppUser")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("LaunchPad.Domain.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("AppUser");
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectInterest", b =>
                 {
                     b.HasOne("LaunchPad.Domain.Entities.Candidate", "Candidate")
@@ -1124,6 +1260,32 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Candidate");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectQuestion", b =>
+                {
+                    b.HasOne("LaunchPad.Domain.Entities.AppUser", "Author")
+                        .WithMany()
+                        .HasForeignKey("AuthorAppUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("LaunchPad.Domain.Entities.Deliverable", "Deliverable")
+                        .WithMany()
+                        .HasForeignKey("DeliverableId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("LaunchPad.Domain.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Author");
+
+                    b.Navigation("Deliverable");
 
                     b.Navigation("Project");
                 });
@@ -1240,6 +1402,11 @@ namespace LaunchPad.Infrastructure.Persistence.Migrations
                     b.Navigation("Interests");
 
                     b.Navigation("Skills");
+                });
+
+            modelBuilder.Entity("LaunchPad.Domain.Entities.ProjectQuestion", b =>
+                {
+                    b.Navigation("Answers");
                 });
 
             modelBuilder.Entity("LaunchPad.Domain.Entities.SkillCategory", b =>

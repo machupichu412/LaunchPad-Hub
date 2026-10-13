@@ -24,6 +24,8 @@ export type DevPersona = { key: string; displayName: string; roles: AppRole[]; n
 export const DEV_PERSONAS: DevPersona[] = [
   { key: 'ops', displayName: 'Olivia Ops', roles: [AppRoles.ProgramOps], note: 'Program Ops' },
   { key: 'exec', displayName: 'Evan Exec', roles: [AppRoles.Executive], note: 'Executive' },
+  { key: 'sme', displayName: 'Taylor Expert', roles: [AppRoles.SubjectMatterExpert], note: 'SME — two assigned projects' },
+  { key: 'sme-new', displayName: 'Alex Expert', roles: [AppRoles.SubjectMatterExpert], note: 'SME — no projects yet' },
   { key: 'hm', displayName: 'Harper Hiring', roles: [AppRoles.HiringManager], note: 'Hiring Manager' },
   { key: 'sponsor', displayName: 'Sam Sponsor', roles: [AppRoles.Sponsor], note: 'Sponsor, owns the demo projects' },
   { key: 'sponsor2', displayName: 'Priya Shah', roles: [AppRoles.Sponsor], note: 'Sponsor, a different organization' },

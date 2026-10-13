@@ -10,6 +10,8 @@ public class AppUser
     public Guid EntraObjectId { get; set; }
     public string Upn { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+    // Last observed token role, used only for the Ops assignment directory; never authorizes access.
+    public bool IsSubjectMatterExpert { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
