@@ -24,6 +24,8 @@ The in-memory database resets on every API restart.
 | `ops` | ProgramOps | — |
 | `exec` | Executive | — |
 | `hm` | HiringManager | — |
+| `sme` | SubjectMatterExpert | Two assigned projects |
+| `sme-new` | SubjectMatterExpert | No assigned projects |
 | `sponsor` | Sponsor | Sam Sponsor: owns *Internal Dashboard Revamp* (active assignment for Casey), *Design System Refresh*, *Mentorship Program Refresh* (draft) |
 | `sponsor2` | Sponsor | Priya Shah: owns *Customer Insights AI Copilot*, *API Gateway Migration* (pending), *Cloud Cost Optimization* (fall cohort) |
 | `sponsor-new` | Sponsor | No sponsor profile |
@@ -129,3 +131,12 @@ The in-memory database resets on every API restart.
 | X8 | Cohort closed mid-flow | `ops`, `cand-c2`, `sponsor2` | Ops marks fall cohort Completed. | Marketplace, interest, project creation, and matching for that cohort stop. |
 | X9 | Concurrent decisions | two `ops` tabs, `sponsor`, `sponsor2` | Approve and deny the same assignment at once; two sponsors request one candidate at once. | Exactly one decision wins. *SQL only.* |
 | X10 | Status change during assignment | `ops`, `sponsor`, `cand2` | Ops sets Casey to No Hire while her assignment is active. | Defined outcome for the live assignment. |
+
+
+## Subject Matter Expert
+
+- Sign in as `sme`: My Projects & Questions shows two assigned projects. Select Internal Dashboard Revamp, read the seeded question, and reply with text plus a document or image. Verify the candidate can download the attachment.
+- Review a submitted deliverable, download it, and post technical feedback. Confirm the feedback appears in the project discussion and does not change performance ratings.
+- As Ops, use Project Support to add and remove SME assignments. The removed SME must receive 403 for that project's questions, deliverables, and attachment downloads.
+- Sign in as `sme-new`: verify the empty project state and that Community still permits posting. After the first sign-in, Ops can assign this SME.
+- Verify an SME cannot open the talent pipeline, hidden scores, sponsor project editor, or unrelated project discussions.

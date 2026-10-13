@@ -10,5 +10,6 @@ public static class Roles
     public const string ProgramOps = "LaunchPad.ProgramOps";
     public const string Sponsor = "LaunchPad.Sponsor";
     public const string Candidate = "LaunchPad.Candidate";
+    public const string SubjectMatterExpert = "LaunchPad.SubjectMatterExpert";
     public const string HiringManager = "LaunchPad.HiringManager";
 }

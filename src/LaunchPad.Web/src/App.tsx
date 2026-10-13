@@ -21,6 +21,7 @@ import { NotFound } from './features/shared/NotFound';
 // Route components load per role area rather than in the initial bundle: an Ops user
 // should not download the candidate, sponsor, and exec screens to see a dashboard.
 // The .then() mapping is because these are named exports, which lazy() cannot take directly.
+const ProjectSupport = lazy(() => import('./features/shared/ProjectSupport').then(m => ({ default: m.ProjectSupport })));
 const TalentPipeline = lazy(() => import('./features/ops/TalentPipeline').then(m => ({ default: m.TalentPipeline })));
 const ApprovalQueue = lazy(() => import('./features/ops/ApprovalQueue').then(m => ({ default: m.ApprovalQueue })));
 const OpsDashboard = lazy(() => import('./features/ops/OpsDashboard').then(m => ({ default: m.OpsDashboard })));
@@ -70,6 +71,7 @@ function AppContent() {
                 <Suspense fallback={<Spinner size="large" label="Loading..." />}>
                 <Routes>
                 <Route path="/" element={<RoleAwareHome />} />
+                <Route path="/project-support" element={<RequireRole allow={[AppRoles.SubjectMatterExpert, AppRoles.Candidate, AppRoles.ProgramOps]}><ProjectSupport /></RequireRole>} />
                 <Route path="/unauthorized" element={<Unauthorized />} />
                 <Route
                   path="/pipeline"
@@ -252,7 +254,7 @@ function AppContent() {
                 <Route
                   path="/community"
                   element={
-                    <RequireRole allow={[AppRoles.Candidate, AppRoles.ProgramOps, AppRoles.Sponsor]}>
+                    <RequireRole allow={[AppRoles.Candidate, AppRoles.ProgramOps, AppRoles.Sponsor, AppRoles.SubjectMatterExpert]}>
                       <Community />
                     </RequireRole>
                   }

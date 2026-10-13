@@ -61,7 +61,7 @@ builder.Services.AddAuthorization(options =>
     // Both must reject zero-role, app-only, and malformed-identity principals.
     var applicationUser = new AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
-        .RequireRole(Roles.Executive, Roles.ProgramOps, Roles.Sponsor, Roles.Candidate, Roles.HiringManager)
+        .RequireRole(Roles.Executive, Roles.ProgramOps, Roles.Sponsor, Roles.Candidate, Roles.HiringManager, Roles.SubjectMatterExpert)
         .RequireAssertion(ctx => ApplicationIdentity.IsValid(ctx.User))
         .Build();
     options.DefaultPolicy = applicationUser;

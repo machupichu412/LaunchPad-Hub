@@ -45,8 +45,9 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   // browser. This branch does not exist in a production build.
   if (isMockMode) {
     const method = init.method ?? 'GET';
-    const bodyForMock = typeof init.body === 'string' ? safeJsonParse(init.body) : undefined;
+    const bodyForMock = typeof init.body === 'string' ? safeJsonParse(init.body) : init.body instanceof FormData ? init.body : undefined;
     const { status, body } = await resolveMock(method, input, bodyForMock);
+    if (body instanceof Blob) return new Response(body, { status });
     return new Response(body === null || body === undefined ? null : JSON.stringify(body), {
       status,
       headers: { 'Content-Type': 'application/json' },

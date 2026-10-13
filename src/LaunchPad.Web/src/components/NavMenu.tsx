@@ -183,6 +183,9 @@ export function NavMenu() {
   return (
     <ul className={styles.list}>
       <NavLink to="/" icon={<HomeRegular />}>Home</NavLink>
+      {(activeRole === AppRoles.SubjectMatterExpert || activeRole === AppRoles.Candidate || activeRole === AppRoles.ProgramOps) &&
+        <NavLink to="/project-support" icon={<QuestionCircleRegular />}>{activeRole === AppRoles.SubjectMatterExpert ? 'My Projects & Questions' : 'Project Support'}</NavLink>}
+      {activeRole === AppRoles.SubjectMatterExpert && <NavLink to="/community" icon={<PeopleCommunityRegular />}>Community</NavLink>}
 
       {/* Every link below redirects straight back to /onboarding via
           RequireCandidateProfile until a profile exists — showing them before then

@@ -27,7 +27,7 @@ namespace LaunchPad.Api.Controllers;
 // The feed belongs to the people running and doing the program. The SPA has always kept
 // Executive and Hiring Manager out of /community; the API allowed them to read and post
 // anyway, and a client-side guard is not a control.
-[Authorize(Roles = $"{Roles.Candidate},{Roles.Sponsor},{Roles.ProgramOps}")]
+[Authorize(Roles = $"{Roles.Candidate},{Roles.Sponsor},{Roles.ProgramOps},{Roles.SubjectMatterExpert}")]
 public class CommunityController : ControllerBase
 {
     private const int DefaultPageSize = 20;
@@ -302,7 +302,7 @@ public class CommunityController : ControllerBase
             ? requestedRole
             : _currentUser.Roles.FirstOrDefault();
 
-        return role?.Replace("LaunchPad.", string.Empty);
+        return role == Roles.SubjectMatterExpert ? "SME" : role?.Replace("LaunchPad.", string.Empty);
     }
 
     private Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary AddErrors(FluentValidation.Results.ValidationResult result)
