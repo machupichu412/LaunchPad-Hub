@@ -50,7 +50,7 @@ launchpad/
 
 ## Authorization model
 
-- **Roles ride in the Entra token** (`roles` claim from app-role assignment), not raw Entra groups — group claims overflow past ~150 memberships and force a Graph lookup per request. Five roles: Executive, ProgramOps, Sponsor, Candidate, HiringManager.
+- **Roles ride in the Entra token** (`roles` claim from app-role assignment), not raw Entra groups — group claims overflow past ~150 memberships and force a Graph lookup per request. Six roles: Executive, ProgramOps, Sponsor, Candidate, HiringManager, SubjectMatterExpert.
 - **Groups are assigned to app roles**, never individuals assigned directly — onboarding/offboarding a cohort should be a group-membership operation.
 - **Role alone is not enough.** "Sponsor can manage their own project" needs resource-based authorization (`IAuthorizationHandler` + `OwnsProjectRequirement`/`OwnsCandidateProfileRequirement`), not just `[Authorize(Roles = "Sponsor")]`.
 - **Fail closed:** global `FallbackPolicy` requires an authenticated user by default; "Assignment required = Yes" on the Enterprise App means zero-role tokens can't sneak through a policy that was accidentally left off an endpoint.

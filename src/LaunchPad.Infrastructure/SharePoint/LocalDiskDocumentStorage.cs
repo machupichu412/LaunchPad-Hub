@@ -25,7 +25,7 @@ public sealed class LocalDiskDocumentStorage : IDocumentStorage
         var folderPath = ResolvePath(folderItemId) ?? throw new InvalidOperationException("Invalid folder ID.");
         Directory.CreateDirectory(folderPath);
 
-        var storedFileName = $"{Guid.NewGuid()}_{fileName}";
+        var storedFileName = $"{Guid.NewGuid():N}_{FolderNameSanitizer.Sanitize(fileName)}";
         var filePath = Path.Combine(folderPath, storedFileName);
 
         await using var fileStream = File.Create(filePath);

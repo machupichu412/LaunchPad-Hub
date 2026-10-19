@@ -3,9 +3,22 @@
   "logging": {
     "applicationInsights": {
       "samplingSettings": {
-        "isEnabled": true,
-        "excludedTypes": "Request"
+        "isEnabled": true
       }
+    }
+  },
+  "functionTimeout": "00:05:00",
+  "concurrency": {
+    "dynamicConcurrencyEnabled": false
+  },
+  "extensions": {
+    "serviceBus": {
+      "prefetchCount": 0,
+      "maxConcurrentCalls": 2,
+      "maxAutoLockRenewalDuration": "00:05:00"
+    },
+    "blobs": {
+      "maxDegreeOfParallelism": 1
     }
   }
 }

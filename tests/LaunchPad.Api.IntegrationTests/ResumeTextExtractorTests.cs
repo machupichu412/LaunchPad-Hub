@@ -298,4 +298,30 @@ public class ResumeTextExtractorTests
             base.Dispose(disposing);
         }
     }
+    [Fact]
+    public async Task DocxWithOversizedExpandedEntry_IsRejectedBeforeXmlParsing()
+    {
+        using var content = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(content, System.IO.Compression.ZipArchiveMode.Create, true))
+        {
+            using var entry = zip.CreateEntry("word/document.xml").Open();
+            await entry.WriteAsync(new byte[9 * 1024 * 1024]);
+        }
+        content.Position = 0;
+        var extractor = new LaunchPad.Infrastructure.Candidates.ResumeTextExtractor(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<LaunchPad.Infrastructure.Candidates.ResumeTextExtractor>.Instance);
+        (await extractor.ExtractTextAsync(content, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OversizedInput_StopsReadingAtByteLimit()
+    {
+        using var content = new MemoryStream(new byte[24 * 1024 * 1024]);
+        var extractor = new LaunchPad.Infrastructure.Candidates.ResumeTextExtractor(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<LaunchPad.Infrastructure.Candidates.ResumeTextExtractor>.Instance);
+        (await extractor.ExtractTextAsync(content, "application/pdf")).Should().BeNull();
+        content.Position.Should().BeLessThan(13 * 1024 * 1024);
+    }
+
 }

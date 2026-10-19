@@ -7,8 +7,11 @@ on:
     branches: [main]
 
 permissions:
-  id-token: write # OIDC federated credential — no stored Azure secrets
   contents: read
+
+concurrency:
+  group: launchpad-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-api:
@@ -25,10 +28,22 @@ jobs:
       - run: dotnet test LaunchPad.sln -c Release --no-build --collect:"XPlat Code Coverage"
       - run: dotnet publish src/LaunchPad.Api -c Release -o ./publish/api
       - run: dotnet publish src/LaunchPad.Functions -c Release -o ./publish/functions
+      # The schema change this build expects, as an idempotent script (each migration guarded by
+      # its own IF NOT EXISTS on __EFMigrationsHistory, so re-running it is a no-op). Generated
+      # here because it needs no database at all — applying it does, and this runner cannot
+      # reach one: SQL is private-endpoint-only in every environment and public network access
+      # is denied tenant-wide by policy (infra/modules/sql.bicep). See docs/runbooks/migrations.md.
+      - run: dotnet tool restore
+      - run: >-
+          dotnet ef migrations script --idempotent
+          --project src/LaunchPad.Infrastructure --startup-project src/LaunchPad.Api
+          --output ./publish/migrations.sql
       - uses: actions/upload-artifact@v4
         with: { name: api, path: ./publish/api }
       - uses: actions/upload-artifact@v4
         with: { name: functions, path: ./publish/functions }
+      - uses: actions/upload-artifact@v4
+        with: { name: migrations, path: ./publish/migrations.sql }
 
   build-web:
     runs-on: ubuntu-latest
@@ -37,6 +52,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: 'npm', cache-dependency-path: src/LaunchPad.Web/package-lock.json }
       - run: npm ci --prefix src/LaunchPad.Web
+      - run: npm audit --prefix src/LaunchPad.Web --audit-level=low
       - run: npm run lint --prefix src/LaunchPad.Web
       - run: npm run test --prefix src/LaunchPad.Web
       - run: npm run build --prefix src/LaunchPad.Web
@@ -56,9 +72,10 @@ jobs:
   # provide (the filtered unique index on Assignment, and the vCandidateRisk view).
   # Same idea as the local Tier-1 homelab setup (docker-compose.homelab.yml /
   # scripts/run-local-full.sh), but using the amd64 mssql/server image to match this
-  # runner's architecture instead of arm64 azure-sql-edge. Independent of build-api —
-  # not currently in deploy-dev/deploy-prod's `needs`, so it can't block a deploy
-  # while it's still new; promote it once it's proven stable.
+  # runner's architecture instead of arm64 azure-sql-edge. Independent of build-api, but
+  # now in both deploy jobs' `needs`: it is the only gate that can catch a regression in
+  # the filtered unique index or the views, so a deploy that skips it is a deploy with no
+  # coverage of the constraints the data model actually relies on.
   integration-real-sql:
     runs-on: ubuntu-latest
     services:
@@ -92,12 +109,19 @@ jobs:
         run: dotnet test tests/LaunchPad.Api.IntegrationTests -c Release --no-build --filter "FullyQualifiedName~SqlServerOnlyBehaviorTests"
 
   deploy-dev:
-    needs: [build-api, build-web, validate-infra]
+    permissions:
+      contents: read
+      id-token: write
+    needs: [build-api, build-web, validate-infra, integration-real-sql]
     if: github.ref == 'refs/heads/main'
     environment: development
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Require an operational alert recipient
+        env:
+          ALERT_EMAIL: ${{ vars.AZURE_ALERT_EMAIL }}
+        run: test -n "$ALERT_EMAIL"
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -108,10 +132,14 @@ jobs:
         with:
           resourceGroupName: rg-launchpad-dev
           template: infra/main.bicep
-          parameters: infra/params.dev.json
+          parameters: infra/params.dev.json alertEmail=${{ vars.AZURE_ALERT_EMAIL }}
       - uses: actions/download-artifact@v4
         with: { name: api, path: ./publish/api }
-      - run: dotnet ef database update --project src/LaunchPad.Infrastructure --startup-project src/LaunchPad.Api
+      # Migrations are NOT applied from here. This step used to run `dotnet ef database update`
+      # with no connection string configured, against a server this runner cannot reach
+      # (publicNetworkAccess: 'Disabled', denied tenant-wide by policy) — it could only ever
+      # fail. The schema change ships as the `migrations` artifact instead; an operator applies
+      # it from inside the VNet. See docs/runbooks/migrations.md.
       - uses: azure/webapps-deploy@v3
         with:
           # Not a literal name — main.bicep computes it from uniqueString(subscription().id,
@@ -121,6 +149,12 @@ jobs:
           app-name: ${{ steps.infra.outputs.appServiceName }}
           package: ./publish/api
       - uses: actions/download-artifact@v4
+        with: { name: functions, path: ./publish/functions }
+      - uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ steps.infra.outputs.functionAppName }}
+          package: ./publish/functions
+      - uses: actions/download-artifact@v4
         with: { name: web, path: ./dist }
       - uses: azure/static-web-apps-deploy@v1
         with:
@@ -129,12 +163,19 @@ jobs:
           skip_app_build: true
 
   deploy-prod:
-    needs: [build-api, build-web, validate-infra]
+    permissions:
+      contents: read
+      id-token: write
+    needs: [build-api, build-web, validate-infra, integration-real-sql]
     if: github.ref == 'refs/heads/main'
     environment: production # required reviewers gate here
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Require an operational alert recipient
+        env:
+          ALERT_EMAIL: ${{ vars.AZURE_ALERT_EMAIL }}
+        run: test -n "$ALERT_EMAIL"
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -145,10 +186,12 @@ jobs:
         with:
           resourceGroupName: rg-launchpad-prod
           template: infra/main.bicep
-          parameters: infra/params.prod.json
+          parameters: infra/params.prod.json alertEmail=${{ vars.AZURE_ALERT_EMAIL }}
       - uses: actions/download-artifact@v4
         with: { name: api, path: ./publish/api }
-      - run: dotnet ef database update --project src/LaunchPad.Infrastructure --startup-project src/LaunchPad.Api
+      # Not applied from here — same reason as deploy-dev. Prod is the case that matters most:
+      # apply the `migrations` artifact from inside the VNet BEFORE approving this deploy, or
+      # the new build meets a schema it doesn't expect. See docs/runbooks/migrations.md.
       - uses: azure/webapps-deploy@v3
         with:
           # Same reasoning as deploy-dev — not a literal name, read back from this run's
@@ -158,6 +201,12 @@ jobs:
           package: ./publish/api
       - run: ./scripts/smoke-test.sh https://${{ steps.infra.outputs.appServiceName }}-staging.azurewebsites.net
       - run: az webapp deployment slot swap -g rg-launchpad-prod -n ${{ steps.infra.outputs.appServiceName }} --slot staging
+      - uses: actions/download-artifact@v4
+        with: { name: functions, path: ./publish/functions }
+      - uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ steps.infra.outputs.functionAppName }}
+          package: ./publish/functions
       - uses: actions/download-artifact@v4
         with: { name: web, path: ./dist }
       - uses: azure/static-web-apps-deploy@v1

@@ -11,6 +11,8 @@ public sealed record DevPersona(string Key, Guid EntraObjectId, string DisplayNa
 /// </summary>
 public static class DevPersonas
 {
+    public static readonly DevPersona Sme = new("sme", Guid.Parse("00000000-0000-4000-8000-000000000050"), "Taylor Expert", "taylor.expert@example.com", [Roles.SubjectMatterExpert]);
+    public static readonly DevPersona SmeNew = new("sme-new", Guid.Parse("00000000-0000-4000-8000-000000000051"), "Alex Expert", "alex.expert@example.com", [Roles.SubjectMatterExpert]);
     public static readonly DevPersona Ops = new("ops", Guid.Parse("00000000-0000-4000-8000-000000000001"), "Olivia Ops", "olivia.ops@example.com", [Roles.ProgramOps]);
     public static readonly DevPersona Exec = new("exec", Guid.Parse("00000000-0000-4000-8000-000000000002"), "Evan Exec", "evan.exec@example.com", [Roles.Executive]);
     public static readonly DevPersona HiringManager = new("hm", Guid.Parse("00000000-0000-4000-8000-000000000003"), "Harper Hiring", "harper.hiring@example.com", [Roles.HiringManager]);
@@ -27,7 +29,7 @@ public static class DevPersonas
 
     public static readonly IReadOnlyDictionary<string, DevPersona> ByKey = new[]
     {
-        Ops, Exec, HiringManager, Sponsor, Sponsor2, SponsorNew,
+        Ops, Exec, HiringManager, Sme, SmeNew, Sponsor, Sponsor2, SponsorNew,
         Candidate1, Candidate2, Candidate3, CandidateCohort2, CandidateNew, OpsSponsor, NoRole,
     }.ToDictionary(p => p.Key, StringComparer.Ordinal);
 }

@@ -16,8 +16,15 @@
     <PackageReference Include="AspNetCore.HealthChecks.SqlServer" Version="9.0.0" />
     <PackageReference Include="AspNetCore.HealthChecks.AzureServiceBus" Version="9.0.0" />
     <!-- Local-demo-only: lets Program.cs swap in an in-memory DbContext when no SQL
-         Server is reachable. Never referenced by Infrastructure/Functions. -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.0" />
+         Server is reachable. Never referenced by Infrastructure/Functions.
+         Release keeps the compile asset (Program.cs still references UseInMemoryDatabase)
+         but drops the runtime DLL, so a demo-only provider never ships to an environment
+         that has real SQL. The path that uses it is Development-gated anyway (Program.cs
+         `useInMemoryForLocalDemo`); this just stops it being present to select at all.
+         Tests reference the package directly, so `dotnet test -c Release` is unaffected. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.0">
+      <ExcludeAssets Condition="'$(Configuration)' == 'Release'">runtime</ExcludeAssets>
+    </PackageReference>
     <!-- Required by `dotnet ef` when the API is the startup project for migrations. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
       <PrivateAssets>all</PrivateAssets>

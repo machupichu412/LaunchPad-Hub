@@ -1,4 +1,5 @@
 using System.Text;
+using System.IO.Compression;
 using System.Text.RegularExpressions;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -54,7 +55,17 @@ public sealed class ResumeTextExtractor : IResumeTextExtractor
         // then the whole stream is re-read, and neither PdfPig nor the Open XML SDK can work
         // with the non-seekable stream a blob download hands back.
         using var buffer = new MemoryStream();
-        await content.CopyToAsync(buffer, ct);
+        var chunk = new byte[81920];
+        int read;
+        while ((read = await content.ReadAsync(chunk, ct)) > 0)
+        {
+            if (buffer.Length + read > MaxBytes)
+            {
+                _logger.LogWarning("Resume extraction stopped at the input byte limit.");
+                return null;
+            }
+            await buffer.WriteAsync(chunk.AsMemory(0, read), ct);
+        }
 
         if (buffer.Length == 0)
         {
@@ -91,7 +102,7 @@ public sealed class ResumeTextExtractor : IResumeTextExtractor
             var raw = format switch
             {
                 ResumeFormat.Pdf => ExtractFromPdf(buffer, ct),
-                ResumeFormat.Docx => ExtractFromDocx(buffer),
+                ResumeFormat.Docx => ExtractFromDocx(buffer, ct),
                 _ => null,
             };
 
@@ -170,9 +181,19 @@ public sealed class ResumeTextExtractor : IResumeTextExtractor
         return builder.ToString();
     }
 
-    private static string ExtractFromDocx(Stream stream)
+    private static string ExtractFromDocx(Stream stream, CancellationToken ct)
     {
-        using var document = WordprocessingDocument.Open(stream, isEditable: false);
+        // Compressed upload size does not bound the XML the parser allocates.
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true))
+        {
+            if (archive.Entries.Count > 1000
+                || archive.Entries.Any(e => e.Length > 8 * 1024 * 1024)
+                || archive.Entries.Sum(e => e.Length) > 20 * 1024 * 1024)
+                return string.Empty;
+        }
+        stream.Position = 0;
+        using var document = WordprocessingDocument.Open(stream, isEditable: false,
+            new OpenSettings { MaxCharactersInPart = 2_000_000 });
         var body = document.MainDocumentPart?.Document?.Body;
         if (body is null) return string.Empty;
 
@@ -182,6 +203,7 @@ public sealed class ResumeTextExtractor : IResumeTextExtractor
         var builder = new StringBuilder();
         foreach (var paragraph in body.Descendants<Paragraph>())
         {
+            ct.ThrowIfCancellationRequested();
             var text = paragraph.InnerText;
             if (!string.IsNullOrWhiteSpace(text))
             {

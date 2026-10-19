@@ -288,6 +288,10 @@ const roleHomes: Record<AppRole, () => ReactNode> = {
   [AppRoles.ProgramOps]: ProgramOpsHome,
   [AppRoles.Executive]: ExecutiveHome,
   [AppRoles.HiringManager]: HiringManagerHome,
+  [AppRoles.SubjectMatterExpert]: () => <QuickLinkGrid links={[
+    { to: '/project-support', icon: <FolderRegular />, title: 'My Projects & Questions', description: 'Support assigned projects, answer questions, and review deliverables.' },
+    { to: '/community', icon: <PeopleCommunityRegular />, title: 'Community', description: 'Share technical expertise with the community.' },
+  ]} />,
 };
 
 // Each role sees a distinct home: a Candidate with no profile yet gets a direct path

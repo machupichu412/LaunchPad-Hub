@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using FluentValidation;
 using LaunchPad.Api.Authorization;
 using LaunchPad.Application.Assignments;
@@ -151,6 +152,8 @@ public class AssignmentsController : ControllerBase
     /// justified by the candidate being blocked on this exact action right now (see the plan's
     /// design-decisions section).</summary>
     [HttpPost("{id:int}/deliverables")]
+    [EnableRateLimiting(RateLimitPolicies.Upload)]
+    [RequestSizeLimit(110 * 1024 * 1024)]
     [Consumes("multipart/form-data")]
     [RequestFormLimits(MultipartBodyLengthLimit = 110 * 1024 * 1024)]
     public async Task<ActionResult<DeliverableDto>> SubmitDeliverable(
@@ -230,6 +233,7 @@ public class AssignmentsController : ControllerBase
     /// <summary>Proxies a deliverable's file content from SharePoint — mirrors
     /// CandidatesController.GetAvatar's shape. The client never talks to Graph directly.</summary>
     [HttpGet("{id:int}/deliverables/{deliverableId:int}/file")]
+    [EnableRateLimiting(RateLimitPolicies.Download)]
     public async Task<IActionResult> GetDeliverableFile(int id, int deliverableId, CancellationToken ct)
     {
         var auth = await AuthorizeAssignmentAsync(id, ct);

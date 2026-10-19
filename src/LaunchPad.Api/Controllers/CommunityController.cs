@@ -27,7 +27,7 @@ namespace LaunchPad.Api.Controllers;
 // The feed belongs to the people running and doing the program. The SPA has always kept
 // Executive and Hiring Manager out of /community; the API allowed them to read and post
 // anyway, and a client-side guard is not a control.
-[Authorize(Roles = $"{Roles.Candidate},{Roles.Sponsor},{Roles.ProgramOps}")]
+[Authorize(Roles = $"{Roles.Candidate},{Roles.Sponsor},{Roles.ProgramOps},{Roles.SubjectMatterExpert}")]
 public class CommunityController : ControllerBase
 {
     private const int DefaultPageSize = 20;
@@ -100,8 +100,10 @@ public class CommunityController : ControllerBase
     }
 
     [HttpPost("posts")]
+    [UploadWorkload]
     [Consumes("multipart/form-data")]
     [RequestFormLimits(MultipartBodyLengthLimit = 8 * 1024 * 1024)]
+    [RequestSizeLimit(9 * 1024 * 1024)]
     [EnableRateLimiting(RateLimitPolicies.CommunityWrite)]
     public async Task<ActionResult<CommunityPostDto>> CreatePost(
         [FromForm] string body, [FromForm] CommunityPostType postType, [FromForm] string? activeRole,
@@ -239,6 +241,7 @@ public class CommunityController : ControllerBase
     /// <summary>Proxies a post's image content — mirrors AssignmentsController.GetDeliverableFile's
     /// shape. The client never talks to Blob Storage directly.</summary>
     [HttpGet("posts/{id:int}/image")]
+    [EnableRateLimiting(RateLimitPolicies.MediaRead)]
     public async Task<IActionResult> GetPostImage(int id, CancellationToken ct)
     {
         var post = await _community.GetPostAsync(id, ct);
@@ -299,7 +302,7 @@ public class CommunityController : ControllerBase
             ? requestedRole
             : _currentUser.Roles.FirstOrDefault();
 
-        return role?.Replace("LaunchPad.", string.Empty);
+        return role == Roles.SubjectMatterExpert ? "SME" : role?.Replace("LaunchPad.", string.Empty);
     }
 
     private Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary AddErrors(FluentValidation.Results.ValidationResult result)

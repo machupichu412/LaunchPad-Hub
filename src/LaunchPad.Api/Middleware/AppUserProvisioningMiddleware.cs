@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using LaunchPad.Domain.Entities;
+using LaunchPad.Api.Authorization;
 using LaunchPad.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Web;
@@ -24,7 +25,7 @@ public sealed class AppUserProvisioningMiddleware
 
     public async Task InvokeAsync(HttpContext context, LaunchPadDbContext db)
     {
-        if (context.User.Identity?.IsAuthenticated == true)
+        if (ApplicationIdentity.IsValid(context.User) && context.Request.Path.StartsWithSegments("/api"))
         {
             // GetObjectId() (Microsoft.Identity.Web), not a raw FindFirstValue("oid") —
             // see the matching note in CurrentUser.cs. A mismatch here means this
@@ -34,18 +35,24 @@ public sealed class AppUserProvisioningMiddleware
             var oid = context.User.GetObjectId();
             if (oid is not null && Guid.TryParse(oid, out var entraObjectId))
             {
-                var exists = await db.AppUsers.AnyAsync(u => u.EntraObjectId == entraObjectId);
-                if (!exists)
+                var appUser = await db.AppUsers.SingleOrDefaultAsync(u => u.EntraObjectId == entraObjectId, context.RequestAborted);
+                if (appUser is null)
                 {
                     db.AppUsers.Add(new AppUser
                     {
                         EntraObjectId = entraObjectId,
+                        IsSubjectMatterExpert = context.User.IsInRole(LaunchPad.Application.Common.Roles.SubjectMatterExpert),
                         Upn = context.User.FindFirstValue(ClaimTypes.Upn)
                             ?? context.User.FindFirstValue("preferred_username")
                             ?? string.Empty,
                         DisplayName = context.User.FindFirstValue("name") ?? string.Empty
                     });
-                    await db.SaveChangesAsync();
+                    await db.SaveChangesAsync(context.RequestAborted);
+                }
+                else if (appUser.IsSubjectMatterExpert != context.User.IsInRole(LaunchPad.Application.Common.Roles.SubjectMatterExpert))
+                {
+                    appUser.IsSubjectMatterExpert = context.User.IsInRole(LaunchPad.Application.Common.Roles.SubjectMatterExpert);
+                    await db.SaveChangesAsync(context.RequestAborted);
                 }
             }
             else

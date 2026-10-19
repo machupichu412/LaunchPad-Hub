@@ -239,6 +239,9 @@ public static class LocalDemoSeeder
         var interest2 = new ProjectInterest { Candidate = candidates[0], Project = project3, Rating = 5 };
         var interest3 = new ProjectInterest { Candidate = candidates[2], Project = project2, Rating = 5 };
 
+        var expert = new AppUser { EntraObjectId = DevPersonas.Sme.EntraObjectId, Upn = DevPersonas.Sme.Upn, DisplayName = DevPersonas.Sme.DisplayName, IsSubjectMatterExpert = true };
+        db.AddRange(new ProjectExpert { Project = project, AppUser = expert }, new ProjectExpert { Project = project2, AppUser = expert });
+        db.Add(new ProjectQuestion { Project = project, Author = candidates[0].AppUser, Title = "How should we structure the dashboard API?", Body = "Could an SME advise on caching and refresh intervals?" });
         db.AddRange(categoryEngineering, categoryData, categoryDesign, categoryCloud);
         db.AddRange(program, cohort, skillCSharp, skillReact, skillPowerBi, sponsor, project, assignment);
         db.AddRange(candidates);

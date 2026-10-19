@@ -48,6 +48,7 @@ public static class InfrastructureServiceCollectionExtensions
                     .CommandTimeout(commandTimeoutSeconds)));
 
         services.AddScoped<ICandidateRepository, CandidateRepository>();
+        services.AddScoped<LaunchPad.Application.ProjectSupport.IProjectSupportRepository, ProjectSupportRepository>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<IAssignmentRepository, AssignmentRepository>();
         services.AddScoped<IReviewRepository, ReviewRepository>();

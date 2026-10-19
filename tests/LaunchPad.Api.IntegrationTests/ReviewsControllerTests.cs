@@ -194,6 +194,22 @@ public class ReviewsControllerTests : IClassFixture<CustomWebApplicationFactory>
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Theory]
+    [InlineData(ReviewType.CandidateOnSponsor)]
+    [InlineData(ReviewType.ProjectEval)]
+    public async Task Submit_AsCandidateWithOpsRole_CannotReviewAnotherCandidatesAssignment(ReviewType type)
+    {
+        var (_, _, assignmentId) = await SeedActiveAssignmentAsync();
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, $"{Roles.Candidate},{Roles.ProgramOps}");
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, Guid.NewGuid().ToString());
+        (await client.PostAsJsonAsync("/api/reviews", MakeRequest(assignmentId, type)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>().Reviews
+            .Any(r => r.AssignmentId == assignmentId).Should().BeFalse();
+    }
+
     [Fact]
     public async Task Submit_CandidateOnSponsor_AsSponsor_IsForbidden()
     {

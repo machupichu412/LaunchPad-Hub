@@ -22,9 +22,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Identity.Web;
 using Serilog;
-using System.Globalization;
 using System.Text.Json.Serialization;
-using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -59,6 +57,17 @@ if (useDevPersonas)
 // --- Authorization: policies, not scattered role strings ---
 builder.Services.AddAuthorization(options =>
 {
+    // Explicit [Authorize] uses DefaultPolicy; missing attributes use FallbackPolicy.
+    // Both must reject zero-role, app-only, and malformed-identity principals.
+    var applicationUser = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .RequireRole(Roles.Executive, Roles.ProgramOps, Roles.Sponsor, Roles.Candidate, Roles.HiringManager, Roles.SubjectMatterExpert)
+        .RequireAssertion(ctx => ApplicationIdentity.IsValid(ctx.User))
+        .Build();
+    options.DefaultPolicy = applicationUser;
+    options.FallbackPolicy = applicationUser;
+    options.AddPolicy(Policies.ApplicationUser, applicationUser);
+
     options.AddPolicy(Policies.ViewTalentPipeline, p =>
         p.RequireRole(Roles.Executive, Roles.ProgramOps, Roles.Sponsor, Roles.HiringManager));
 
@@ -95,9 +104,6 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(Policies.ViewOwnAssignment, p =>
         p.RequireRole(Roles.Candidate, Roles.Sponsor, Roles.ProgramOps, Roles.Executive));
 
-    // Fail closed: every endpoint requires auth unless explicitly opted out.
-    options.FallbackPolicy = new AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser().Build();
 });
 
 builder.Services.AddScoped<IAuthorizationHandler, OwnsProjectHandler>();
@@ -107,55 +113,9 @@ builder.Services.AddScoped<IAuthorizationHandler, ChangeAssignmentHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, OwnsCandidateProfileHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, OwnsAssignmentHandler>();
 
-// A lightweight per-user guard against spam/runaway-script posting — not a defense against
-// a determined abuser, just a cheap backstop appropriate for a ~2,000-user internal app. Only
-// applied to Community's post/comment creation (see [EnableRateLimiting] there), never to
-// reads or reactions.
-var globalPermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:PermitLimit") ?? 300;
-var globalWindowSeconds = builder.Configuration.GetValue<int?>("RateLimiting:WindowSeconds") ?? 60;
-
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
-    // A runaway client (a retry loop, a stuck refetchInterval) could previously issue
-    // unlimited requests against SQL. Deliberately generous — a normal session loads many
-    // queries per page — so this is a backstop, not a quota.
-    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: httpContext.User.GetObjectId()
-                ?? httpContext.Connection.RemoteIpAddress?.ToString()
-                ?? "anonymous",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                Window = TimeSpan.FromSeconds(globalWindowSeconds),
-                PermitLimit = globalPermitLimit,
-                QueueLimit = 0,
-            }));
-
-    // Without this a 429 tells the client to back off but not for how long, so the usual
-    // response is an immediate retry — which is what produced the 429.
-    options.OnRejected = (context, ct) =>
-    {
-        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
-        {
-            context.HttpContext.Response.Headers.RetryAfter =
-                ((int)retryAfter.TotalSeconds).ToString(NumberFormatInfo.InvariantInfo);
-        }
-
-        return ValueTask.CompletedTask;
-    };
-
-    options.AddPolicy(RateLimitPolicies.CommunityWrite, httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: httpContext.User.GetObjectId() ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                Window = TimeSpan.FromMinutes(1),
-                PermitLimit = 10,
-                QueueLimit = 0,
-            }));
-});
+// Admission control precedes authentication; user/workload quotas precede any SQL work.
+builder.Services.AddSingleton<RequestAdmissionMiddleware>();
+builder.Services.AddApplicationRateLimits(builder.Configuration);
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
@@ -236,7 +196,12 @@ else
     builder.Services.AddSingleton<ICommunityImageStorage, BlobCommunityImageStorage>();
 }
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        options.Filters.Add<LargeCollectionResultFilter>();
+        options.Filters.Add(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(1024 * 1024));
+        options.Filters.Add(new Microsoft.AspNetCore.Mvc.Authorization.AuthorizeFilter(Policies.ApplicationUser));
+    })
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddValidatorsFromAssemblyContaining<CreateProjectRequestValidator>();
 builder.Services.AddEndpointsApiExplorer();
@@ -274,6 +239,9 @@ if (!useInMemoryForLocalDemo)
         .AddAzureServiceBusQueue(
             builder.Configuration["ServiceBus:Namespace"] ?? string.Empty,
             builder.Configuration["ServiceBus:QueueName"] ?? string.Empty,
+            new Azure.Identity.DefaultAzureCredential(),
+            configure: options => options.UsePeekMode = false,
+            timeout: TimeSpan.FromSeconds(5),
             name: "servicebus",
             tags: new[] { "ready" });
 }
@@ -287,7 +255,7 @@ builder.Services.AddCors(options =>
         // Without this, browsers hide WWW-Authenticate from fetch()'s Response object
         // even when the API sends it — the exact validation failure reason (invalid
         // audience, expired token, etc.) becomes invisible client-side.
-        .WithExposedHeaders("WWW-Authenticate"));
+        .WithExposedHeaders("WWW-Authenticate", "Retry-After", "X-Correlation-Id"));
 });
 
 var app = builder.Build();
@@ -309,24 +277,27 @@ app.UseMiddleware<CorrelationIdMiddleware>();
 // After the correlation id so the handler can put it in the problem body; in Development
 // UseDeveloperExceptionPage is registered above and wins, keeping stack traces local.
 app.UseExceptionHandler();
+app.UseMiddleware<SecurityHeadersMiddleware>();
+if (!app.Environment.IsDevelopment()) app.UseHsts();
+app.UseMiddleware<RequestAdmissionMiddleware>();
 app.UseResponseCompression();
 app.UseCors("Spa");
 app.UseAuthentication();
-app.UseMiddleware<AppUserProvisioningMiddleware>();
-app.UseAuthorization();
 app.UseRateLimiter();
+app.UseAuthorization();
+app.UseMiddleware<AppUserProvisioningMiddleware>();
 
 app.MapControllers();
 
 app.MapHealthChecks("/healthz", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     Predicate = _ => false
-}).AllowAnonymous();
+}).AllowAnonymous().DisableRateLimiting();
 
 app.MapHealthChecks("/healthz/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("ready")
-}).AllowAnonymous();
+}).AllowAnonymous().RequireRateLimiting(RateLimitPolicies.Readiness);
 
 app.Run();
 

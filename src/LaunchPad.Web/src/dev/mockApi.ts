@@ -1,3 +1,4 @@
+import type { Question, Expert } from '../api/projectSupport';
 /**
  * Synthetic fixture data + a tiny route resolver for mock mode (see mockMode.ts).
  * Every shape here mirrors api/types.ts exactly, so pages render as they would
@@ -336,7 +337,45 @@ const executiveDashboardByCohort: Record<number, ExecutiveDashboardDto> = {
 type Json = unknown;
 type Handler = (match: RegExpMatchArray, url: URL, method: string, body: unknown) => Json | undefined;
 
+const supportExperts: Expert[] = [{ appUserId: 50, displayName: 'Taylor Expert' }, { appUserId: 51, displayName: 'Alex Expert' }];
+const projectExperts: Record<number, Expert[]> = { 1: [supportExperts[0]], 2: [supportExperts[0]] };
+const supportQuestions: Record<number, Question[]> = { 1: [{ projectQuestionId: 1, title: 'How should we cache the dashboard data?', body: 'We need fresh metrics without overloading the API. What approach would you recommend?', authorName: 'Priya Natarajan', createdUtc: hoursAgo(5), deliverableId: null, answers: [{ projectAnswerId: 1, authorName: 'Taylor Expert', body: 'Start with a short cache per project, and invalidate it when source data changes.', createdUtc: hoursAgo(2), fileName: null }] }] };
+const supportFiles = new Map<number, File>();
+let nextQuestion = 2;
+let nextAnswer = 2;
+
 const routes: { method: string; pattern: RegExp; handler: Handler }[] = [
+  { method: 'GET', pattern: /^\/api\/project-support\/projects$/, handler: () => projects.map(p => ({ projectId: p.projectId, name: p.name, description: p.description })) },
+  { method: 'GET', pattern: /^\/api\/project-support\/experts$/, handler: () => supportExperts },
+  { method: 'GET', pattern: /^\/api\/project-support\/projects\/(\d+)\/experts$/, handler: m => projectExperts[Number(m[1])] ?? [] },
+  { method: 'PUT', pattern: /^\/api\/project-support\/projects\/(\d+)\/experts\/(\d+)$/, handler: m => {
+    const assigned = projectExperts[Number(m[1])] ??= [];
+    const expert = supportExperts.find(e => e.appUserId === Number(m[2]));
+    if (expert && !assigned.some(e => e.appUserId === expert.appUserId)) assigned.push(expert);
+    return {};
+  } },
+  { method: 'DELETE', pattern: /^\/api\/project-support\/projects\/(\d+)\/experts\/(\d+)$/, handler: m => {
+    projectExperts[Number(m[1])] = (projectExperts[Number(m[1])] ?? []).filter(e => e.appUserId !== Number(m[2])); return {};
+  } },
+  { method: 'GET', pattern: /^\/api\/project-support\/projects\/(\d+)\/questions$/, handler: m => supportQuestions[Number(m[1])] ?? [] },
+  { method: 'POST', pattern: /^\/api\/project-support\/projects\/(\d+)\/questions$/, handler: (m, _u, _method, body) => {
+    const request = body as { title: string; body: string; deliverableId?: number };
+    const question: Question = { projectQuestionId: nextQuestion++, title: request.title, body: request.body, deliverableId: request.deliverableId ?? null, authorName: request.deliverableId ? 'Taylor Expert' : 'Priya Natarajan', createdUtc: now(), answers: [] };
+    (supportQuestions[Number(m[1])] ??= []).unshift(question); return { projectQuestionId: question.projectQuestionId };
+  } },
+  { method: 'POST', pattern: /^\/api\/project-support\/projects\/(\d+)\/questions\/(\d+)\/answers$/, handler: (m, _u, _method, body) => {
+    const question = supportQuestions[Number(m[1])]?.find(q => q.projectQuestionId === Number(m[2]));
+    if (!question || !(body instanceof FormData)) return undefined;
+    const id = nextAnswer++;
+    const file = body.get('file');
+    if (file instanceof File) supportFiles.set(id, file);
+    question.answers.push({ projectAnswerId: id, authorName: 'Taylor Expert', body: String(body.get('body') ?? ''), createdUtc: now(), fileName: file instanceof File ? file.name : null });
+    return { projectAnswerId: id };
+  } },
+  { method: 'GET', pattern: /^\/api\/project-support\/projects\/\d+\/questions\/\d+\/answers\/(\d+)\/file$/, handler: m => supportFiles.get(Number(m[1])) },
+  { method: 'GET', pattern: /^\/api\/project-support\/projects\/(\d+)\/deliverables$/, handler: m => Number(m[1]) === 1 ? [{ deliverableId: 1, title: 'Dashboard technical notes', fileName: 'technical-notes.txt', candidateName: 'Priya Natarajan', submittedUtc: daysAgo(1) }] : [] },
+  { method: 'GET', pattern: /^\/api\/project-support\/projects\/1\/deliverables\/1\/file$/, handler: () => new Blob(['Dashboard technical notes: cache metrics per project and refresh every minute.'], { type: 'text/plain' }) },
+
   { method: 'GET', pattern: /^\/api\/candidates\/me$/, handler: () => meCandidate },
   { method: 'GET', pattern: /^\/api\/candidates\/me\/dashboard$/, handler: () => dashboard },
   { method: 'GET', pattern: /^\/api\/candidates\/cohort\/\d+$/, handler: () => rosterCandidates },

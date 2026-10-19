@@ -18,6 +18,7 @@ public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationScheme
 {
     public const string SchemeName = "Test";
     public const string RolesHeader = "X-Test-Roles";
+    public const string ScopesHeader = "X-Test-Scopes";
     public const string OidHeader = "X-Test-Oid";
 
     public TestAuthHandler(
@@ -42,6 +43,7 @@ public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationScheme
         var roles = rolesHeader.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries);
         var claims = new List<Claim>
         {
+            new("scp", Request.Headers.TryGetValue(ScopesHeader, out var scopes) ? (scopes.ToString() == "none" ? "" : scopes.ToString()) : "access_as_user"),
             new("oid", oid),
             new(ClaimTypes.Name, "Test User")
         };

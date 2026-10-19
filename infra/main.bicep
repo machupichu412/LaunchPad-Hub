@@ -14,6 +14,10 @@ param sqlAadAdminLogin string
 @description('Email address that receives operational alerts. Empty (the default in non-prod) deploys no action group and no alerts.')
 param alertEmail string = ''
 
+@description('Monthly resource-group budget in billing currency. Alerts do not stop spending.')
+@minValue(1)
+param monthlyBudget int = 1000
+
 var isProd = env == 'prod'
 
 // --- Networking ---
@@ -92,7 +96,9 @@ module serviceBus 'modules/serviceBus.bicep' = {
   params: {
     env: env
     location: location
-    publicNetworkAccess: !isProd
+    privateNetworking: isProd
+    privateEndpointSubnetId: network.outputs.peSubnetId
+    privateDnsZoneId: network.outputs.serviceBusDnsZoneId
   }
 }
 
@@ -222,6 +228,15 @@ module alerts 'modules/alerts.bicep' = {
     appServiceId: appService.outputs.appServiceId
     sqlDatabaseId: sql.outputs.sqlDatabaseId
     serviceBusNamespaceId: serviceBus.outputs.namespaceId
+  }
+}
+
+module budget 'modules/budget.bicep' = {
+  name: 'budget'
+  params: {
+    env: env
+    amount: monthlyBudget
+    alertEmail: alertEmail
   }
 }
 

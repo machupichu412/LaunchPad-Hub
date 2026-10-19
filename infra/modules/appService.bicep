@@ -40,7 +40,31 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   }
   sku: {
     name: skuName
+    capacity: 1
   }
+}
+
+var runtimeSiteConfig = {
+  linuxFxVersion: 'DOTNETCORE|9.0'
+  minTlsVersion: '1.2'
+  scmMinTlsVersion: '1.2'
+  ftpsState: 'Disabled'
+  http20Enabled: true
+  alwaysOn: true
+  healthCheckPath: '/healthz'
+  // All outbound traffic routes through the VNet, not just RFC1918 ranges — SQL/Key
+  // Vault/Storage are reachable only via their private endpoints now.
+  vnetRouteAllEnabled: true
+  appSettings: [
+    { name: 'Auth__UseDevPersonas', value: 'false' }
+    { name: 'Database__UseInMemoryForLocalDemo', value: 'false' }
+    { name: 'ASPNETCORE_ENVIRONMENT', value: env == 'prod' ? 'Production' : 'Staging' }
+    { name: 'ConnectionStrings__Sql', value: 'Server=tcp:${sqlServerFqdn},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;' }
+    { name: 'KeyVault__Uri', value: keyVaultUri }
+    { name: 'ApplicationInsights__ConnectionString', value: appInsightsConnectionString }
+    { name: 'ServiceBus__Namespace', value: '${serviceBusNamespace}.servicebus.windows.net' }
+    { name: 'Storage__AccountUrl', value: storageAccountBlobEndpoint }
+  ]
 }
 
 resource appService 'Microsoft.Web/sites@2023-12-01' = {
@@ -54,22 +78,7 @@ resource appService 'Microsoft.Web/sites@2023-12-01' = {
     serverFarmId: appServicePlan.id
     httpsOnly: true
     virtualNetworkSubnetId: vnetIntegrationSubnetId
-    siteConfig: {
-      linuxFxVersion: 'DOTNETCORE|9.0'
-      alwaysOn: true
-      healthCheckPath: '/healthz'
-      // All outbound traffic routes through the VNet, not just RFC1918 ranges — SQL/Key
-      // Vault/Storage are reachable only via their private endpoints now.
-      vnetRouteAllEnabled: true
-      appSettings: [
-        { name: 'ASPNETCORE_ENVIRONMENT', value: env == 'prod' ? 'Production' : (env == 'test' ? 'Staging' : 'Development') }
-        { name: 'ConnectionStrings__Sql', value: 'Server=tcp:${sqlServerFqdn},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;' }
-        { name: 'KeyVault__Uri', value: keyVaultUri }
-        { name: 'ApplicationInsights__ConnectionString', value: appInsightsConnectionString }
-        { name: 'ServiceBus__Namespace', value: '${serviceBusNamespace}.servicebus.windows.net' }
-        { name: 'Storage__AccountUrl', value: storageAccountBlobEndpoint }
-      ]
-    }
+    siteConfig: runtimeSiteConfig
   }
 }
 
@@ -86,12 +95,12 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2023-12-01' = if (deployStagingS
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
-    siteConfig: appService.properties.siteConfig
+    siteConfig: runtimeSiteConfig
   }
 }
 
 output appServiceId string = appService.id
 output appServiceName string = appService.name
 output appServicePrincipalId string = appService.identity.principalId
-output stagingSlotPrincipalId string = deployStagingSlot ? stagingSlot.identity.principalId : ''
+output stagingSlotPrincipalId string = deployStagingSlot ? stagingSlot!.identity.principalId : ''
 output defaultHostName string = appService.properties.defaultHostName

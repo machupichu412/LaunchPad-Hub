@@ -541,13 +541,21 @@ App roles are declared in the API's manifest and land in the token as `roles` cl
     "description": "Read-only talent pipeline.",
     "allowedMemberTypes": ["User"],
     "isEnabled": true
+  },
+  {
+    "id": "6b1d3f2a-0000-4000-8000-000000000006",
+    "displayName": "Subject Matter Expert",
+    "value": "LaunchPad.SubjectMatterExpert",
+    "description": "Supports assigned projects with technical answers and deliverable reviews; participates in community.",
+    "allowedMemberTypes": ["User"],
+    "isEnabled": true
   }
 ]
 ```
 
 ### 6.3 Assign roles to *groups*, never to individuals
 
-Create five Entra security groups and assign each to the corresponding app role via **Enterprise Applications → LaunchPad-API → Users and groups**.
+Create six Entra security groups and assign each to the corresponding app role via **Enterprise Applications → LaunchPad-API → Users and groups**.
 
 | Entra group | App role | Membership managed by |
 |---|---|---|
@@ -556,10 +564,11 @@ Create five Entra security groups and assign each to the corresponding app role 
 | `SG-LaunchPad-Sponsor` | `LaunchPad.Sponsor` | Dynamic or Ops-managed |
 | `SG-LaunchPad-Candidate` | `LaunchPad.Candidate` | Automated at cohort onboarding |
 | `SG-LaunchPad-HiringManager` | `LaunchPad.HiringManager` | Ops-managed |
+| `SG-LaunchPad-SubjectMatterExpert` | `LaunchPad.SubjectMatterExpert` | Ops-managed |
 
 Group-based assignment requires Entra ID P1. Two operational benefits: onboarding a cohort becomes one group-membership bulk operation, and offboarding is guaranteed to revoke access everywhere.
 
-> **Token bloat guard:** use app-role assignment (`roles` claim), not raw group IDs (`groups` claim). Group claims can overflow past ~150 memberships and force a Graph lookup on every request. App roles emit exactly the five values you care about.
+> **Token bloat guard:** use app-role assignment (`roles` claim), not raw group IDs (`groups` claim). Group claims can overflow past ~150 memberships and force a Graph lookup on every request. App roles emit exactly the six values you care about.
 
 ### 6.4 Enable user assignment required
 
@@ -921,7 +930,7 @@ jobs:
 
 | Phase | Duration | Deliverable | Exit criteria |
 |---|---|---|---|
-| **0 — Foundation** | 1 week | Bicep IaC for all three environments; both Entra app registrations with app roles; the five security groups; CI/CD pipeline deploying a "hello world" API and SPA | An authenticated user can hit a role-protected endpoint and see their roles echoed back |
+| **0 — Foundation** | 1 week | Bicep IaC for all three environments; both Entra app registrations with app roles; the six security groups; CI/CD pipeline deploying a "hello world" API and SPA | An authenticated user can hit a role-protected endpoint and see their roles echoed back |
 | **1 — Data & identity** | 2 weeks | Full EF Core model + migrations; JIT `AppUser` provisioning; authorization policies and handlers; per-role integration test suite | Every table exists; each role's access is proven by a passing test |
 | **2 — Core CRUD** | 3 weeks | Candidate profile, Sponsor, Project, Cohort management; blob upload with SAS; Fluent UI shell with role-aware navigation | Ops can run a cohort end to end manually |
 | **3 — Matching & approvals** | 3 weeks | Matching engine in `LaunchPad.Application` (pure, unit-tested); Service Bus + Function orchestration; top-3 matches with rationale; two-stage approval workflow | A project posts, matches generate, sponsor recommends, ops approves |
@@ -964,3 +973,10 @@ Run both in parallel for one cohort rather than cutting over cold.
 ---
 
 *Prepared for the LaunchPad platform re-architecture. Section 6 (Entra role security) and Section 9 (hosting topology) are the two areas to socialize with your security reviewer earliest — they gate the Service Tree registration and Prod approval.*
+
+
+### Subject Matter Expert project support
+
+Apply the `AddProjectSupport` database migration and add the sixth app role above to each environment's API app registration before enabling SMEs. Assign the SME group to that role. SMEs appear in the Ops assignment directory after their first authenticated API request; the observed-role directory flag is not an authorization grant. Every SME request requires the role in the current token and an explicit project assignment.
+
+Program Ops manages zero-to-many project memberships in **Project Support**. Candidates with OpsApproved, Active, or Completed assignments can participate in their project discussions; proposed, sponsor-only-approved, and withdrawn assignments grant no access. SMEs can download assigned-project deliverables and post technical feedback discussions. These discussions are shared with project participants and do not change hidden ratings or deliverable status. Replies support one document/image attachment per reply (10 MB); files use the existing project SharePoint folder and authenticated download proxies. Removing an SME assignment removes project and file access on subsequent requests.

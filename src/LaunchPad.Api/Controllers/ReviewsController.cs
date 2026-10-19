@@ -84,7 +84,8 @@ public class ReviewsController : ControllerBase
         }
         else
         {
-            if (!User.IsInRole(Roles.Candidate)) return Forbid();
+            if (!User.IsInRole(Roles.Candidate)
+                || assignment.Candidate.AppUser.EntraObjectId != _currentUser.EntraObjectId) return Forbid();
             var auth = await _authorization.AuthorizeAsync(User, assignment, Policies.ManageOwnAssignment);
             if (!auth.Succeeded) return Forbid();
             submittedByAppUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);

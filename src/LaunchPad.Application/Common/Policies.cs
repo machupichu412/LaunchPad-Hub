@@ -2,6 +2,7 @@ namespace LaunchPad.Application.Common;
 
 public static class Policies
 {
+    public const string ApplicationUser = nameof(ApplicationUser);
     public const string ViewTalentPipeline = nameof(ViewTalentPipeline);
     public const string ViewHiddenScores = nameof(ViewHiddenScores);
     public const string ApproveMatch = nameof(ApproveMatch);

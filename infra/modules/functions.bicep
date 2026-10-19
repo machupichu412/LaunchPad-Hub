@@ -42,6 +42,7 @@ resource functionsStorageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' 
   properties: {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
+    allowSharedKeyAccess: false
     // Public access is disabled in every environment, not just Prod — Microsoft's
     // internal CloudGov policy set denies public network access tenant-wide.
     publicNetworkAccess: 'Disabled'
@@ -157,10 +158,14 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
       }
       scaleAndConcurrency: {
         instanceMemoryMB: 2048
-        maximumInstanceCount: 100
+        // Flex Consumption currently permits no maximum below 40.
+        maximumInstanceCount: 40
       }
     }
     siteConfig: {
+      minTlsVersion: '1.2'
+      scmMinTlsVersion: '1.2'
+      ftpsState: 'Disabled'
       appSettings: [
         { name: 'AzureWebJobsStorage__accountName', value: functionsStorageAccount.name }
         { name: 'ConnectionStrings__Sql', value: 'Server=tcp:${sqlServerFqdn},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;' }
