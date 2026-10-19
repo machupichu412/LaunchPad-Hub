@@ -69,7 +69,7 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
     }
 
     [Fact]
-    public async Task Create_WithANewFreeTextSkillName_AssignsItToTheUncategorizedFallbackCategory()
+    public async Task Create_WithASkillNameNobodyHasDefined_IsRejectedInsteadOfGrowingTheTaxonomy()
     {
         var (ownerOid, _, cohortId) = await SeedProjectAsync();
 
@@ -87,9 +87,13 @@ public class ProjectsControllerTests : IClassFixture<CustomWebApplicationFactory
         };
         var response = await client.PostAsJsonAsync("/api/projects", request);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-        var dto = await response.Content.ReadFromJsonAsync<ProjectDto>(TestJsonOptions.Default);
-        dto!.RequiredSkills.Should().ContainSingle(s => s.SkillName == skillName && s.Category == "Uncategorized");
+        // A typo here used to add a permanent "Uncategorized" skill to everyone's picker.
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain(skillName);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        (await db.Skills.AnyAsync(s => s.Name == skillName)).Should().BeFalse();
     }
 
     [Fact]

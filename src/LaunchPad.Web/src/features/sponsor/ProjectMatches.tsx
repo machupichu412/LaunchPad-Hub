@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Badge, Body1, Button, Card, Caption1, Spinner, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
+import { Body1, Button, Card, Caption1, Spinner, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { CheckmarkRegular, DismissRegular } from '@fluentui/react-icons';
 import { getProjectMatches, recommendMatch, rejectMatch } from '../../api/matches';
 import { PageHeader } from '../../components/PageHeader';
@@ -69,11 +69,6 @@ export function ProjectMatches() {
               <Body1>
                 <strong>{match.candidateName}</strong>
               </Body1>
-              {match.matchScore != null && (
-                <Badge appearance="tint" color="brand" style={{ marginLeft: tokens.spacingHorizontalXS }}>
-                  {match.matchScore}% match
-                </Badge>
-              )}
               {match.matchRationale && (
                 <Caption1 style={{ display: 'block', marginTop: tokens.spacingVerticalXS }}>{match.matchRationale}</Caption1>
               )}

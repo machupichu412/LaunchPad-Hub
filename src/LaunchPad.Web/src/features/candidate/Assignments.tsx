@@ -70,11 +70,6 @@ export function Assignments() {
           {assignment.projectDescription && <Body1>{assignment.projectDescription}</Body1>}
           <div style={{ marginTop: tokens.spacingVerticalS }}>
             <Badge appearance="tint" color="brand">{assignment.status}</Badge>
-            {assignment.matchScore != null && (
-              <Badge appearance="tint" color="success" style={{ marginLeft: tokens.spacingHorizontalXS }}>
-                {assignment.matchScore}% match
-              </Badge>
-            )}
           </div>
           {assignment.matchRationale && (
             <Caption1 style={{ display: 'block', marginTop: tokens.spacingVerticalS }}>

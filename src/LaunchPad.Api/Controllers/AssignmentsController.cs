@@ -30,6 +30,7 @@ public class AssignmentsController : ControllerBase
     private readonly IValidator<SubmitDeliverableRequest> _deliverableValidator;
     private readonly IFolderProvisioner _folderProvisioner;
     private readonly IDocumentStorage _documentStorage;
+    private readonly IAuditLog _auditLog;
 
     public AssignmentsController(
         IAssignmentRepository assignments,
@@ -40,7 +41,8 @@ public class AssignmentsController : ControllerBase
         IValidator<CreateTodoRequest> createTodoValidator,
         IValidator<SubmitDeliverableRequest> deliverableValidator,
         IFolderProvisioner folderProvisioner,
-        IDocumentStorage documentStorage)
+        IDocumentStorage documentStorage,
+        IAuditLog auditLog)
     {
         _assignments = assignments;
         _candidates = candidates;
@@ -51,6 +53,7 @@ public class AssignmentsController : ControllerBase
         _deliverableValidator = deliverableValidator;
         _folderProvisioner = folderProvisioner;
         _documentStorage = documentStorage;
+        _auditLog = auditLog;
     }
 
     /// <summary>The signed-in Candidate's own active assignment — resolved server-side, never a client-supplied ID.</summary>
@@ -88,8 +91,15 @@ public class AssignmentsController : ControllerBase
 
         if (User.IsInRole(Roles.Candidate)) return Forbid();
 
-        var auth = await AuthorizeAssignmentAsync(id, ct);
-        if (auth.Result is not null) return auth.Result;
+        var (assignment, authResult) = await AuthorizeAssignmentAsync(id, Policies.ChangeOwnAssignment, ct);
+        if (authResult is not null) return authResult;
+
+        // To-dos are the plan for work that is happening or about to: an assignment that was
+        // withdrawn or has already finished can't take new ones.
+        if (assignment!.Status is not (AssignmentStatus.OpsApproved or AssignmentStatus.Active))
+        {
+            return BadRequest("To-dos can only be added to an approved or active assignment.");
+        }
 
         var todo = new ProjectTodo
         {
@@ -112,7 +122,7 @@ public class AssignmentsController : ControllerBase
         var validation = await _todoValidator.ValidateAsync(request, ct);
         if (!validation.IsValid) return ValidationProblem(AddErrors(validation));
 
-        var auth = await AuthorizeAssignmentAsync(id, ct);
+        var auth = await AuthorizeAssignmentAsync(id, Policies.ChangeOwnAssignment, ct);
         if (auth.Result is not null) return auth.Result;
 
         var todo = await _assignments.GetTodoAsync(id, todoId, ct);
@@ -158,7 +168,15 @@ public class AssignmentsController : ControllerBase
         var validation = await _deliverableValidator.ValidateAsync(request, ct);
         if (!validation.IsValid) return ValidationProblem(AddErrors(validation));
 
-        var (assignment, authResult) = await AuthorizeAssignmentAsync(id, ct);
+        // A deliverable is the candidate's own work product, so a sponsor uploading one to
+        // their candidate's assignment would put words in that candidate's mouth. Ops keeps
+        // access for the "they emailed it to me" case.
+        if (User.IsInRole(Roles.Sponsor) && !User.IsInRole(Roles.ProgramOps))
+        {
+            return Forbid();
+        }
+
+        var (assignment, authResult) = await AuthorizeAssignmentAsync(id, Policies.ChangeOwnAssignment, ct);
         if (authResult is not null) return authResult;
 
         ProjectTodo? attachedTodo = null;
@@ -177,7 +195,17 @@ public class AssignmentsController : ControllerBase
             candidate.SharePointFolderWebUrl = webUrl;
         }
 
+        // The extension passed validation, but the extension is the uploader's word. Read the
+        // first bytes and make the file prove it before storing something other people download.
         await using var stream = file!.OpenReadStream();
+        var header = new byte[FileSignatures.HeaderBytes];
+        var headerLength = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct);
+        if (!FileSignatures.MatchesExtension(header.AsSpan(0, headerLength), Path.GetExtension(request.FileName)))
+        {
+            return BadRequest("That file's contents don't match its extension.");
+        }
+        stream.Position = 0;
+
         var sharePointItemId = await _documentStorage.SaveAsync(
             candidate.SharePointFolderId, request.FileName, stream, request.ContentType, request.ContentLength, ct);
 
@@ -227,12 +255,63 @@ public class AssignmentsController : ControllerBase
         return Ok(reviews.Select(r => r.ToCandidateEvaluationDto()).ToArray());
     }
 
-    private async Task<(Assignment? Assignment, ActionResult? Result)> AuthorizeAssignmentAsync(int assignmentId, CancellationToken ct)
+    /// <summary>Starts or finishes an assignment ahead of (or behind) its dates. The nightly
+    /// AssignmentLifecycleFunction does this on schedule; this is the manual override for when
+    /// the calendar and reality disagree, and it is Ops's call, not the sponsor's.</summary>
+    [HttpPost("{id:int}/status")]
+    [Authorize(Roles = Roles.ProgramOps)]
+    public async Task<ActionResult<MyAssignmentDto>> SetLifecycleStatus(int id, SetAssignmentStatusRequest request, CancellationToken ct)
+    {
+        if (request.Status is not (AssignmentStatus.Active or AssignmentStatus.Completed))
+        {
+            return BadRequest("Only Active and Completed can be set here — approvals go through the matching queue.");
+        }
+
+        var assignment = await _assignments.GetWithOwnershipDetailsAsync(id, ct);
+        if (assignment is null) return NotFound();
+
+        var allowed = request.Status == AssignmentStatus.Active
+            ? assignment.Status == AssignmentStatus.OpsApproved
+            : assignment.Status == AssignmentStatus.Active;
+        if (!allowed)
+        {
+            return BadRequest(request.Status == AssignmentStatus.Active
+                ? "Only an Ops-approved assignment can be started."
+                : "Only an active assignment can be completed.");
+        }
+
+        var previousStatus = assignment.Status;
+        assignment.Status = request.Status;
+        if (request.Status == AssignmentStatus.Active)
+        {
+            assignment.StartDate ??= DateOnly.FromDateTime(DateTime.UtcNow);
+        }
+        else
+        {
+            assignment.EndDate ??= DateOnly.FromDateTime(DateTime.UtcNow);
+        }
+
+        await _assignments.SaveChangesAsync(ct);
+        await _auditLog.RecordAsync(
+            _currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(),
+            request.Status == AssignmentStatus.Active ? "Activated" : "Completed",
+            reason: request.Reason, data: new { From = previousStatus, To = request.Status }, ct: ct);
+
+        var todos = await _assignments.GetTodosAsync(assignment.AssignmentId, ct);
+        return Ok(assignment.ToMyAssignmentDto(todos.Count, todos.Count(t => t.Status == TodoStatus.Completed)));
+    }
+
+    /// <summary>Reading an assignment's to-dos, deliverables, and evaluations.</summary>
+    private Task<(Assignment? Assignment, ActionResult? Result)> AuthorizeAssignmentAsync(int assignmentId, CancellationToken ct) =>
+        AuthorizeAssignmentAsync(assignmentId, Policies.ManageOwnAssignment, ct);
+
+    private async Task<(Assignment? Assignment, ActionResult? Result)> AuthorizeAssignmentAsync(
+        int assignmentId, string policy, CancellationToken ct)
     {
         var assignment = await _assignments.GetWithOwnershipDetailsAsync(assignmentId, ct);
         if (assignment is null) return (null, NotFound());
 
-        var auth = await _authorization.AuthorizeAsync(User, assignment, Policies.ManageOwnAssignment);
+        var auth = await _authorization.AuthorizeAsync(User, assignment, policy);
         if (!auth.Succeeded) return (null, Forbid());
 
         return (assignment, null);

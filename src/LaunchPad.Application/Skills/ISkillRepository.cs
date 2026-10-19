@@ -5,12 +5,14 @@ namespace LaunchPad.Application.Skills;
 public interface ISkillRepository
 {
     /// <summary>
-    /// Case-insensitive exact-name match, creating rows for any names that don't
-    /// exist yet. This is the naive form of the normalization CLAUDE.md calls for —
-    /// real free-text dedup ("Power BI" / "PowerBI") is migration/taxonomy work,
-    /// not runtime logic.
+    /// Case-insensitive exact-name match against the existing taxonomy. Names with no match
+    /// are returned in <paramref name="unknownNames"/> rather than created: a typo on a
+    /// project form used to add a permanent "Uncategorized" skill that every candidate then
+    /// saw in their picker, which is the free-text sprawl the normalized model exists to end.
+    /// New skills come from the deliberate, category-carrying CreateAsync path instead.
     /// </summary>
-    Task<IReadOnlyList<Skill>> GetOrCreateByNamesAsync(IEnumerable<string> names, CancellationToken ct = default);
+    Task<(IReadOnlyList<Skill> Found, IReadOnlyList<string> UnknownNames)> GetByNamesAsync(
+        IEnumerable<string> names, CancellationToken ct = default);
 
     /// <summary>Every skill, with its category — the picker's full browsable list.</summary>
     Task<IReadOnlyList<Skill>> GetAllAsync(CancellationToken ct = default);

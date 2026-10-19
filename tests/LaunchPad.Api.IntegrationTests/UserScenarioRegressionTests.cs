@@ -1,0 +1,682 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using FluentAssertions;
+using LaunchPad.Application.Assignments;
+using LaunchPad.Application.Cohorts;
+using LaunchPad.Application.Community;
+using LaunchPad.Application.Notifications;
+using LaunchPad.Application.Common;
+using LaunchPad.Application.Matching;
+using LaunchPad.Application.Projects;
+using LaunchPad.Application.Candidates;
+using LaunchPad.Application.Reviews;
+using LaunchPad.Domain.Entities;
+using LaunchPad.Domain.Enums;
+using LaunchPad.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace LaunchPad.Api.IntegrationTests;
+
+/// <summary>
+/// Regressions for bugs found by the multi-role browser scenarios in
+/// docs/testing/user-test-findings.md. Each test names its finding id.
+/// </summary>
+public class UserScenarioRegressionTests : IClassFixture<CustomWebApplicationFactory>
+{
+    private readonly CustomWebApplicationFactory _factory;
+    public UserScenarioRegressionTests(CustomWebApplicationFactory factory) => _factory = factory;
+
+    private sealed record World(
+        int CohortA, int CohortB, int ProjectInA, int ProjectInB,
+        Guid SponsorOid, Guid CandidateAOid, Guid CandidateBOid, int CandidateAId, int CandidateBId, string SponsorTag);
+
+    private async Task<World> SeedTwoCohortsAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        var tag = Guid.NewGuid().ToString("N")[..8];
+
+        var program = new Domain.Entities.Program { Name = $"Scenario {tag}" };
+        var cohortA = new Cohort { Program = program, Name = $"A {tag}", StartDate = new DateOnly(2026, 1, 1), EndDate = new DateOnly(2026, 6, 1), Status = CohortStatus.Active };
+        var cohortB = new Cohort { Program = program, Name = $"B {tag}", StartDate = new DateOnly(2026, 7, 1), EndDate = new DateOnly(2026, 12, 1), Status = CohortStatus.Active };
+        var sponsorOid = Guid.NewGuid();
+        var sponsor = new Sponsor { AppUser = new AppUser { EntraObjectId = sponsorOid, Upn = $"sponsor-{tag}@example.com", DisplayName = "Scenario Sponsor" } };
+        Candidate NewCandidate(Cohort cohort, Guid oid) => new()
+        {
+            Cohort = cohort,
+            AppUser = new AppUser { EntraObjectId = oid, Upn = $"{oid}@example.com", DisplayName = "Scenario Candidate" },
+            Availability = Availability.PartTime,
+            Status = CandidateStatus.InProgress,
+        };
+        var candidateAOid = Guid.NewGuid();
+        var candidateBOid = Guid.NewGuid();
+        var candidateA = NewCandidate(cohortA, candidateAOid);
+        var candidateB = NewCandidate(cohortB, candidateBOid);
+        Project NewProject(Cohort cohort, string name) => new()
+        {
+            Cohort = cohort,
+            Sponsor = sponsor,
+            Name = name,
+            AvailabilityNeeded = Availability.PartTime,
+            ApprovalStatus = ProjectApprovalStatus.Approved,
+            Status = ProjectStatus.Open,
+            MaxCandidates = 1,
+        };
+        var projectA = NewProject(cohortA, "Open in A");
+        var projectB = NewProject(cohortB, "Open in B");
+
+        db.AddRange(program, cohortA, cohortB, sponsor, candidateA, candidateB, projectA, projectB);
+        await db.SaveChangesAsync();
+
+        return new World(cohortA.CohortId, cohortB.CohortId, projectA.ProjectId, projectB.ProjectId,
+            sponsorOid, candidateAOid, candidateBOid, candidateA.CandidateId, candidateB.CandidateId, tag);
+    }
+
+    private HttpClient ClientAs(string roles, Guid? oid = null)
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, roles);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, (oid ?? Guid.NewGuid()).ToString());
+        return client;
+    }
+
+    private async Task<int> AddAssignmentAsync(int projectId, int candidateId, AssignmentStatus status)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        var assignment = new Assignment { ProjectId = projectId, CandidateId = candidateId, Status = status, StartDate = new DateOnly(2026, 1, 1) };
+        db.Add(assignment);
+        await db.SaveChangesAsync();
+        return assignment.AssignmentId;
+    }
+
+    // F-01
+    [Fact]
+    public async Task Candidate_CannotOpenOrRateAProjectFromAnotherCohort()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var candidateB = ClientAs(Roles.Candidate, world.CandidateBOid);
+
+        (await candidateB.GetAsync($"/api/projects/{world.ProjectInA}/open-detail"))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await candidateB.PostAsJsonAsync($"/api/projects/{world.ProjectInA}/interest", new RateInterestRequest { Rating = 5 }))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        // Their own cohort's project is still reachable.
+        (await candidateB.GetAsync($"/api/projects/{world.ProjectInB}/open-detail"))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // F-02
+    [Theory]
+    [InlineData(AssignmentStatus.Proposed)]
+    [InlineData(AssignmentStatus.OpsApproved)]
+    [InlineData(AssignmentStatus.Active)]
+    public async Task OpsDeny_RefusesAnAssignmentThatIsNotAwaitingOps(AssignmentStatus status)
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, status);
+
+        var response = await ClientAs(Roles.ProgramOps).PostAsync($"/api/matching/{assignmentId}/deny", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        (await db.Assignments.SingleAsync(a => a.AssignmentId == assignmentId)).Status.Should().Be(status);
+    }
+
+    // F-03
+    [Fact]
+    public async Task CancelledProject_LeavesTheApprovalQueueAndCannotBeApproved()
+    {
+        var world = await SeedTwoCohortsAsync();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+            var project = await db.Projects.SingleAsync(p => p.ProjectId == world.ProjectInA);
+            project.ApprovalStatus = ProjectApprovalStatus.PendingOps;
+            project.Status = ProjectStatus.Cancelled;
+            await db.SaveChangesAsync();
+        }
+
+        var ops = ClientAs(Roles.ProgramOps);
+        var queue = await ops.GetFromJsonAsync<List<ProjectDto>>($"/api/projects/pending-approval?cohortId={world.CohortA}", TestJsonOptions.Default);
+        queue.Should().NotContain(p => p.ProjectId == world.ProjectInA);
+
+        (await ops.PostAsync($"/api/projects/{world.ProjectInA}/approve", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // F-04
+    [Fact]
+    public async Task CreateProject_InACohortThatDoesNotExist_IsAValidationError()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var request = new CreateProjectRequest
+        {
+            CohortId = 987_654,
+            Name = "Nowhere",
+            AvailabilityNeeded = Availability.PartTime,
+            MaxCandidates = 1,
+        };
+
+        var response = await ClientAs(Roles.Sponsor, world.SponsorOid).PostAsJsonAsync("/api/projects", request, TestJsonOptions.Default);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("Cohort not found");
+    }
+
+    // F-05
+    [Fact]
+    public async Task CohortStatusChange_IsAudited()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var opsOid = Guid.NewGuid();
+
+        var response = await ClientAs(Roles.ProgramOps, opsOid).PatchAsJsonAsync(
+            $"/api/cohorts/{world.CohortB}/status", new { status = "Completed" }, TestJsonOptions.Default);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        (await db.AuditEvents.Where(e => e.EntityName == "Cohort" && e.EntityId == world.CohortB.ToString()).ToListAsync())
+            .Should().ContainSingle(e => e.Action == "StatusChanged");
+    }
+
+    // F-06
+    [Fact]
+    public async Task SubmittingTheSameReviewTwice_IsAConflictNotADuplicateRow()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+        var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
+        var request = new SubmitReviewRequest
+        {
+            AssignmentId = assignmentId,
+            ReviewType = ReviewType.SponsorOnCandidate,
+            Checkpoint = Checkpoint.Midpoint,
+            Commitment = 3,
+            Availability = 3,
+            Guidance = 3,
+            OutputQuality = 3,
+        };
+
+        (await sponsor.PostAsJsonAsync("/api/reviews", request, TestJsonOptions.Default)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await sponsor.PostAsJsonAsync("/api/reviews", request, TestJsonOptions.Default)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        (await db.Reviews.CountAsync(r => r.AssignmentId == assignmentId)).Should().Be(1);
+    }
+    // F-07
+    [Fact]
+    public async Task SchedulingReviews_AfterTheReviewWasAlreadySubmitted_CreatesTheTodoAlreadyCompleted()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+        var review = new SubmitReviewRequest
+        {
+            AssignmentId = assignmentId,
+            ReviewType = ReviewType.SponsorOnCandidate,
+            Checkpoint = Checkpoint.Midpoint,
+            Commitment = 4,
+            Availability = 4,
+            Guidance = 4,
+            OutputQuality = 4,
+        };
+        (await ClientAs(Roles.Sponsor, world.SponsorOid).PostAsJsonAsync("/api/reviews", review, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var schedule = await ClientAs(Roles.ProgramOps).PostAsJsonAsync(
+            $"/api/cohorts/{world.CohortA}/schedule-reviews", new { checkpoint = "Midpoint", dueDate = "2026-10-01" }, TestJsonOptions.Default);
+        schedule.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        var todos = await db.ProjectTodos.Where(t => t.AssignmentId == assignmentId && t.LinkedReviewCheckpoint == Checkpoint.Midpoint).ToListAsync();
+        todos.Single(t => t.LinkedReviewType == ReviewType.SponsorOnCandidate).Status.Should().Be(TodoStatus.Completed);
+        todos.Single(t => t.LinkedReviewType == ReviewType.CandidateOnSponsor).Status.Should().Be(TodoStatus.NotStarted);
+    }
+
+    // G-01
+    [Fact]
+    public async Task NightlySweep_StartsApprovedWorkAndCompletesFinishedWork()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var starting = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.OpsApproved);
+        var finishing = await AddAssignmentAsync(world.ProjectInB, world.CandidateBId, AssignmentStatus.Active);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        // Cohort A runs Jan-Jun 2026, cohort B Jul-Dec — so on this date A's project has
+        // started and B's has not yet ended.
+        var projectA = await db.Projects.SingleAsync(p => p.ProjectId == world.ProjectInA);
+        projectA.StartDate = new DateOnly(2026, 1, 1);
+        var projectB = await db.Projects.SingleAsync(p => p.ProjectId == world.ProjectInB);
+        projectB.EndDate = new DateOnly(2026, 2, 1);
+        await db.SaveChangesAsync();
+
+        var runner = scope.ServiceProvider.GetRequiredService<IAssignmentLifecycleRunner>();
+        // Counts cover every assignment in the shared test database, so assert on these two.
+        var result = await runner.RunAsync(new DateOnly(2026, 3, 1));
+
+        result.Activated.Should().BeGreaterThanOrEqualTo(1);
+        (await db.Assignments.SingleAsync(a => a.AssignmentId == starting)).Status.Should().Be(AssignmentStatus.Active);
+        (await db.Assignments.SingleAsync(a => a.AssignmentId == finishing)).Status.Should().Be(AssignmentStatus.Completed);
+    }
+
+    // G-01
+    [Fact]
+    public async Task OpsCanStartAndCompleteAnAssignmentByHand_ButOnlyFromTheRightStatus()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.OpsApproved);
+        var ops = ClientAs(Roles.ProgramOps);
+
+        // Can't complete work that never started.
+        (await ops.PostAsJsonAsync($"/api/assignments/{assignmentId}/status", new { status = "Completed" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        (await ops.PostAsJsonAsync($"/api/assignments/{assignmentId}/status", new { status = "Active", reason = "Kicked off early" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ops.PostAsJsonAsync($"/api/assignments/{assignmentId}/status", new { status = "Completed" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Approvals still belong to the matching queue.
+        (await ops.PostAsJsonAsync($"/api/assignments/{assignmentId}/status", new { status = "OpsApproved" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
+        (await sponsor.PostAsJsonAsync($"/api/assignments/{assignmentId}/status", new { status = "Active" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // G-02
+    [Theory]
+    [InlineData("payload.exe", "application/octet-stream", new byte[] { 0x4D, 0x5A, 0x90, 0x00 }, "file type isn't accepted")]
+    [InlineData("fake.pdf", "application/pdf", new byte[] { 0x4D, 0x5A, 0x90, 0x00 }, "don't match its extension")]
+    public async Task Deliverable_UploadsMustBeAnAcceptedTypeAndLookLikeIt(
+        string fileName, string contentType, byte[] content, string expectedMessage)
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent("Deliverable"), "title");
+        var fileContent = new ByteArrayContent(content);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        form.Add(fileContent, "file", fileName);
+
+        var response = await ClientAs(Roles.Candidate, world.CandidateAOid)
+            .PostAsync($"/api/assignments/{assignmentId}/deliverables", form);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain(expectedMessage);
+    }
+
+    // G-02
+    [Fact]
+    public async Task Deliverable_ARealPdfIsStillAccepted()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent("Deliverable"), "title");
+        var fileContent = new ByteArrayContent([.. "%PDF-1.7 report"u8]);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        form.Add(fileContent, "file", "report.pdf");
+
+        (await ClientAs(Roles.Candidate, world.CandidateAOid).PostAsync($"/api/assignments/{assignmentId}/deliverables", form))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // G-02
+    [Fact]
+    public async Task Avatar_MustActuallyBeTheImageTypeItClaims()
+    {
+        var candidate = ClientAs(Roles.Candidate, Guid.NewGuid());
+
+        var lying = new ByteArrayContent([.. "<script>alert(1)</script>"u8]);
+        lying.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        (await candidate.PostAsync("/api/me/avatar", lying)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var realPng = new ByteArrayContent([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x01]);
+        realPng.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        (await candidate.PostAsync("/api/me/avatar", realPng)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    // G-04
+    [Fact]
+    public async Task CompletingACohort_ClosesItsMarketplaceProjectCreationAndMatching()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var candidateB = ClientAs(Roles.Candidate, world.CandidateBOid);
+        var ops = ClientAs(Roles.ProgramOps);
+
+        // Open while the cohort is running.
+        (await candidateB.GetFromJsonAsync<List<ProjectDto>>("/api/projects/open", TestJsonOptions.Default))
+            .Should().Contain(p => p.ProjectId == world.ProjectInB);
+
+        (await ops.PatchAsJsonAsync($"/api/cohorts/{world.CohortB}/status", new { status = "Completed" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await candidateB.GetFromJsonAsync<List<ProjectDto>>("/api/projects/open", TestJsonOptions.Default))
+            .Should().BeEmpty("a finished cohort's marketplace is closed");
+        (await candidateB.GetAsync($"/api/projects/{world.ProjectInB}/open-detail"))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await candidateB.PostAsJsonAsync($"/api/projects/{world.ProjectInB}/interest", new RateInterestRequest { Rating = 5 }))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var newProject = new CreateProjectRequest
+        {
+            CohortId = world.CohortB,
+            Name = "Too late",
+            AvailabilityNeeded = Availability.PartTime,
+            MaxCandidates = 1,
+        };
+        (await ClientAs(Roles.Sponsor, world.SponsorOid).PostAsJsonAsync("/api/projects", newProject, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        (await ops.PostAsync($"/api/matching/run?cohortId={world.CohortB}", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ops.PostAsync("/api/matching/run?cohortId=987654", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ops.PostAsJsonAsync("/api/cohorts/987654/schedule-reviews", new { checkpoint = "Final", dueDate = "2026-10-01" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // G-03, G-14
+    [Fact]
+    public async Task NewCohorts_StartPlannedAndCannotReuseAName()
+    {
+        await SeedTwoCohortsAsync();   // the program a new cohort is created under
+        var ops = ClientAs(Roles.ProgramOps);
+        var name = $"Scenario cohort {Guid.NewGuid():N}";
+        var request = new { name, startDate = "2027-01-04", endDate = "2027-06-04" };
+
+        var created = await ops.PostAsJsonAsync("/api/cohorts", request, TestJsonOptions.Default);
+        created.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await created.Content.ReadFromJsonAsync<CohortDto>(TestJsonOptions.Default);
+        dto!.Status.Should().Be(CohortStatus.Planned, "a cohort created for later must not start competing with the running one");
+
+        (await ops.PostAsJsonAsync("/api/cohorts", request, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // G-05
+    [Fact]
+    public async Task EveryAssignmentDecision_ReachesThePeopleItAffects()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Proposed);
+        var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
+        var ops = ClientAs(Roles.ProgramOps);
+        var notifications = (FakeNotificationPublisher)_factory.Services.GetRequiredService<INotificationPublisher>();
+
+        string CandidateUpn() => $"{world.CandidateAOid}@example.com";
+        List<string> SubjectsFor(string upn) => notifications.Sent.Where(n => n.ToUpn == upn).Select(n => n.Subject).ToList();
+
+        (await sponsor.PostAsync($"/api/projects/{world.ProjectInA}/matches/{assignmentId}/recommend", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        SubjectsFor(CandidateUpn()).Should().ContainMatch("A sponsor picked you*");
+
+        (await ops.PostAsync($"/api/matching/{assignmentId}/approve", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        SubjectsFor(CandidateUpn()).Should().ContainMatch("You're confirmed on*");
+        SubjectsFor($"sponsor-{world.SponsorTag}@example.com").Should().ContainMatch("Match confirmed:*");
+    }
+
+    // G-05
+    [Fact]
+    public async Task CommentingOnAPost_TellsItsAuthor()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var notifications = (FakeNotificationPublisher)_factory.Services.GetRequiredService<INotificationPublisher>();
+        var author = ClientAs(Roles.Candidate, world.CandidateAOid);
+
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent("Shipped the first prototype"), "body" },
+            { new StringContent("Win"), "postType" },
+        };
+        var created = await author.PostAsync("/api/community/posts", form);
+        created.StatusCode.Should().Be(HttpStatusCode.OK);
+        var postId = (await created.Content.ReadFromJsonAsync<CommunityPostDto>(TestJsonOptions.Default))!.CommunityPostId;
+
+        // The author's own comment is not an event worth mailing them about.
+        (await author.PostAsJsonAsync($"/api/community/posts/{postId}/comments", new { body = "Adding a detail" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        notifications.Sent.Where(n => n.ToUpn == $"{world.CandidateAOid}@example.com").Should().NotContain(n => n.Subject.Contains("commented"));
+
+        (await ClientAs(Roles.Candidate, world.CandidateBOid)
+            .PostAsJsonAsync($"/api/community/posts/{postId}/comments", new { body = "Nice work" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        notifications.Sent.Where(n => n.ToUpn == $"{world.CandidateAOid}@example.com")
+            .Should().Contain(n => n.Subject.Contains("commented on your post"));
+    }
+
+    // G-07
+    [Fact]
+    public async Task Executive_ReadsEveryProjectButChangesNone()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var exec = ClientAs(Roles.Executive);
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+
+        // Reading stays open: dashboards are the role's whole job.
+        (await exec.GetAsync($"/api/projects/{world.ProjectInA}")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await exec.GetAsync($"/api/projects/{world.ProjectInA}/matches")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await exec.GetAsync($"/api/projects/{world.ProjectInA}/assigned-candidates")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await exec.GetAsync($"/api/assignments/{assignmentId}/todos")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var edit = new UpdateProjectRequest { Name = "Renamed by exec", AvailabilityNeeded = Availability.PartTime, MaxCandidates = 1 };
+        (await exec.PutAsJsonAsync($"/api/projects/{world.ProjectInA}", edit, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await exec.PostAsJsonAsync($"/api/projects/{world.ProjectInA}/cancel", new { reason = "no" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await exec.PostAsJsonAsync($"/api/projects/{world.ProjectInA}/delivery-stage", new { stage = "MvpBuilt" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await exec.PostAsJsonAsync($"/api/assignments/{assignmentId}/todos", new { title = "Exec to-do" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // G-06
+    [Fact]
+    public async Task ASponsorReview_CanOnlyComeFromThatProjectsOwnSponsor()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+        var review = new SubmitReviewRequest
+        {
+            AssignmentId = assignmentId,
+            ReviewType = ReviewType.SponsorOnCandidate,
+            Checkpoint = Checkpoint.Final,
+            Commitment = 5,
+            Availability = 5,
+            Guidance = 5,
+            OutputQuality = 5,
+        };
+
+        // Holding ProgramOps as well no longer buys a way into someone else's sponsor voice.
+        var opsAndSponsor = ClientAs($"{Roles.ProgramOps},{Roles.Sponsor}");
+        (await opsAndSponsor.PostAsJsonAsync("/api/reviews", review, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        (await ClientAs(Roles.Sponsor, world.SponsorOid).PostAsJsonAsync("/api/reviews", review, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // G-08
+    [Fact]
+    public async Task ASponsorOnlySeesCandidatesFromCohortsTheyWorkIn()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
+
+        // This sponsor has a project in both cohorts, so both are visible.
+        (await sponsor.GetAsync($"/api/candidates/{world.CandidateAId}")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var strangerOid = Guid.NewGuid();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+            db.Add(new Sponsor { AppUser = new AppUser { EntraObjectId = strangerOid, Upn = $"{strangerOid}@example.com", DisplayName = "Sponsor Elsewhere" } });
+            await db.SaveChangesAsync();
+        }
+
+        var stranger = ClientAs(Roles.Sponsor, strangerOid);
+        (await stranger.GetAsync($"/api/candidates/{world.CandidateAId}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await stranger.GetAsync($"/api/candidates/cohort/{world.CohortA}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await stranger.GetFromJsonAsync<List<CandidateDto>>("/api/candidates", TestJsonOptions.Default)).Should().BeEmpty();
+
+        // Ops still sees the whole program.
+        (await ClientAs(Roles.ProgramOps).GetAsync($"/api/candidates/{world.CandidateAId}")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // G-12, G-17
+    [Fact]
+    public async Task TheCommunityFeedIsForTheProgram_AndAnnouncementsAreOpsOnly()
+    {
+        MultipartFormDataContent Post(string type) => new()
+        {
+            { new StringContent("Body text"), "body" },
+            { new StringContent(type), "postType" },
+        };
+
+        (await ClientAs(Roles.Executive).GetAsync("/api/community/posts")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ClientAs(Roles.HiringManager).GetAsync("/api/community/posts")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var candidate = ClientAs(Roles.Candidate, Guid.NewGuid());
+        (await candidate.PostAsync("/api/community/posts", Post("Win"))).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await candidate.PostAsync("/api/community/posts", Post("Announcement"))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ClientAs(Roles.ProgramOps).PostAsync("/api/community/posts", Post("Announcement"))).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // G-09
+    [Fact]
+    public async Task NeitherCandidateNorSponsorReceivesAMatchScore()
+    {
+        var world = await SeedTwoCohortsAsync();
+        // Proposed for the sponsor's match list; the same candidate is what Ops sees in the
+        // queue once it reaches SponsorApproved.
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Proposed);
+
+        var candidateJson = await ClientAs(Roles.Candidate, world.CandidateAOid).GetStringAsync("/api/candidates/me/dashboard");
+        candidateJson.Should().NotContain("matchScore");
+
+        var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
+        (await sponsor.GetStringAsync($"/api/projects/{world.ProjectInA}/matches")).Should().NotContain("matchScore");
+        (await sponsor.GetStringAsync($"/api/projects/{world.ProjectInA}/eligible-candidates"))
+            .Should().NotContain("\"score\"");
+
+        // Ops keeps the number: it arbitrates the queue.
+        (await sponsor.PostAsync($"/api/projects/{world.ProjectInA}/matches/{assignmentId}/recommend", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ClientAs(Roles.ProgramOps).GetStringAsync($"/api/matching/queue?cohortId={world.CohortA}"))
+            .Should().Contain("matchScore");
+
+        // The rationale survives — it is the part that explains the match.
+        (await ClientAs(Roles.Candidate, world.CandidateAOid).GetStringAsync("/api/assignments/mine"))
+            .Should().Contain("matchRationale").And.NotContain("matchScore");
+    }
+
+    // G-10
+    [Fact]
+    public async Task ASkillNameNobodyDefined_IsRejectedOnProjectsAndProfiles()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var invented = $"Telepathy {Guid.NewGuid():N}";
+
+        var project = new CreateProjectRequest
+        {
+            CohortId = world.CohortA,
+            Name = "Needs telepathy",
+            AvailabilityNeeded = Availability.PartTime,
+            MaxCandidates = 1,
+            RequiredSkillNames = [invented],
+        };
+        var projectResponse = await ClientAs(Roles.Sponsor, world.SponsorOid).PostAsJsonAsync("/api/projects", project, TestJsonOptions.Default);
+        projectResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await projectResponse.Content.ReadAsStringAsync()).Should().Contain(invented);
+
+        var profile = new UpdateCandidateProfileRequest { Availability = Availability.PartTime, SkillNames = [invented] };
+        (await ClientAs(Roles.Candidate, world.CandidateAOid).PutAsJsonAsync("/api/candidates/me", profile, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
+        (await db.Skills.AnyAsync(s => s.Name == invented))
+            .Should().BeFalse("a typo must not become a skill everyone sees in their picker");
+    }
+
+    // G-11
+    [Fact]
+    public async Task ToDos_NeedALiveAssignmentAndASensibleDueDate()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var sponsor = ClientAs(Roles.Sponsor, world.SponsorOid);
+        var withdrawn = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Withdrawn);
+        var active = await AddAssignmentAsync(world.ProjectInB, world.CandidateBId, AssignmentStatus.Active);
+
+        (await sponsor.PostAsJsonAsync($"/api/assignments/{withdrawn}/todos", new { title = "Too late" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var yesterday = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1).ToString("yyyy-MM-dd");
+        (await sponsor.PostAsJsonAsync($"/api/assignments/{active}/todos", new { title = "Backdated", dueDate = yesterday }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        (await sponsor.PostAsJsonAsync($"/api/assignments/{active}/todos", new { title = "Fine" }, TestJsonOptions.Default))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // G-11
+    [Fact]
+    public async Task ADeliverableComesFromTheCandidate_NotTheirSponsor()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.Active);
+
+        MultipartFormDataContent Upload()
+        {
+            var form = new MultipartFormDataContent { { new StringContent("Report"), "title" } };
+            var file = new ByteArrayContent([.. "%PDF-1.7 report"u8]);
+            file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+            form.Add(file, "file", "report.pdf");
+            return form;
+        }
+
+        using var sponsorUpload = Upload();
+        (await ClientAs(Roles.Sponsor, world.SponsorOid).PostAsync($"/api/assignments/{assignmentId}/deliverables", sponsorUpload))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        using var candidateUpload = Upload();
+        (await ClientAs(Roles.Candidate, world.CandidateAOid).PostAsync($"/api/assignments/{assignmentId}/deliverables", candidateUpload))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // G-16
+    [Fact]
+    public async Task ApprovingAnAlreadyApprovedMatch_SaysSo()
+    {
+        var world = await SeedTwoCohortsAsync();
+        var assignmentId = await AddAssignmentAsync(world.ProjectInA, world.CandidateAId, AssignmentStatus.OpsApproved);
+
+        var response = await ClientAs(Roles.ProgramOps).PostAsync($"/api/matching/{assignmentId}/approve", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("already been approved");
+    }
+
+    // G-19
+    [Fact]
+    public async Task AskingForAPhotoNobodyUploaded_IsNotAnError()
+    {
+        var response = await ClientAs(Roles.Candidate, Guid.NewGuid()).GetAsync("/api/me/avatar");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent, "every page asks for this, and most people have no photo");
+    }
+}

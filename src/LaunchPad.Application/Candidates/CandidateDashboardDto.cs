@@ -12,6 +12,5 @@ public class CandidateDashboardDto
     public MyAssignmentDto? ActiveProject { get; set; }
     public int TasksComplete { get; set; }
     public int TasksTotal { get; set; }
-    public decimal? MatchScore { get; set; }
     public int CommunityPostsThisWeek { get; set; }
 }

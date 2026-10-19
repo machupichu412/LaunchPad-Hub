@@ -135,9 +135,13 @@ export function MyProjects() {
                     <Button size="small" onClick={() => navigate(`/projects/${project.projectId}/edit`)}>
                       Edit
                     </Button>
-                    <Button size="small" onClick={() => navigate(`/projects/${project.projectId}/matches`)}>
-                      Review matches
-                    </Button>
+                    {/* A project Ops hasn't approved has no matches to review — matching only
+                        runs on approved projects, so this led to an empty page. */}
+                    {project.approvalStatus === 'Approved' && (
+                      <Button size="small" onClick={() => navigate(`/projects/${project.projectId}/matches`)}>
+                        Review matches
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

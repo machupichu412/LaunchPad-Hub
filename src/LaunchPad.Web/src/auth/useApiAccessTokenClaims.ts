@@ -3,6 +3,7 @@ import { useMsal } from '@azure/msal-react';
 import { apiRequest } from './msalConfig';
 import { isMockMode } from '../dev/mockMode';
 import { AppRoles } from './roles';
+import { getActivePersona, isPersonaMode } from '../dev/devPersonas';
 
 export type ApiTokenClaims = {
   roles?: string[];
@@ -49,13 +50,23 @@ export type ApiAccessTokenState = {
 // without a real Entra token. Stripped from production builds.
 const MOCK_CLAIMS: ApiTokenClaims = { roles: Object.values(AppRoles) };
 
+function syntheticClaims(): ApiTokenClaims | null {
+  if (isMockMode) return MOCK_CLAIMS;
+  if (isPersonaMode) {
+    const persona = getActivePersona();
+    return persona ? { roles: persona.roles } : null;
+  }
+  return null;
+}
+
 export function useApiAccessTokenClaims(): ApiAccessTokenState {
   const { instance, accounts } = useMsal();
-  const [claims, setClaims] = useState<ApiTokenClaims | null>(isMockMode ? MOCK_CLAIMS : null);
-  const [isLoading, setIsLoading] = useState(!isMockMode);
+  const isSynthetic = isMockMode || isPersonaMode;
+  const [claims, setClaims] = useState<ApiTokenClaims | null>(syntheticClaims);
+  const [isLoading, setIsLoading] = useState(!isSynthetic);
 
   useEffect(() => {
-    if (isMockMode) return;
+    if (isSynthetic) return;
     const account = accounts[0];
     if (!account) {
       setClaims(null);
@@ -72,7 +83,7 @@ export function useApiAccessTokenClaims(): ApiAccessTokenState {
         setClaims(null);
       })
       .finally(() => setIsLoading(false));
-  }, [accounts, instance]);
+  }, [accounts, instance, isSynthetic]);
 
   return { claims, isLoading };
 }

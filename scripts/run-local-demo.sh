@@ -16,6 +16,12 @@ set -euo pipefail
 # Entra sign-in this script otherwise expects. Pass --real-auth to force the
 # real Entra ID frontend for this run regardless of that file.
 #
+# Multi-role testing without Entra: start the web app with VITE_DEV_PERSONAS=true
+# (and VITE_MOCK_MODE=false). The SPA then shows a persona picker, each browser tab
+# signs in as its own persona, and the API (Auth:UseDevPersonas, set by the LocalDemo
+# profile, Development only) trusts the X-Dev-Persona header. See
+# src/LaunchPad.Api/LocalDemo/DevPersonaAuthHandler.cs.
+#
 # Usage: ./scripts/run-local-demo.sh [--real-auth]
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

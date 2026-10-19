@@ -6,6 +6,8 @@ import { AppShell } from './components/AppShell';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { SignInPrompt } from './components/SignInPrompt';
 import { isMockMode } from './dev/mockMode';
+import { getActivePersona, isPersonaMode } from './dev/devPersonas';
+import { PersonaPicker } from './dev/PersonaPicker';
 import { RequireRole } from './auth/RequireRole';
 import { RequireCandidateProfile } from './auth/RequireCandidateProfile';
 import { RequireSponsorProfile } from './auth/RequireSponsorProfile';
@@ -14,6 +16,7 @@ import { AppRoles } from './auth/roles';
 import { ThemeModeProvider, useThemeMode } from './theme/ThemeModeContext';
 import { RoleAwareHome } from './features/shared/RoleAwareHome';
 import { Unauthorized } from './features/shared/Unauthorized';
+import { NotFound } from './features/shared/NotFound';
 
 // Route components load per role area rather than in the initial bundle: an Ops user
 // should not download the candidate, sponsor, and exec screens to see a dashboard.
@@ -355,6 +358,8 @@ function AppContent() {
                     </RequireRole>
                   }
                 />
+                {/* Without a catch-all an unknown URL rendered an empty page with no way back. */}
+                <Route path="*" element={<NotFound />} />
                 </Routes>
                 </Suspense>
               </ErrorBoundary>
@@ -374,6 +379,7 @@ function AppContent() {
  */
 function AuthGate({ children }: { children: ReactNode }) {
   if (isMockMode) return <>{children}</>;
+  if (isPersonaMode) return getActivePersona() ? <>{children}</> : <PersonaPicker />;
   return (
     <>
       <AuthenticatedTemplate>{children}</AuthenticatedTemplate>

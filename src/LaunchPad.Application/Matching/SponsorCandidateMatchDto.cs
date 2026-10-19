@@ -21,7 +21,6 @@ public class SponsorCandidateMatchDto
     public string? Degree { get; set; }
     public decimal? Gpa { get; set; }
     public string[] Skills { get; set; } = Array.Empty<string>();
-    public decimal Score { get; set; }
     public string Rationale { get; set; } = string.Empty;
     public byte? InterestRating { get; set; }
 

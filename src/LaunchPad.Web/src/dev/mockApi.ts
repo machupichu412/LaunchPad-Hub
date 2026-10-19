@@ -124,7 +124,6 @@ const dashboard: CandidateDashboardDto = {
     status: 'Active',
     startDate: '2026-01-20',
     endDate: null,
-    matchScore: 92,
     matchRationale: 'Strong overlap on React + data visualization, plus a shared interest in nonprofit impact work.',
     projectId: 1,
     projectName: 'Community Impact Dashboard',
@@ -137,7 +136,6 @@ const dashboard: CandidateDashboardDto = {
   },
   tasksComplete: 2,
   tasksTotal: 5,
-  matchScore: 92,
   communityPostsThisWeek: 3,
 };
 
@@ -223,21 +221,21 @@ const eligibleCandidates: SponsorCandidateMatchDto[] = [
     candidateId: 2, displayName: 'Marcus Webb', location: 'Detroit, MI', availability: 'FullTime',
     graduationDate: '2026-12-01', bio: 'Backend-leaning generalist. Will refactor your API for fun.',
     school: 'Wayne State University', degree: 'B.S. Information Systems', gpa: 3.4,
-    skills: ['C#', 'ASP.NET Core', 'Azure', 'SQL'], score: 91, rationale: 'Strong match on required C# and Bot Framework-adjacent backend skills.',
+    skills: ['C#', 'ASP.NET Core', 'Azure', 'SQL'], rationale: 'Strong match on required C# and Bot Framework-adjacent backend skills.',
     interestRating: 4, hasPendingAssignmentElsewhere: false, proposedAssignmentId: 101,
   },
   {
     candidateId: 5, displayName: 'Sam Okafor', location: 'Southfield, MI', availability: 'FullTime',
     graduationDate: '2026-05-01', bio: 'QA-minded engineer — happiest when a test suite goes red before it goes green.',
     school: 'Michigan State University', degree: 'B.S. Computer Science', gpa: 3.6,
-    skills: ['Playwright', 'TypeScript', 'CI/CD'], score: 62, rationale: 'Availability matches; limited overlap with required backend skills.',
+    skills: ['Playwright', 'TypeScript', 'CI/CD'], rationale: 'Availability matches; limited overlap with required backend skills.',
     interestRating: null, hasPendingAssignmentElsewhere: false, proposedAssignmentId: null,
   },
   {
     candidateId: 3, displayName: 'Ava Chen', location: 'Ypsilanti, MI', availability: 'PartTime',
     graduationDate: '2027-05-01', bio: 'Product design + a little front-end. Sketches wireframes in the margins of everything.',
     school: 'Eastern Michigan University', degree: 'B.F.A. Interaction Design', gpa: 3.9,
-    skills: ['Figma', 'User Research', 'React', 'Accessibility'], score: 38, rationale: 'Availability and skill set are a weak fit for this project.',
+    skills: ['Figma', 'User Research', 'React', 'Accessibility'], rationale: 'Availability and skill set are a weak fit for this project.',
     interestRating: null, hasPendingAssignmentElsewhere: true, proposedAssignmentId: null,
   },
 ];

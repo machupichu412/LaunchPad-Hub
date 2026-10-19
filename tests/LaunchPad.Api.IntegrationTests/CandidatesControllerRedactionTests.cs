@@ -24,7 +24,11 @@ public class CandidatesControllerRedactionTests : IClassFixture<CustomWebApplica
     // Risk data itself comes from TestCandidateRepositoryWithFakeRisk (registered in
     // CustomWebApplicationFactory) — CandidateRisk is keyless and can't be seeded via
     // .Add(). This only needs to seed a real Candidate for the mapper to attach to.
-    private async Task<int> SeedCandidateAsync()
+    /// <summary>Seeds the candidate together with a sponsor who has a project in that cohort,
+    /// and returns that sponsor's object id: a sponsor may only read candidates from cohorts
+    /// they work in, so the redaction assertions need a sponsor who can legitimately see this
+    /// candidate — otherwise they would pass on a 403 without testing redaction at all.</summary>
+    private async Task<(int CandidateId, Guid SponsorOid)> SeedCandidateAsync()
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<LaunchPadDbContext>();
@@ -39,10 +43,25 @@ public class CandidatesControllerRedactionTests : IClassFixture<CustomWebApplica
             Status = CandidateStatus.InProgress,
         };
 
-        db.AddRange(program, cohort, candidate);
+        var sponsorOid = Guid.NewGuid();
+        var sponsor = new Sponsor
+        {
+            AppUser = new AppUser { EntraObjectId = sponsorOid, Upn = $"redaction-sponsor-{sponsorOid}@example.com", DisplayName = "Redaction Sponsor" },
+        };
+        var project = new Project
+        {
+            Cohort = cohort,
+            Sponsor = sponsor,
+            Name = "Redaction Test Project",
+            AvailabilityNeeded = Availability.PartTime,
+            ApprovalStatus = ProjectApprovalStatus.Approved,
+            Status = ProjectStatus.Open,
+        };
+
+        db.AddRange(program, cohort, candidate, sponsor, project);
         await db.SaveChangesAsync();
 
-        return candidate.CandidateId;
+        return (candidate.CandidateId, sponsorOid);
     }
 
     [Theory]
@@ -50,10 +69,11 @@ public class CandidatesControllerRedactionTests : IClassFixture<CustomWebApplica
     [InlineData(Roles.HiringManager)]
     public async Task Get_OmitsHiddenScoreFields_ForUnauthorizedRoles(string role)
     {
-        var candidateId = await SeedCandidateAsync();
+        var (candidateId, sponsorOid) = await SeedCandidateAsync();
 
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, role);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
 
         var json = await client.GetStringAsync($"/api/candidates/{candidateId}");
 
@@ -65,10 +85,11 @@ public class CandidatesControllerRedactionTests : IClassFixture<CustomWebApplica
     [InlineData(Roles.ProgramOps)]
     public async Task Get_IncludesScoreFields_ForAuthorizedRoles(string role)
     {
-        var candidateId = await SeedCandidateAsync();
+        var (candidateId, sponsorOid) = await SeedCandidateAsync();
 
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, role);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
 
         var dto = await client.GetFromJsonAsync<CandidateDto>($"/api/candidates/{candidateId}", TestJsonOptions.Default);
 
@@ -81,10 +102,11 @@ public class CandidatesControllerRedactionTests : IClassFixture<CustomWebApplica
     [InlineData(Roles.HiringManager)]
     public async Task Get_OmitsSuggestedHireOutcome_ForUnauthorizedRoles(string role)
     {
-        var candidateId = await SeedCandidateAsync();
+        var (candidateId, sponsorOid) = await SeedCandidateAsync();
 
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, role);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, sponsorOid.ToString());
 
         var json = await client.GetStringAsync($"/api/candidates/{candidateId}");
 

@@ -89,9 +89,6 @@ export function CandidateDetailDialog({
                     </Caption1>
                   )}
                 </div>
-                <Badge appearance="tint" color="brand" style={{ marginLeft: 'auto' }}>
-                  {Math.round(candidate.score)}% match
-                </Badge>
               </div>
 
               {isMatched && (

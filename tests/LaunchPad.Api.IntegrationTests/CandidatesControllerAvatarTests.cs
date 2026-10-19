@@ -64,7 +64,7 @@ public class CandidatesControllerAvatarTests : IClassFixture<CustomWebApplicatio
         candidateClient.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Candidate);
         candidateClient.DefaultRequestHeaders.Add(TestAuthHandler.OidHeader, candidateOid.ToString());
 
-        var imageBytes = new byte[] { 7, 7, 7 };
+        var imageBytes = TestFiles.Jpeg();
         var content = new ByteArrayContent(imageBytes);
         content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
         var uploadResponse = await candidateClient.PostAsync("/api/me/avatar", content);

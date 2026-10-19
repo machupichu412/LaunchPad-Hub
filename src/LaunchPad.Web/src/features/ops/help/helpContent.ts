@@ -196,7 +196,7 @@ export const helpArticles: HelpArticle[] = [
       {
         kind: 'steps',
         items: [
-          'Make sure the projects you want considered are approved and the candidates have finished onboarding — matching only sees completed profiles.',
+          'Make sure the projects you want considered are approved — matching only looks at open, approved projects.',
           'Go to Assignment Approvals and choose Run matching.',
           'Matching runs in the background. The queue does not populate instantly; give it a moment and refresh.',
           'Work the queue. Approving staffs the candidate; denying returns them to the pool for a later round.',
@@ -211,6 +211,12 @@ export const helpArticles: HelpArticle[] = [
       {
         kind: 'paragraph',
         text: 'You can re-run matching as often as you like. It proposes new pairings for candidates who are not yet staffed and does not disturb assignments that are already active.',
+      },
+      {
+        kind: 'callout',
+        tone: 'info',
+        title: 'An unfinished profile is still considered',
+        text: 'Matching does not check whether a candidate has finished onboarding — it considers every candidate in the cohort who is not already staffed. A sparse profile just scores poorly against a project\'s required skills rather than being left out, so it is still worth encouraging candidates to complete onboarding before a run.',
       },
       {
         kind: 'link',
@@ -338,6 +344,50 @@ export const helpArticles: HelpArticle[] = [
         to: '/ops/risks',
         label: 'Open Risks',
         description: 'The current at-risk list for the active cohort.',
+      },
+    ],
+  },
+
+  {
+    id: 'candidate-outcomes',
+    title: 'Setting candidate outcomes',
+    summary: 'Where the Hire / Talent Plus / No Hire call gets made, and what the suggested-outcome badge is basing itself on.',
+    icon: 'people',
+    blocks: [
+      {
+        kind: 'paragraph',
+        text: 'Candidates is the roster of everyone in the cohorts you pick, with a card per candidate — skills, school, and their current outcome. It is the same page Executive and Hiring Manager accounts see under the name "Talent Pipeline," but they get it read-only; only Program Ops can change an outcome.',
+      },
+      { kind: 'heading', text: 'Setting an outcome' },
+      {
+        kind: 'paragraph',
+        text: 'Every candidate has one of four outcomes: In Progress, Hire, Talent Plus, or No Hire. Pick a new one from the Outcome dropdown on their card — it saves immediately and is recorded in the audit trail like any other decision.',
+      },
+      { kind: 'heading', text: 'The suggested-outcome badge' },
+      {
+        kind: 'paragraph',
+        text: 'Once a candidate has a Final review in and the sponsor answered whether they would bring the candidate on, a "Suggested" badge appears on their card. It is built from the same Final score and risk flags described in the risk guide, plus the sponsor\'s answer — it is a suggestion, not a decision. Nothing is set automatically; you still choose the outcome from the dropdown.',
+      },
+      {
+        kind: 'table',
+        columns: ['Badge', 'When it appears'],
+        rows: [
+          ['No Hire', 'The sponsor did not recommend the candidate, the Final score is below 2.5, or the candidate has a performance-risk flag'],
+          ['Talent Plus', 'The Final score is 4.5 or higher and the candidate has no engagement-risk flag'],
+          ['Hire', 'A Final review with an answered recommendation exists and neither of the above applies'],
+        ],
+      },
+      {
+        kind: 'callout',
+        tone: 'info',
+        title: 'No badge yet is not a signal',
+        text: 'A candidate with no Final review yet, or one where the sponsor left the recommendation question blank, simply shows no badge — there is nothing to suggest from, not a suggestion to bring them on or not.',
+      },
+      {
+        kind: 'link',
+        to: '/pipeline',
+        label: 'Open Candidates',
+        description: 'Browse candidates by cohort and set their outcome.',
       },
     ],
   },

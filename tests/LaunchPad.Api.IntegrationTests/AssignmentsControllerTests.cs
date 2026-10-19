@@ -80,7 +80,7 @@ public class AssignmentsControllerTests : IClassFixture<CustomWebApplicationFact
             form.Add(new StringContent(id.ToString()), "projectTodoId");
         }
 
-        var fileContent = new ByteArrayContent(content ?? Encoding.UTF8.GetBytes("fake file bytes"));
+        var fileContent = new ByteArrayContent(content ?? TestFiles.Pdf("fake file bytes"));
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
         form.Add(fileContent, "file", fileName);
         return form;
@@ -238,7 +238,7 @@ public class AssignmentsControllerTests : IClassFixture<CustomWebApplicationFact
     public async Task SubmitThenDownloadDeliverable_ReturnsTheExactBytesUploaded()
     {
         var (ownerOid, assignmentId, _) = await SeedAssignmentAsync();
-        var originalBytes = Encoding.UTF8.GetBytes("the exact deliverable content");
+        var originalBytes = TestFiles.Pdf("the exact deliverable content");
 
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add(TestAuthHandler.RolesHeader, Roles.Candidate);

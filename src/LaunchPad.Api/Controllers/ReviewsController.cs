@@ -73,8 +73,12 @@ public class ReviewsController : ControllerBase
         int? submittedByAppUserId;
         if (request.ReviewType == ReviewType.SponsorOnCandidate)
         {
+            // ProjectOwnerOnly, not ManageOwnProject: Ops bypasses ownership there, so a user
+            // holding both ProgramOps and Sponsor could file "the sponsor's review" of a
+            // candidate on a project they have nothing to do with — and the candidate reads it
+            // as their sponsor's words.
             if (!User.IsInRole(Roles.Sponsor)) return Forbid();
-            var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ManageOwnProject);
+            var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ProjectOwnerOnly);
             if (!auth.Succeeded) return Forbid();
             submittedByAppUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         }
@@ -84,6 +88,16 @@ public class ReviewsController : ControllerBase
             var auth = await _authorization.AuthorizeAsync(User, assignment, Policies.ManageOwnAssignment);
             if (!auth.Succeeded) return Forbid();
             submittedByAppUserId = await _appUsers.GetIdByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        }
+
+        // Backstops the unique (AssignmentId, ReviewType, Checkpoint, SubmittedBy) index: hitting
+        // the index instead surfaces as an unhandled DbUpdateException, a 500 for a double-click.
+        var existing = await _reviews.GetByAssignmentAsync(request.AssignmentId, ct);
+        if (existing.Any(r => r.ReviewType == request.ReviewType
+            && r.Checkpoint == request.Checkpoint
+            && r.SubmittedBy == (submittedByAppUserId ?? 0)))
+        {
+            return Conflict("You've already submitted this review.");
         }
 
         var review = new Review

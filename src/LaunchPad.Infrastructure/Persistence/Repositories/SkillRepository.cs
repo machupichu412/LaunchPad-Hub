@@ -6,12 +6,11 @@ namespace LaunchPad.Infrastructure.Persistence.Repositories;
 
 public sealed class SkillRepository : ISkillRepository
 {
-    private const string UncategorizedCategoryName = "Uncategorized";
-
     private readonly LaunchPadDbContext _db;
     public SkillRepository(LaunchPadDbContext db) => _db = db;
 
-    public async Task<IReadOnlyList<Skill>> GetOrCreateByNamesAsync(IEnumerable<string> names, CancellationToken ct = default)
+    public async Task<(IReadOnlyList<Skill> Found, IReadOnlyList<string> UnknownNames)> GetByNamesAsync(
+        IEnumerable<string> names, CancellationToken ct = default)
     {
         var distinctNames = names
             .Select(n => n.Trim())
@@ -19,7 +18,7 @@ public sealed class SkillRepository : ISkillRepository
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        if (distinctNames.Length == 0) return Array.Empty<Skill>();
+        if (distinctNames.Length == 0) return (Array.Empty<Skill>(), Array.Empty<string>());
 
         var existing = await _db.Skills
             .Include(s => s.SkillCategory)
@@ -30,20 +29,7 @@ public sealed class SkillRepository : ISkillRepository
             .Where(n => !existing.Any(s => string.Equals(s.Name, n, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
 
-        if (missingNames.Length > 0)
-        {
-            // Every skill needs a category (see SkillConfiguration); a skill typed
-            // free-text on a Project/Candidate form has no category to offer, so it
-            // falls back to a shared "Uncategorized" row that Program Ops can later
-            // recategorize from a skills admin view.
-            var uncategorizedId = await GetOrCreateUncategorizedCategoryIdAsync(ct);
-            var created = missingNames.Select(n => new Skill { Name = n, SkillCategoryId = uncategorizedId }).ToArray();
-            await _db.Skills.AddRangeAsync(created, ct);
-            await _db.SaveChangesAsync(ct);
-            existing.AddRange(created);
-        }
-
-        return existing;
+        return (existing, missingNames);
     }
 
     public async Task<IReadOnlyList<Skill>> GetAllAsync(CancellationToken ct = default) =>
@@ -90,16 +76,5 @@ public sealed class SkillRepository : ISkillRepository
         _db.Skills.Remove(skill);
         await _db.SaveChangesAsync(ct);
         return true;
-    }
-
-    private async Task<int> GetOrCreateUncategorizedCategoryIdAsync(CancellationToken ct)
-    {
-        var category = await _db.SkillCategories.FirstOrDefaultAsync(sc => sc.Name == UncategorizedCategoryName, ct);
-        if (category is not null) return category.SkillCategoryId;
-
-        category = new SkillCategory { Name = UncategorizedCategoryName };
-        await _db.SkillCategories.AddAsync(category, ct);
-        await _db.SaveChangesAsync(ct);
-        return category.SkillCategoryId;
     }
 }

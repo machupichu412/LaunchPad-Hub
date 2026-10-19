@@ -215,9 +215,6 @@ export function CandidateGallery({
                   <Body1>
                     <strong>{c.displayName}</strong>
                   </Body1>
-                  <Badge appearance="tint" color="brand" style={{ marginLeft: tokens.spacingHorizontalXS }}>
-                    {Math.round(c.score)}% match
-                  </Badge>
                   <Caption1 style={{ display: 'block', marginTop: tokens.spacingVerticalXXS }}>{c.rationale}</Caption1>
                 </div>
               </div>
@@ -265,9 +262,6 @@ export function CandidateGallery({
               <div key={c.candidateId} className={styles.miniCard} onClick={() => setSelectedCandidate(c)}>
                 <CandidateAvatar candidateId={c.candidateId} name={c.displayName} size={40} />
                 <Body1 className={styles.centeredText}>{c.displayName}</Body1>
-                <Badge appearance="tint" color="brand">
-                  {Math.round(c.score)}% match
-                </Badge>
                 <Button
                   size="small"
                   appearance="primary"
@@ -300,9 +294,6 @@ export function CandidateGallery({
                     <CandidateAvatar candidateId={c.candidateId} name={c.displayName} size={64} />
                     <Body1>{c.displayName}</Body1>
                     {c.school && <Caption1>{c.school}</Caption1>}
-                    <Badge appearance="tint" color="brand">
-                      {Math.round(c.score)}% match
-                    </Badge>
                     {c.hasPendingAssignmentElsewhere && (
                       <Badge appearance="tint" color="warning" size="small">
                         Pending elsewhere

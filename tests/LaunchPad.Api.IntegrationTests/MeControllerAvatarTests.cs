@@ -37,7 +37,7 @@ public class MeControllerAvatarTests : IClassFixture<CustomWebApplicationFactory
     public async Task UploadThenGet_RoundTripsTheSameBytesAndContentType()
     {
         var client = CreateClient(Guid.NewGuid());
-        var bytes = new byte[] { 1, 2, 3, 4, 5 };
+        var bytes = TestFiles.Png();
 
         var uploadResponse = await client.PostAsync("/api/me/avatar", ImageContent(bytes, "image/png"));
         uploadResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
@@ -49,13 +49,13 @@ public class MeControllerAvatarTests : IClassFixture<CustomWebApplicationFactory
     }
 
     [Fact]
-    public async Task Get_WithNoAvatarUploaded_ReturnsNotFound()
+    public async Task Get_WithNoAvatarUploaded_ReturnsNoContent()
     {
         var client = CreateClient(Guid.NewGuid());
 
         var response = await client.GetAsync("/api/me/avatar");
 
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
     [Fact]
@@ -80,16 +80,16 @@ public class MeControllerAvatarTests : IClassFixture<CustomWebApplicationFactory
     }
 
     [Fact]
-    public async Task Delete_ClearsTheAvatar_SoASubsequentGetIsNotFound()
+    public async Task Delete_ClearsTheAvatar_SoASubsequentGetHasNoContent()
     {
         var client = CreateClient(Guid.NewGuid());
-        await client.PostAsync("/api/me/avatar", ImageContent(new byte[] { 9, 9, 9 }));
+        await client.PostAsync("/api/me/avatar", ImageContent(TestFiles.Jpeg()));
 
         var deleteResponse = await client.DeleteAsync("/api/me/avatar");
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var getResponse = await client.GetAsync("/api/me/avatar");
-        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        getResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
     [Fact]
@@ -98,14 +98,14 @@ public class MeControllerAvatarTests : IClassFixture<CustomWebApplicationFactory
         var clientA = CreateClient(Guid.NewGuid());
         var clientB = CreateClient(Guid.NewGuid());
 
-        await clientA.PostAsync("/api/me/avatar", ImageContent(new byte[] { 1, 1, 1 }));
-        await clientB.PostAsync("/api/me/avatar", ImageContent(new byte[] { 2, 2, 2 }));
+        await clientA.PostAsync("/api/me/avatar", ImageContent(TestFiles.Jpeg("a")));
+        await clientB.PostAsync("/api/me/avatar", ImageContent(TestFiles.Jpeg("b")));
 
         var aBytes = await (await clientA.GetAsync("/api/me/avatar")).Content.ReadAsByteArrayAsync();
         var bBytes = await (await clientB.GetAsync("/api/me/avatar")).Content.ReadAsByteArrayAsync();
 
-        aBytes.Should().BeEquivalentTo(new byte[] { 1, 1, 1 });
-        bBytes.Should().BeEquivalentTo(new byte[] { 2, 2, 2 });
+        aBytes.Should().BeEquivalentTo(TestFiles.Jpeg("a"));
+        bBytes.Should().BeEquivalentTo(TestFiles.Jpeg("b"));
     }
 
     [Fact]
@@ -113,10 +113,10 @@ public class MeControllerAvatarTests : IClassFixture<CustomWebApplicationFactory
     {
         var client = CreateClient(Guid.NewGuid());
 
-        await client.PostAsync("/api/me/avatar", ImageContent(new byte[] { 1, 1, 1 }));
-        await client.PostAsync("/api/me/avatar", ImageContent(new byte[] { 2, 2, 2, 2 }));
+        await client.PostAsync("/api/me/avatar", ImageContent(TestFiles.Jpeg("first")));
+        await client.PostAsync("/api/me/avatar", ImageContent(TestFiles.Jpeg("second")));
 
         var getResponse = await client.GetAsync("/api/me/avatar");
-        (await getResponse.Content.ReadAsByteArrayAsync()).Should().BeEquivalentTo(new byte[] { 2, 2, 2, 2 });
+        (await getResponse.Content.ReadAsByteArrayAsync()).Should().BeEquivalentTo(TestFiles.Jpeg("second"));
     }
 }

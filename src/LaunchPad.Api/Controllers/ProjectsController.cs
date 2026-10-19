@@ -2,6 +2,7 @@ using FluentValidation;
 using LaunchPad.Api.Authorization;
 using LaunchPad.Application.Assignments;
 using LaunchPad.Application.Candidates;
+using LaunchPad.Application.Cohorts;
 using LaunchPad.Application.Common;
 using LaunchPad.Application.Matching;
 using LaunchPad.Application.Notifications;
@@ -28,6 +29,7 @@ public class ProjectsController : ControllerBase
     private readonly ISponsorRepository _sponsors;
     private readonly ICandidateRepository _candidates;
     private readonly ISkillRepository _skills;
+    private readonly ICohortRepository _cohorts;
     private readonly IAssignmentRepository _assignments;
     private readonly IProjectInterestRepository _projectInterests;
     private readonly IAppUserRepository _appUsers;
@@ -50,6 +52,7 @@ public class ProjectsController : ControllerBase
         ISponsorRepository sponsors,
         ICandidateRepository candidates,
         ISkillRepository skills,
+        ICohortRepository cohorts,
         IAssignmentRepository assignments,
         IProjectInterestRepository projectInterests,
         IAppUserRepository appUsers,
@@ -71,6 +74,7 @@ public class ProjectsController : ControllerBase
         _sponsors = sponsors;
         _candidates = candidates;
         _skills = skills;
+        _cohorts = cohorts;
         _assignments = assignments;
         _projectInterests = projectInterests;
         _appUsers = appUsers;
@@ -124,6 +128,13 @@ public class ProjectsController : ControllerBase
         var candidate = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         if (candidate is null) return Ok(Array.Empty<ProjectDto>());
 
+        // A completed cohort's marketplace is closed — its projects are history, not offers.
+        var cohort = await _cohorts.GetByIdAsync(candidate.CohortId, ct);
+        if (cohort is null || cohort.Status == Domain.Enums.CohortStatus.Completed)
+        {
+            return Ok(Array.Empty<ProjectDto>());
+        }
+
         var projects = await _projects.GetOpenByCohortAsync(candidate.CohortId, ct);
         var ratings = await _projectInterests.GetRatingsForCandidateAsync(candidate.CandidateId, ct);
 
@@ -143,22 +154,16 @@ public class ProjectsController : ControllerBase
     [Authorize(Roles = Roles.Candidate)]
     public async Task<ActionResult<ProjectDto>> GetOpenDetail(int id, CancellationToken ct)
     {
+        var candidate = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         var project = await _projects.GetWithSponsorAsync(id, ct);
-        if (project is null
-            || project.ApprovalStatus != Domain.Enums.ProjectApprovalStatus.Approved
-            || project.Status != Domain.Enums.ProjectStatus.Open)
+        if (candidate is null || !await IsBrowsableByAsync(project, candidate, ct))
         {
             return NotFound();
         }
 
-        var dto = ToDto(project);
-
-        var candidate = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
-        if (candidate is not null)
-        {
-            var ratings = await _projectInterests.GetRatingsForCandidateAsync(candidate.CandidateId, ct);
-            if (ratings.TryGetValue(id, out var rating)) dto.MyInterestRating = rating;
-        }
+        var dto = ToDto(project!);
+        var ratings = await _projectInterests.GetRatingsForCandidateAsync(candidate.CandidateId, ct);
+        if (ratings.TryGetValue(id, out var rating)) dto.MyInterestRating = rating;
 
         return Ok(dto);
     }
@@ -173,21 +178,19 @@ public class ProjectsController : ControllerBase
         var validation = await _rateInterestValidator.ValidateAsync(request, ct);
         if (!validation.IsValid) return ValidationProblem(AddErrors(validation));
 
+        var candidate = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
+        if (candidate is null) return Forbid();
+
         var project = await _projects.GetWithSponsorAsync(id, ct);
-        if (project is null
-            || project.ApprovalStatus != Domain.Enums.ProjectApprovalStatus.Approved
-            || project.Status != Domain.Enums.ProjectStatus.Open)
+        if (!await IsBrowsableByAsync(project, candidate, ct))
         {
             return NotFound();
         }
 
-        var candidate = await _candidates.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
-        if (candidate is null) return Forbid();
-
         await _projectInterests.UpsertAsync(candidate.CandidateId, id, request.Rating, ct);
         await _projectInterests.SaveChangesAsync(ct);
 
-        var dto = ToDto(project);
+        var dto = ToDto(project!);
         dto.MyInterestRating = request.Rating;
         return Ok(dto);
     }
@@ -209,7 +212,11 @@ public class ProjectsController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<ProjectDto>>> GetPendingApproval([FromQuery] int cohortId, CancellationToken ct)
     {
         var projects = await _projects.GetByCohortAsync(cohortId, ct);
-        return Ok(projects.Where(p => p.ApprovalStatus == ProjectApprovalStatus.PendingOps).Select(ToDto).ToArray());
+        // A project cancelled while pending has nothing left to decide — approving it would
+        // only produce an Approved project nobody can ever see.
+        return Ok(projects
+            .Where(p => p.ApprovalStatus == ProjectApprovalStatus.PendingOps && p.Status != ProjectStatus.Cancelled)
+            .Select(ToDto).ToArray());
     }
 
     [HttpPost]
@@ -221,6 +228,21 @@ public class ProjectsController : ControllerBase
 
         var sponsor = await _sponsors.GetByEntraObjectIdAsync(_currentUser.EntraObjectId, ct);
         if (sponsor is null) return Forbid();
+
+        // Without this a bad id only surfaces as a foreign-key failure at SaveChanges — a 500.
+        var cohort = await _cohorts.GetByIdAsync(request.CohortId, ct);
+        if (cohort is null)
+        {
+            ModelState.AddModelError(nameof(request.CohortId), "Cohort not found.");
+            return ValidationProblem(ModelState);
+        }
+
+        // Planned is fine — sponsors line projects up before a cohort opens. Completed is not.
+        if (cohort.Status == Domain.Enums.CohortStatus.Completed)
+        {
+            ModelState.AddModelError(nameof(request.CohortId), "That cohort has finished — pick a current one.");
+            return ValidationProblem(ModelState);
+        }
 
         var project = new Project
         {
@@ -236,7 +258,9 @@ public class ProjectsController : ControllerBase
             Status = Domain.Enums.ProjectStatus.Open,
         };
 
-        project.Skills = await ResolveSkillsAsync(request.RequiredSkillNames, request.PreferredSkillNames, ct);
+        var (skills, unknownSkillNames) = await ResolveSkillsAsync(request.RequiredSkillNames, request.PreferredSkillNames, ct);
+        if (unknownSkillNames.Count > 0) return UnknownSkillsProblem(unknownSkillNames);
+        project.Skills = skills;
 
         await _projects.AddAsync(project, ct);
         await _projects.SaveChangesAsync(ct);
@@ -255,7 +279,7 @@ public class ProjectsController : ControllerBase
         var project = await _projects.GetWithSponsorAsync(id, ct);
         if (project is null) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         var committedCount = await _assignments.GetCommittedCountForProjectAsync(id, ct);
@@ -270,7 +294,9 @@ public class ProjectsController : ControllerBase
         project.StartDate = request.StartDate;
         project.EndDate = request.EndDate;
         project.MaxCandidates = request.MaxCandidates;
-        project.Skills = await ResolveSkillsAsync(request.RequiredSkillNames, request.PreferredSkillNames, ct);
+        var (skills, unknownSkillNames) = await ResolveSkillsAsync(request.RequiredSkillNames, request.PreferredSkillNames, ct);
+        if (unknownSkillNames.Count > 0) return UnknownSkillsProblem(unknownSkillNames);
+        project.Skills = skills;
 
         await _projects.SaveChangesAsync(ct);
 
@@ -296,7 +322,7 @@ public class ProjectsController : ControllerBase
         var isProgramOps = User.IsInRole(Roles.ProgramOps);
         if (!isProgramOps)
         {
-            var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+            var auth = await _authorization.AuthorizeAsync(User, project, Policies.ChangeOwnProject);
             if (!auth.Succeeded) return Forbid();
 
             if (request.Stage <= project.DeliveryStage)
@@ -325,7 +351,7 @@ public class ProjectsController : ControllerBase
         var project = await _projects.GetWithSponsorAsync(id, ct);
         if (project is null) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         if (project.ApprovalStatus != Domain.Enums.ProjectApprovalStatus.Draft
@@ -374,6 +400,11 @@ public class ProjectsController : ControllerBase
         if (project.ApprovalStatus == Domain.Enums.ProjectApprovalStatus.Draft)
         {
             return BadRequest("A Draft project hasn't been submitted for review yet.");
+        }
+
+        if (project.Status == Domain.Enums.ProjectStatus.Cancelled)
+        {
+            return BadRequest("This project was cancelled and can't be approved.");
         }
 
         var wasAlreadyApproved = project.ApprovalStatus == Domain.Enums.ProjectApprovalStatus.Approved;
@@ -529,7 +560,7 @@ public class ProjectsController : ControllerBase
                 Degree = c.Degree,
                 Gpa = c.Gpa,
                 Skills = c.Skills.Select(s => s.Skill.Name).ToArray(),
-                Score = r.Score,
+                // Ranked best-first; the number itself stays with Ops and Exec.
                 Rationale = r.Rationale,
                 InterestRating = interestsForThisProject.TryGetValue(c.CandidateId, out var rating) ? rating : null,
                 HasPendingAssignmentElsewhere = pendingElsewhere.Contains(c.CandidateId),
@@ -552,7 +583,7 @@ public class ProjectsController : ControllerBase
         var project = await _projects.GetWithSponsorAsync(id, ct);
         if (project is null) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         if (project.ApprovalStatus != ProjectApprovalStatus.Approved)
@@ -628,12 +659,17 @@ public class ProjectsController : ControllerBase
         await _auditLog.RecordAsync(
             _currentUser.EntraObjectId, "Assignment", result.Assignment!.AssignmentId.ToString(), "SponsorDirectRequest", ct: ct);
 
+        await _notifications.PublishAsync(new NotificationMessage(
+            candidate.AppUser.Upn,
+            $"A sponsor requested you for {project.Name}",
+            $"{project.Sponsor.AppUser.DisplayName} asked for you on \"{project.Name}\". " +
+            "Program Ops reviews the request next — you'll hear once it's confirmed."), ct);
+
         return Ok(new ProjectMatchDto
         {
             AssignmentId = result.Assignment.AssignmentId,
             CandidateId = candidate.CandidateId,
             CandidateName = candidate.AppUser.DisplayName,
-            MatchScore = result.Assignment.MatchScore,
             MatchRationale = result.Assignment.MatchRationale,
         });
     }
@@ -678,7 +714,7 @@ public class ProjectsController : ControllerBase
         var project = await _projects.GetWithSponsorAsync(id, ct);
         if (project is null) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         project.Status = Domain.Enums.ProjectStatus.Cancelled;
@@ -701,7 +737,7 @@ public class ProjectsController : ControllerBase
         var assignment = await _assignments.GetAsync(assignmentId, ct);
         if (assignment is null || assignment.ProjectId != id) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         if (assignment.Status != AssignmentStatus.Proposed)
@@ -731,6 +767,13 @@ public class ProjectsController : ControllerBase
 
         await _assignments.SaveChangesAsync(ct);
         await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "SponsorRecommend", ct: ct);
+
+        await _notifications.PublishAsync(new NotificationMessage(
+            assignment.Candidate.AppUser.Upn,
+            $"A sponsor picked you for {assignment.Project.Name}",
+            $"{assignment.Project.Sponsor.AppUser.DisplayName} recommended you for \"{assignment.Project.Name}\". " +
+            "Program Ops reviews the match next — you'll hear once it's confirmed."), ct);
+
         return Ok(ToMatchDto(assignment));
     }
 
@@ -743,7 +786,7 @@ public class ProjectsController : ControllerBase
         var assignment = await _assignments.GetAsync(assignmentId, ct);
         if (assignment is null || assignment.ProjectId != id) return NotFound();
 
-        var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ManageOwnProject);
+        var auth = await _authorization.AuthorizeAsync(User, assignment.Project, Policies.ChangeOwnProject);
         if (!auth.Succeeded) return Forbid();
 
         if (assignment.Status != AssignmentStatus.Proposed)
@@ -754,7 +797,34 @@ public class ProjectsController : ControllerBase
         assignment.Status = AssignmentStatus.Withdrawn;
         await _assignments.SaveChangesAsync(ct);
         await _auditLog.RecordAsync(_currentUser.EntraObjectId, "Assignment", assignment.AssignmentId.ToString(), "SponsorReject", ct: ct);
+
+        // Says the match is over without dressing it up as a verdict on the candidate — they
+        // go back into the pool for the next matching run.
+        await _notifications.PublishAsync(new NotificationMessage(
+            assignment.Candidate.AppUser.Upn,
+            $"You're no longer being considered for {assignment.Project.Name}",
+            $"\"{assignment.Project.Name}\" is moving ahead with other candidates. " +
+            "You're back in the pool for upcoming projects."), ct);
+
         return Ok(ToMatchDto(assignment));
+    }
+
+    /// <summary>The marketplace visibility rule, shared by the list, detail and interest
+    /// endpoints: Open, Ops-approved, and in the candidate's own cohort. Detail and interest
+    /// take an id from the URL, so without the cohort check a candidate could reach any
+    /// other cohort's projects just by guessing ids.</summary>
+    private async Task<bool> IsBrowsableByAsync(Project? project, Candidate candidate, CancellationToken ct)
+    {
+        if (project is null
+            || project.ApprovalStatus != Domain.Enums.ProjectApprovalStatus.Approved
+            || project.Status != Domain.Enums.ProjectStatus.Open
+            || project.CohortId != candidate.CohortId)
+        {
+            return false;
+        }
+
+        var cohort = await _cohorts.GetByIdAsync(candidate.CohortId, ct);
+        return cohort is not null && cohort.Status != Domain.Enums.CohortStatus.Completed;
     }
 
     private static ProjectMatchDto ToMatchDto(Assignment assignment) => new()
@@ -762,21 +832,33 @@ public class ProjectsController : ControllerBase
         AssignmentId = assignment.AssignmentId,
         CandidateId = assignment.CandidateId,
         CandidateName = assignment.Candidate.AppUser.DisplayName,
-        MatchScore = assignment.MatchScore,
         MatchRationale = assignment.MatchRationale,
     };
 
-    private async Task<List<ProjectSkill>> ResolveSkillsAsync(string[] requiredNames, string[] preferredNames, CancellationToken ct)
+    /// <summary>Resolves skill names against the taxonomy. Unknown names come back in
+    /// UnknownNames instead of quietly becoming new global skills — Ops adds skills
+    /// deliberately, with a category.</summary>
+    private async Task<(List<ProjectSkill> Skills, IReadOnlyList<string> UnknownNames)> ResolveSkillsAsync(
+        string[] requiredNames, string[] preferredNames, CancellationToken ct)
     {
-        var requiredSkills = await _skills.GetOrCreateByNamesAsync(requiredNames, ct);
-        var preferredSkills = await _skills.GetOrCreateByNamesAsync(preferredNames, ct);
+        var (requiredSkills, unknownRequired) = await _skills.GetByNamesAsync(requiredNames, ct);
+        var (preferredSkills, unknownPreferred) = await _skills.GetByNamesAsync(preferredNames, ct);
 
         var result = requiredSkills.Select(s => new ProjectSkill { SkillId = s.SkillId, Skill = s, IsRequired = true }).ToList();
         result.AddRange(preferredSkills
             .Where(s => result.All(r => r.SkillId != s.SkillId))
             .Select(s => new ProjectSkill { SkillId = s.SkillId, Skill = s, IsRequired = false }));
 
-        return result;
+        return (result, [.. unknownRequired, .. unknownPreferred]);
+    }
+
+    /// <summary>The same message on create and update, naming what wasn't recognized.</summary>
+    private ActionResult UnknownSkillsProblem(IReadOnlyList<string> unknownNames)
+    {
+        ModelState.AddModelError(
+            "RequiredSkillNames",
+            $"These skills aren't in the skill list yet: {string.Join(", ", unknownNames)}. Ask Program Ops to add them.");
+        return ValidationProblem(ModelState);
     }
 
     private static ProjectDto ToDto(Project project)
