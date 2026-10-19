@@ -12,8 +12,7 @@ param sqlAadAdminObjectId string
 param sqlAadAdminLogin string
 
 @description('Email address that receives operational alerts. Empty (the default in non-prod) deploys no action group and no alerts.')
-@minLength(3)
-param alertEmail string
+param alertEmail string = ''
 
 @description('Monthly resource-group budget in billing currency. Alerts do not stop spending.')
 @minValue(1)
