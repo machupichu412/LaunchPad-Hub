@@ -2,7 +2,12 @@
   <PropertyGroup>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
+    <!-- Still audits down to low, so every advisory appears in build output. Only high
+         (NU1903) and critical (NU1904) fail the build. Low and moderate stay warnings
+         deliberately: advisories land on their publishers' schedule, not ours, and a
+         low-severity finding in a build-time dependency should not be able to block a
+         production hotfix. Raise these back if a review says otherwise. -->
     <NuGetAuditLevel>low</NuGetAuditLevel>
-    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 </Project>

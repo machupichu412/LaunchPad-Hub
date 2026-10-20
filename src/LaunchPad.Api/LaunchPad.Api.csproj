@@ -25,6 +25,12 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.0">
       <ExcludeAssets Condition="'$(Configuration)' == 'Release'">runtime</ExcludeAssets>
     </PackageReference>
+    <!-- Pinned to patch transitive advisories, not because the API calls either directly.
+         Microsoft.Identity.Web 4.14.1 resolves both at 9.0.18, which carries GHSA-846f-f764-76mx
+         (Pkcs, high) and GHSA-r955-8q5j-3h83 / -7hqp-7c5m-4vq6 / -c399-9853-6jmj (Xml, high).
+         Drop these pins once Identity.Web's own dependency moves past them. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="9.0.21" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="9.0.21" />
     <!-- Required by `dotnet ef` when the API is the startup project for migrations. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
       <PrivateAssets>all</PrivateAssets>
