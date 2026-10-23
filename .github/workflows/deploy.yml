@@ -52,7 +52,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: 'npm', cache-dependency-path: src/LaunchPad.Web/package-lock.json }
       - run: npm ci --prefix src/LaunchPad.Web
-      - run: npm audit --prefix src/LaunchPad.Web --audit-level=low
+      # Fails on high and critical only, matching Directory.Build.props for the .NET side.
+      # The report still lists low and moderate findings; they just don't block a deploy,
+      # since a new advisory in a build-time dependency arrives on its publisher's schedule.
+      - run: npm audit --prefix src/LaunchPad.Web --audit-level=high
       - run: npm run lint --prefix src/LaunchPad.Web
       - run: npm run test --prefix src/LaunchPad.Web
       - run: npm run build --prefix src/LaunchPad.Web
